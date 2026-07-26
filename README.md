@@ -1,0 +1,1 @@
+# textlint-ASD-ai

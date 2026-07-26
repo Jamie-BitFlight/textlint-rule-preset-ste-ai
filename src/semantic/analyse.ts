@@ -9,6 +9,7 @@ import type {
   SourceRange,
   TextFix,
 } from '../core/types.js';
+import { gateFix } from '../core/rule.js';
 import type { SemanticBroker } from './broker.js';
 
 export interface SemanticAnalysisInput {
@@ -99,7 +100,25 @@ export async function analyseSemantically(
     const threshold =
       config.confidenceThresholds[candidate.evaluatorId] ?? config.defaultConfidenceThreshold;
 
-    if (verdict.status === 'compliant') continue;
+    // A `compliant` verdict is exculpatory, so it must clear the operator's confidence bar just as
+    // an adverse one must. Without this, `{"status":"compliant","confidence":0.01}` silently
+    // removed a candidate from review — weak evidence could establish compliance while the same
+    // confidence could not establish a violation.
+    if (verdict.status === 'compliant') {
+      if (verdict.confidence >= threshold) continue;
+      pushReviewRequired(
+        diagnostics,
+        candidate,
+        ruleStatus,
+        policy,
+        `Semantic adjudication returned "compliant" below the decision threshold ` +
+          `(${verdict.confidence.toFixed(2)} < ${threshold.toFixed(2)}), so the passage was not ` +
+          `decided: ${verdict.explanation}`,
+        verdict.confidence,
+        threshold,
+      );
+      continue;
+    }
 
     if (verdict.status === 'uncertain') {
       pushReviewRequired(
@@ -270,6 +289,10 @@ async function maybeSemanticFix(
   const literals = protectedLiteralsIn(input.doc, range);
   if (literals.some((literal) => !replacement.includes(literal))) return undefined;
 
+  // A protected region that the fix range only partially covers would have its fragment rewritten,
+  // so any overlap that is not full containment refuses the fix outright.
+  if (overlapsProtectedRegionPartially(input.doc, range)) return undefined;
+
   const gate = await verifyRewriteEquivalence({
     broker: input.broker,
     ruleId: candidate.ruleId,
@@ -279,14 +302,51 @@ async function maybeSemanticFix(
     invariants: candidate.invariants,
     ...(input.signal === undefined ? {} : { signal: input.signal }),
   });
+  // The gate's categorical flag must not override its own stated uncertainty when authorising a
+  // source mutation, so an operator-owned minimum applies on top of it.
   if (!gate.equivalent) return undefined;
+  if (gate.confidence < input.autofix.minimumSemanticFixConfidence) return undefined;
 
-  return {
+  const fix: TextFix = {
     range,
     text: replacement,
     rationale: `Independent rewrite-equivalence check passed (confidence ${gate.confidence.toFixed(2)}).`,
     safety: 'semantic-gated',
   };
+
+  // The central gate, applied to the semantic branch as well as the deterministic one. An earlier
+  // version attached this fix directly, so a model-proposed rewrite could change a quantity, a
+  // negation, a modal verb or an ordering word — every refusal `checkFixSafety` exists to make.
+  const refusal = gateFix({
+    doc: input.doc,
+    fix,
+    admonition: candidate.admonition,
+    ruleFixable: true,
+    autofix: input.autofix,
+  });
+  if (refusal !== null) return undefined;
+
+  return fix;
+}
+
+/**
+ * True when `range` overlaps a protected region without wholly containing it.
+ *
+ * `protectedLiteralsIn` only collects regions the range fully contains, so a partial intersection
+ * would leave a fragment of an identifier, command, path or URL eligible for rewriting while
+ * escaping the preservation check entirely.
+ */
+export function overlapsProtectedRegionPartially(
+  doc: AnalysedDocument,
+  range: SourceRange,
+): boolean {
+  return doc.protectedRegions.some((region) => {
+    if (!region.opaque) return false;
+    const overlaps = region.range.start < range.end && range.start < region.range.end;
+    if (!overlaps) return false;
+    const contained = range.start <= region.range.start && region.range.end <= range.end;
+    return !contained;
+  });
 }
 
 /** Content-bearing protected literals inside a span, which any rewrite must keep verbatim. */

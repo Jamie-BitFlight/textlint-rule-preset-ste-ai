@@ -49,6 +49,16 @@ export function applicableSentences(
 // Autofix safety gate
 // ---------------------------------------------------------------------------
 
+/**
+ * Numeric literals in order of appearance, normalised for comparison.
+ *
+ * Captures a sign, digits, decimal separators, and version-style dotted groups as one token each,
+ * so a change of value, grouping or decimal position is visible.
+ */
+function numericTokens(text: string): string[] {
+  return [...text.matchAll(/[+-]?\d+(?:[.,]\d+)*/g)].map((m) => m[0].replace(',', '.'));
+}
+
 /** Tokens whose presence or count must never change across a fix. */
 const NEGATION =
   /\b(?:not|no|never|none|neither|nor|without|cannot|can't|don't|doesn't|didn't|won't|shouldn't|mustn't)\b/gi;
@@ -112,9 +122,15 @@ export interface FixRefusal {
  * refused outright regardless of which rule proposed it.
  */
 export function checkFixSafety(before: string, after: string): FixRefusal | null {
-  const digitsBefore = before.replace(/\D+/g, '');
-  const digitsAfter = after.replace(/\D+/g, '');
-  if (digitsBefore !== digitsAfter) {
+  // Compare the ordered sequence of numeric literals, not a concatenation of their digits.
+  // Concatenating made `1.5 mm` → `15 mm`, `10.0 Nm` → `100 Nm` and `0.5 A` → `05 A` all look
+  // identical, so a fix could move a decimal point or regroup a quantity unchallenged.
+  const numbersBefore = numericTokens(before);
+  const numbersAfter = numericTokens(after);
+  if (
+    numbersBefore.length !== numbersAfter.length ||
+    numbersBefore.some((value, index) => value !== numbersAfter[index])
+  ) {
     return { reason: 'the replacement changes a numeric value' };
   }
   if (!sameMultiset(multiset(before, NEGATION), multiset(after, NEGATION))) {

@@ -61,8 +61,8 @@ const CONTENT_BEARING_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
   'constant',
   'product-identifier',
   'quoted-literal',
+  'credential',
   'approved-term',
-  'html-inline',
 ]);
 
 export interface AnalyseOptions {

@@ -74,6 +74,9 @@ export function computeLineStarts(text: string): number[] {
 
 /** 1-based line, 0-based column — the textlint AST convention. */
 export function positionAt(lineStarts: readonly number[], offset: number): SourcePosition {
+  // A negative or past-the-end offset means an upstream range is corrupt. Returning a plausible
+  // -looking position would hide that, so clamp to the document and let the caller see the edge.
+  if (offset < 0) offset = 0;
   let lo = 0;
   let hi = lineStarts.length - 1;
   while (lo < hi) {

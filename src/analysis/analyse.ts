@@ -3,6 +3,7 @@ import { analyseDocument } from '../core/document.js';
 import { runDeterministicRules } from '../core/runner.js';
 import type {
   AnalysedDocument,
+  CandidatePassage,
   Diagnostic,
   DocumentFormat,
   RulePack,
@@ -12,7 +13,7 @@ import type {
 import { deterministicRules } from '../deterministic/index.js';
 import { LlamaCppClient } from '../model-client/llama-client.js';
 import type { ModelTransport } from '../model-client/types.js';
-import { resolveRulePack } from '../rule-pack/loader.js';
+import { resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
 import { analyseSemantically } from '../semantic/analyse.js';
 import { SemanticBroker, type SemanticBrokerDeps } from '../semantic/broker.js';
 import { resolveOverlappingFixes } from '../core/runner.js';
@@ -73,13 +74,71 @@ export function analyseTextDeterministic(
   );
 
   const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
+
+  // Candidates are passages no deterministic rule could decide. Returning only `run.diagnostics`
+  // discarded them, so a document whose only findings needed adjudication reported clean — the
+  // exact "silence means compliant" failure the diagnostic policy exists to prevent.
+  const undecided = undecidedCandidateDiagnostics(
+    run.candidates,
+    config,
+    verifiedAuthority(pack, config.trustedRulePackIds),
+  );
+
   return {
     document,
-    diagnostics: run.diagnostics,
-    notices: run.notices,
+    diagnostics: [...run.diagnostics, ...undecided.diagnostics].sort(
+      (a, b) =>
+        a.range.start - b.range.start ||
+        a.range.end - b.range.end ||
+        a.ruleId.localeCompare(b.ruleId),
+    ),
+    notices: [...run.notices, ...undecided.notices],
     traces: [],
     pack,
     config,
+  };
+}
+
+/**
+ * Turn unadjudicated candidates into `review-required` diagnostics plus a run notice.
+ *
+ * Used by the deterministic-only path, which never contacts a service and therefore never receives
+ * a verdict for them. The semantic path does the equivalent through `analyseSemantically`.
+ */
+function undecidedCandidateDiagnostics(
+  candidates: readonly CandidatePassage[],
+  config: SteAiConfig,
+  ruleStatus: RulePack['metadata']['authority'],
+): { diagnostics: Diagnostic[]; notices: RunNotice[] } {
+  if (candidates.length === 0) return { diagnostics: [], notices: [] };
+
+  const diagnostics: Diagnostic[] = config.diagnostics.reportReviewRequired
+    ? candidates.map((candidate) => ({
+        ruleId: candidate.ruleId,
+        ruleStatus,
+        category: 'review-required' as const,
+        severity: config.diagnostics.severity['review-required'],
+        message:
+          'This passage needs semantic adjudication, which did not run, so it was not decided. ' +
+          `A reviewer must decide it. Reason: ${candidate.reason}`,
+        range: candidate.range,
+        producedBy: 'deterministic' as const,
+        meta: { evaluatorId: candidate.evaluatorId },
+      }))
+    : [];
+
+  return {
+    diagnostics,
+    notices: [
+      {
+        code: 'semantic-disabled',
+        level: 'info',
+        message:
+          `${candidates.length} passage(s) needed semantic adjudication, which did not run. They ` +
+          'are reported as review-required. No compliance conclusion was drawn about them.',
+        detail: { candidates: candidates.length },
+      },
+    ],
   };
 }
 
@@ -133,15 +192,14 @@ export async function analyseText(
     config: config.semantic,
     policy: config.diagnostics,
     autofix: config.autofix,
-    ruleStatus: pack.metadata.authority,
+    // The authority the linter acts on, not the authority the pack claims for itself. An
+    // untrusted pack's findings are reported as `supplementary`, never `normative`.
+    ruleStatus: verifiedAuthority(pack, config.trustedRulePackIds),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 
   // Overlap resolution must see deterministic and semantic fixes together.
-  const merged = resolveOverlappingFixes(
-    [...run.diagnostics, ...semantic.diagnostics],
-    config.diagnostics,
-  );
+  const merged = resolveOverlappingFixes([...run.diagnostics, ...semantic.diagnostics]);
 
   merged.diagnostics.sort(
     (a, b) =>

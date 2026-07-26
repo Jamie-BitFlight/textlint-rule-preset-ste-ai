@@ -1,4 +1,4 @@
-import type { DiagnosticPolicy, SteAiConfig } from './config.js';
+import type { SteAiConfig } from './config.js';
 import { gateFix, type DeterministicRule, type RuleInput } from './rule.js';
 import { rangesOverlap } from './text.js';
 import type {
@@ -80,17 +80,31 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
 
     const output = rule.run(input);
 
+    // A pack may raise a rule's authority and supply its own citation. Without this the pack's
+    // `status`/`sourceRef` were parsed, validated and then ignored, so an authorised pack changed
+    // nothing a reader could see. `verifiedAuthority` still caps an untrusted pack.
+    const packStatus =
+      packSpec === undefined
+        ? undefined
+        : verifiedRuleStatus(packSpec.status, pack, config.trustedRulePackIds);
+
     for (const diagnostic of output.diagnostics) {
       const processed = postProcess(diagnostic, rule, doc, config, blockById, severityOverride);
-      if (processed !== null) diagnostics.push(processed);
+      if (processed === null) continue;
+      diagnostics.push(
+        packStatus === undefined
+          ? processed
+          : {
+              ...processed,
+              ruleStatus: packStatus,
+              meta: { ...(processed.meta ?? {}), sourceRef: packSpec?.sourceRef ?? '' },
+            },
+      );
     }
     candidates.push(...output.candidates);
   }
 
-  const { diagnostics: resolved, notices: fixNotices } = resolveOverlappingFixes(
-    diagnostics,
-    config.diagnostics,
-  );
+  const { diagnostics: resolved, notices: fixNotices } = resolveOverlappingFixes(diagnostics);
   notices.push(...fixNotices);
 
   resolved.sort(
@@ -101,6 +115,21 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
   );
 
   return { diagnostics: resolved, candidates: sortCandidates(candidates), notices };
+}
+
+/**
+ * The status a diagnostic may report for a pack-supplied rule.
+ *
+ * A pack cannot promote its own rules to `normative` unless the operator has named it in
+ * `trustedRulePackIds`; otherwise the strongest it can reach is `supplementary`.
+ */
+function verifiedRuleStatus(
+  declared: RulePack['metadata']['authority'],
+  pack: RulePack,
+  trustedRulePackIds: readonly string[],
+): RulePack['metadata']['authority'] {
+  if (declared !== 'normative') return declared;
+  return trustedRulePackIds.includes(pack.metadata.id) ? 'normative' : 'supplementary';
 }
 
 function stripControlKeys(userConfig: Record<string, unknown>): Record<string, unknown> {
@@ -192,10 +221,10 @@ function admonitionAt(
  * characters is exactly the situation where an automated edit is least trustworthy, so the tool
  * declines and says so instead of picking a winner.
  */
-export function resolveOverlappingFixes(
-  diagnostics: readonly Diagnostic[],
-  policy: DiagnosticPolicy,
-): { diagnostics: Diagnostic[]; notices: RunNotice[] } {
+export function resolveOverlappingFixes(diagnostics: readonly Diagnostic[]): {
+  diagnostics: Diagnostic[];
+  notices: RunNotice[];
+} {
   const withFixes = diagnostics
     .map((d, index) => ({ d, index }))
     .filter((entry) => entry.d.fix !== undefined);
@@ -231,8 +260,10 @@ export function resolveOverlappingFixes(
     delete withoutFix.fix;
     return {
       ...withoutFix,
+      // Severity is deliberately untouched. Withholding a fix says nothing about how serious the
+      // finding is, and overwriting it here discarded both the pack severity and the user override
+      // that postProcess had already applied.
       message: `${diagnostic.message} (No automatic fix: another rule proposes an overlapping edit.)`,
-      severity: policy.severity[diagnostic.category],
     };
   });
 

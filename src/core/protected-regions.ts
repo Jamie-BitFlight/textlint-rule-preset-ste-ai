@@ -557,6 +557,80 @@ const extraPatternPass: Pass = {
   },
 };
 
+/**
+ * Credential-shaped tokens sitting in bare prose.
+ *
+ * Everything else in this file protects spans because they are not *prose*. This pass protects
+ * spans because they must not *leave the machine*. Fenced blocks, inline code and `KEY=value`
+ * fragments already cover the common shapes, but a key pasted into a sentence — "The account uses
+ * AKIAIOSFODNN7EXAMPLE" — is, structurally, an ordinary word, so it survived masking and was
+ * transmitted verbatim to the semantic service. Masking it here closes that path for every
+ * downstream consumer at once, because every passage the broker sends is built from masked text.
+ *
+ * The patterns are deliberately narrow. A false positive costs one unchecked word; a false
+ * negative sends a live secret to a network service, so where a shape is ambiguous this pass
+ * prefers to match. It is a mitigation, not a secret scanner: it does not detect low-entropy
+ * secrets that are indistinguishable from prose, and no configuration turns it off.
+ */
+const credentialPass: Pass = {
+  kind: 'credential',
+  opaque: true,
+  note: 'Credential-shaped token: withheld from analysis and from any model request.',
+  find: (masked) => {
+    const patterns: RegExp[] = [
+      // PEM blocks, header line through footer line.
+      /-----BEGIN[^\n]*-----[\s\S]*?-----END[^\n]*-----/g,
+      // Vendor-prefixed tokens. The prefix is the evidence; the body only has to be long enough
+      // that an ordinary hyphenated word cannot reach it.
+      /\bgh[pousr]_[A-Za-z0-9]{16,}\b/g,
+      /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
+      /\bsk-(?:live|test|proj|ant|or)?-?[A-Za-z0-9_-]{16,}\b/g,
+      /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
+      /\b(?:AKIA|ASIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ABIA|ACCA|ASCA)[A-Z0-9]{12,}\b/g,
+      /\bAIza[A-Za-z0-9_-]{30,}\b/g,
+      /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
+      /\bglpat-[A-Za-z0-9_-]{16,}\b/g,
+      /\bnpm_[A-Za-z0-9]{30,}\b/g,
+      // JSON Web Tokens: three base64url segments, the first of which decodes to `{"`.
+      /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+      // Hex digests and hex-encoded keys. 32 is the shortest that is not plausibly an identifier
+      // a writer would type by hand, and prose has no 32-character all-hex words.
+      /\b(?:[0-9a-f]{32,}|[0-9A-F]{32,})\b/g,
+      // A credential noun bound to a value in prose. The value must carry a digit or be long,
+      // which keeps "The password is set by the installer" out of the match.
+      /\b(?:pass(?:word|phrase|wd)|secret|api[ -]?key|access[ -]?key|private[ -]?key|token|credential)s?\s*(?:is|are|=|:)\s*(["'`]?)([A-Za-z0-9_./+-]*(?:[0-9][A-Za-z0-9_./+-]*|[A-Za-z0-9_./+-]{11,}))\1/gi,
+    ];
+    const out: SourceRange[] = [];
+    for (const re of patterns) {
+      for (const m of masked.matchAll(re)) {
+        if (containsMask(m[0])) continue;
+        const value = m[2];
+        if (value === undefined) {
+          out.push({ start: m.index, end: m.index + m[0].length });
+          continue;
+        }
+        // Only the value is protected; the sentence around it stays available to the prose rules,
+        // which is the whole point of masking rather than dropping the passage.
+        if (value.length < 4) continue;
+        const rel = m[0].lastIndexOf(value);
+        if (rel < 0) continue;
+        out.push({ start: m.index + rel, end: m.index + rel + value.length });
+      }
+    }
+    // Mixed-class high-entropy runs, checked separately because the class test is not expressible
+    // as one regular expression without catastrophic alternation.
+    for (const m of masked.matchAll(/\b[A-Za-z0-9_+/-]{24,}={0,2}(?![A-Za-z0-9_+/=-])/g)) {
+      const token = m[0];
+      if (containsMask(token)) continue;
+      const classes =
+        Number(/[a-z]/.test(token)) + Number(/[A-Z]/.test(token)) + Number(/[0-9]/.test(token));
+      if (classes < 3) continue;
+      out.push({ start: m.index, end: m.index + token.length });
+    }
+    return out;
+  },
+};
+
 const MARKDOWN_PASSES: readonly Pass[] = [
   frontMatterPass,
   fencedCodePass,
@@ -576,6 +650,9 @@ const MARKDOWN_PASSES: readonly Pass[] = [
   listMarkerPass,
   footnotePass,
   htmlInlinePass,
+  // Credentials run ahead of user terminology: a redaction guarantee that a terminology list can
+  // switch off is not a guarantee.
+  credentialPass,
   // User-declared terminology and user patterns run before every heuristic pass. Otherwise a
   // multi-word approved term such as `Acme WidgetPro` fails to match, because the heuristic
   // CamelCase pass has already masked half of it.
@@ -597,6 +674,7 @@ const MARKDOWN_PASSES: readonly Pass[] = [
 const PLAIN_TEXT_PASSES: readonly Pass[] = [
   urlPass,
   emailPass,
+  credentialPass,
   approvedTermPass,
   extraPatternPass,
   placeholderPass,

@@ -48,6 +48,12 @@ export const autofixPolicySchema = z.object({
    * Warnings, cautions and danger notices are not autofixed by this package.
    */
   allowInAdmonitions: z.literal(false).default(false),
+  /**
+   * Minimum model-reported confidence from the independent rewrite-equivalence gate before a
+   * semantic fix may be attached. Deliberately stricter than the diagnostic threshold: reporting a
+   * finding and mutating a source file are different levels of trust.
+   */
+  minimumSemanticFixConfidence: z.number().min(0).max(1).default(0.9),
 });
 
 export type AutofixPolicy = z.output<typeof autofixPolicySchema>;
@@ -102,6 +108,15 @@ export const steAiConfigSchema = z.object({
    * provisional pack is used and every diagnostic is marked provisional.
    */
   rulePack: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  /**
+   * Packs the operator has decided to trust, by `metadata.id`.
+   *
+   * Schema validation proves a pack's *shape*, never its *authority*. Any JSON file can declare
+   * `authority: "normative"`, so an imported pack is untrusted by default and its self-declared
+   * authority is reported as supplier-declared metadata only. A pack must be named here before the
+   * linter treats its authority as application-verified.
+   */
+  trustedRulePackIds: z.array(z.string()).default([]),
   /** Project terminology protected as literal names. */
   approvedTerms: z.array(z.string()).default([]),
   /** Extra regular expressions protected as identifiers. */

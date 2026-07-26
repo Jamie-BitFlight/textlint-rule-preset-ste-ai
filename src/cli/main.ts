@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
 import type { Diagnostic, RunNotice } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
+import { packPermitsConformanceClaim, verifiedAuthority } from '../rule-pack/loader.js';
 
 /**
  * `ste-ai` — a thin CLI over the programmatic API.
@@ -43,6 +44,27 @@ interface Args {
   readonly flags: Map<string, string | boolean>;
 }
 
+/**
+ * Recognised boolean options. An unknown `--flag` is a usage error rather than an ignored token:
+ * a typo such as `--semantci` used to fall through silently to deterministic-only mode, producing
+ * a clean-looking report for a run the operator believed was using a model.
+ */
+const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  'json',
+  'deterministic-only',
+  'semantic',
+  'trace',
+  'fail-on-review',
+  'help',
+]);
+
+export class UsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UsageError';
+  }
+}
+
 function parseArgs(argv: readonly string[]): Args {
   const flags = new Map<string, string | boolean>();
   const files: string[] = [];
@@ -60,10 +82,13 @@ function parseArgs(argv: readonly string[]): Args {
       const name = arg.slice(2);
       if (valued.has(name)) {
         const value = argv[i + 1];
-        if (value === undefined) throw new Error(`--${name} needs a value`);
+        if (value === undefined) throw new UsageError(`--${name} needs a value`);
         flags.set(name, value);
         i += 1;
       } else {
+        if (!BOOLEAN_FLAGS.has(name)) {
+          throw new UsageError(`Unknown option --${name}`);
+        }
         flags.set(name, true);
       }
       continue;
@@ -117,6 +142,7 @@ async function lint(args: Args): Promise<number> {
     diagnostics: Diagnostic[];
     notices: readonly RunNotice[];
     packAuthority: string;
+    declaredAuthority: string;
     conformanceClaim: string;
   }[] = [];
 
@@ -146,8 +172,14 @@ async function lint(args: Args): Promise<number> {
       file,
       diagnostics: analysis.diagnostics.filter((d) => SEVERITY_ORDER[d.severity] >= threshold),
       notices: analysis.notices,
-      packAuthority: analysis.pack.metadata.authority,
-      conformanceClaim: analysis.pack.metadata.conformanceClaim,
+      packAuthority: verifiedAuthority(analysis.pack, analysis.config.trustedRulePackIds),
+      declaredAuthority: analysis.pack.metadata.authority,
+      conformanceClaim: packPermitsConformanceClaim(
+        analysis.pack,
+        analysis.config.trustedRulePackIds,
+      )
+        ? analysis.pack.metadata.conformanceClaim
+        : 'none',
     });
   }
 
@@ -249,7 +281,16 @@ function listEvaluators(args: Args): number {
 }
 
 async function main(): Promise<number> {
-  const args = parseArgs(process.argv.slice(2));
+  let args: Args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    if (error instanceof UsageError) {
+      process.stderr.write(`${error.message}\n\n${USAGE}`);
+      return 2;
+    }
+    throw error;
+  }
   if (args.flags.get('help') === true || args.command === '') {
     process.stdout.write(USAGE);
     return args.command === '' ? 2 : 0;
@@ -267,8 +308,26 @@ async function main(): Promise<number> {
   }
 }
 
-// `basename` guards against being imported rather than executed.
-if (basename(process.argv[1] ?? '').startsWith('main') || process.env['STE_AI_CLI'] === '1') {
+/**
+ * Run when this module is the process entry point.
+ *
+ * An earlier version tested `basename(process.argv[1]).startsWith('main')`, which is false for the
+ * installed binary — npm links it as `node_modules/.bin/ste-ai` — so the published CLI parsed its
+ * arguments, did nothing and exited 0. Comparing the resolved entry path to this module's own URL
+ * is correct for every invocation form: `node dist/cli/main.js`, `npx ste-ai`, and a linked bin.
+ */
+function isEntryPoint(): boolean {
+  if (process.env['STE_AI_CLI'] === '1') return true;
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   main().then(
     (code) => {
       process.exitCode = code;

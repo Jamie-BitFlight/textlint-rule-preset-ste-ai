@@ -351,6 +351,13 @@ export function scanBlocks(
   return blocks;
 }
 
+/** True when the character at `index` is escaped by an odd-length run of preceding backslashes. */
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === '\\'; i -= 1) backslashes += 1;
+  return backslashes % 2 === 1;
+}
+
 /**
  * Split a table row into cell ranges on unescaped pipes.
  *
@@ -363,7 +370,7 @@ function splitTableCells(line: Line): SourceRange[] {
   for (let c = 0; c <= line.raw.length; c += 1) {
     const abs = line.start + c;
     const atEnd = c === line.raw.length;
-    const isBoundary = atEnd || (line.raw[c] === '|' && line.raw[c - 1] !== '\\');
+    const isBoundary = atEnd || (line.raw[c] === '|' && !isEscaped(line.raw, c));
     if (!isBoundary) continue;
     if (abs > cellStart) out.push({ start: cellStart, end: abs });
     cellStart = abs + 1;

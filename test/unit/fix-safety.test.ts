@@ -7,8 +7,6 @@ import type { Diagnostic } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
 import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
-const policy = resolveConfig({}).diagnostics;
-
 describe('checkFixSafety', () => {
   const allowed: readonly [string, string, string][] = [
     ['expands a negative contraction', "don't", 'do not'],
@@ -197,27 +195,27 @@ describe('overlapping fixes', () => {
   });
 
   it('keeps non-overlapping fixes', () => {
-    const result = resolveOverlappingFixes([fix(0, 5, 'a'), fix(10, 15, 'b')], policy);
+    const result = resolveOverlappingFixes([fix(0, 5, 'a'), fix(10, 15, 'b')]);
     expect(result.diagnostics.filter((d) => d.fix !== undefined)).toHaveLength(2);
     expect(result.notices).toEqual([]);
   });
 
   it('refuses both fixes when two rules disagree about the same characters', () => {
-    const result = resolveOverlappingFixes([fix(0, 5, 'a'), fix(3, 8, 'b')], policy);
+    const result = resolveOverlappingFixes([fix(0, 5, 'a'), fix(3, 8, 'b')]);
     expect(result.diagnostics.filter((d) => d.fix !== undefined)).toHaveLength(0);
     expect(result.diagnostics.every((d) => d.message.includes('overlapping edit'))).toBe(true);
     expect(result.notices[0]?.code).toBe('overlapping-fixes-refused');
   });
 
   it('treats an identical fix from two rules as a duplicate, not a conflict', () => {
-    const result = resolveOverlappingFixes([fix(0, 5, 'same'), fix(0, 5, 'same')], policy);
+    const result = resolveOverlappingFixes([fix(0, 5, 'same'), fix(0, 5, 'same')]);
     expect(result.diagnostics.filter((d) => d.fix !== undefined)).toHaveLength(1);
   });
 
   it('resolution is deterministic across runs', () => {
     const input = [fix(0, 5, 'a'), fix(3, 8, 'b'), fix(20, 25, 'c')];
-    const a = resolveOverlappingFixes(input, policy).diagnostics.map((d) => d.fix?.text ?? null);
-    const b = resolveOverlappingFixes(input, policy).diagnostics.map((d) => d.fix?.text ?? null);
+    const a = resolveOverlappingFixes(input).diagnostics.map((d) => d.fix?.text ?? null);
+    const b = resolveOverlappingFixes(input).diagnostics.map((d) => d.fix?.text ?? null);
     expect(a).toEqual(b);
     expect(a).toEqual([null, null, 'c']);
   });

@@ -16,27 +16,47 @@
 }
 ```
 
-Or select and tune individual rules:
+Or select and tune individual rules. Per-rule options are **nested under the preset key**, not
+written as `"preset-ste-ai/<rule-id>"`: textlint resolves anything beginning with `preset-` as a
+package name, so a slashed key is looked up as a package called `preset-ste-ai/<rule-id>`, is not
+found, and the whole configuration silently loads no rules at all.
 
 ```json
 {
   "rules": {
-    "preset-ste-ai/sentence-length-procedural": { "maxWords": 18 },
-    "preset-ste-ai/sentence-length-descriptive": { "maxWords": 22 },
-    "preset-ste-ai/no-contractions": true,
-    "preset-ste-ai/abbreviation-introduction": {
-      "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL"]
-    },
-    "preset-ste-ai/punctuation-constraints": { "maxCommas": 2 },
-    "preset-ste-ai/passive-voice-candidate": false
+    "preset-ste-ai": {
+      "sentence-length-procedural": { "maxWords": 18 },
+      "sentence-length-descriptive": { "maxWords": 22 },
+      "no-contractions": true,
+      "abbreviation-introduction": {
+        "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL"]
+      },
+      "punctuation-constraints": { "maxCommas": 2 },
+      "passive-voice-candidate": false
+    }
   }
 }
 ```
 
-textlint's own `severity` option works as usual and controls the severity textlint reports:
+`examples/.textlintrc.json` is a complete working file in this shape, and
+`test/e2e/example-config.test.ts` checks that it stays valid.
+
+### Severity
+
+Each diagnostic carries the severity of its category (see [diagnostic-policy.md](diagnostic-policy.md))
+and the adapter maps that onto textlint's own severity levels, so `error`, `warning` and `info`
+findings are distinguishable in textlint output and to `--max-warnings`.
+
+A per-rule `severity` overrides the category default for that rule:
 
 ```json
-{ "rules": { "preset-ste-ai/preferred-terminology": { "severity": "warning" } } }
+{ "rules": { "preset-ste-ai": { "preferred-terminology": { "severity": "warning" } } } }
+```
+
+To move a whole category, set it in the shared configuration file instead:
+
+```json
+{ "diagnostics": { "severity": { "review-required": "warning" } } }
 ```
 
 ## Shared configuration file

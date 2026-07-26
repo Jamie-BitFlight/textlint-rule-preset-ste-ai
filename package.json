@@ -79,7 +79,8 @@
     "fixtures:validate": "npm run build && node scripts/validate-fixtures.mjs",
     "eval:semantic": "npm run build && node scripts/evaluate-semantic.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run fixtures:validate",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "build:clean": "npm run clean && npm run build"
   },
   "keywords": [
     "textlint",

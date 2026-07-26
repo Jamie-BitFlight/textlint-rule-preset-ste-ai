@@ -191,6 +191,44 @@ describe('per-rule textlint options', () => {
     expect(result.messages[0]?.message).toContain('the configured limit is 3');
   });
 
+  it('carries the configured severity through to the textlint message', async () => {
+    const text = 'Torque the bolt to 25Nm.\n';
+    const withDefault = await kernel.lintText(text, options(['number-unit-format']));
+    // A deterministic violation defaults to `error`, textlint level 2.
+    expect(withDefault.messages[0]?.severity).toBe(2);
+
+    // Demoting the category must reach the reported message. Before the adapter mapped severities
+    // every finding arrived at level 2 and the whole policy was unobservable through textlint.
+    const demoted = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'number-unit-format',
+          rule: preset.rules['number-unit-format']!,
+          options: {
+            shared: { diagnostics: { severity: { 'deterministic-violation': 'info' } } },
+          },
+        },
+      ],
+    });
+    expect(demoted.messages[0]?.severity).toBe(3);
+
+    // A per-rule severity override is a different lever and must reach the message too.
+    const asWarning = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'number-unit-format',
+          rule: preset.rules['number-unit-format']!,
+          options: { shared: { rules: { 'number-unit-format': { severity: 'warning' } } } },
+        },
+      ],
+    });
+    expect(asWarning.messages[0]?.severity).toBe(1);
+  });
+
   it('a rule disabled through shared options produces nothing', async () => {
     const result = await kernel.lintText('Utilise it.\n', {
       ext: '.md',

@@ -62,6 +62,7 @@ export class MemorySemanticCache<T> implements SemanticCache<T> {
 /** A cache that stores nothing. Used when caching is disabled. */
 export class NullSemanticCache<T> implements SemanticCache<T> {
   get(_key: string): T | undefined {
+    this.#misses += 1;
     return undefined;
   }
   set(_key: string, _value: T): void {

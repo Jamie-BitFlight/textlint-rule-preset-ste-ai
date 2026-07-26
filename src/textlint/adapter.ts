@@ -3,6 +3,7 @@ import type {
   TextlintRuleErrorDetails,
   TextlintRuleModule,
   TextlintRuleReportHandler,
+  TextlintRuleSeverityLevel,
 } from '@textlint/types';
 import { analyseText, type AnalysisResult } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
@@ -123,6 +124,29 @@ export function formatMessage(diagnostic: Diagnostic): string {
 }
 
 /**
+ * Map a core severity onto textlint's severity level.
+ *
+ * textlint takes a rule's severity from `.textlintrc` and applies it to every error the rule
+ * reports, which made the per-category `diagnostics.severity` policy inert: an `info`-level
+ * readability observation and an `error`-level violation both surfaced as errors. Reporting the
+ * undocumented object form instead of a `RuleError` instance is the only way the kernel accepts a
+ * per-diagnostic level (see `TextlintRuleContextImpl.report`), so that is what the adapter does.
+ *
+ * `none` (0) is deliberately unreachable: suppressing a finding is the core's decision, expressed
+ * by not producing the diagnostic at all, and the kernel treats a falsy severity as `error` anyway.
+ */
+export function toTextlintSeverity(severity: Diagnostic['severity']): TextlintRuleSeverityLevel {
+  switch (severity) {
+    case 'info':
+      return 3;
+    case 'warning':
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+/**
  * Build the textlint rule module for one core rule id.
  *
  * The same reporter is used for `linter` and `fixer`: a fix is attached whenever the core decided
@@ -138,7 +162,7 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
     context: Readonly<TextlintRuleContext>,
     rawOptions?: object,
   ): TextlintRuleReportHandler => {
-    const { Syntax, RuleError, report, fixer, locator, getSource } = context;
+    const { Syntax, report, fixer, locator, getSource } = context;
     const { shared, ...ownOptions } = (rawOptions ?? {}) as SteRuleOptions;
 
     return {
@@ -177,7 +201,11 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
               fix: fixer.replaceTextRange([start, end], replacement),
             }));
           }
-          report(node, new RuleError(formatMessage(diagnostic), details));
+          report(node, {
+            ...details,
+            message: formatMessage(diagnostic),
+            severity: toTextlintSeverity(diagnostic.severity),
+          });
         }
 
         // Run-level notices are surfaced once, by the first rule in the preset, anchored at the
@@ -185,12 +213,11 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
         if (ruleId === FIRST_RULE_ID) {
           for (const notice of analysis.notices) {
             if (notice.level === 'info') continue;
-            report(
-              node,
-              new RuleError(`[infrastructure-failure][${notice.code}] ${notice.message}`, {
-                padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
-              }),
-            );
+            report(node, {
+              message: `[infrastructure-failure][${notice.code}] ${notice.message}`,
+              padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
+              severity: toTextlintSeverity(notice.level),
+            });
           }
         }
       },

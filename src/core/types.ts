@@ -89,6 +89,7 @@ export type ProtectedRegionKind =
   | 'field-name'
   | 'constant'
   | 'product-identifier'
+  | 'credential'
   | 'approved-term';
 
 /**

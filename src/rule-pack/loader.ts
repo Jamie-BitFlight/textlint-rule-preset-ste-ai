@@ -58,12 +58,43 @@ export function resolveRulePack(
 /**
  * True when output is allowed to describe findings as conformance with a standard.
  *
- * The bundled pack always returns false. A pack must both declare `normative` authority and a
- * conformance claim other than `none` before any such wording is permitted, and even then the
- * wording comes from the pack supplier, not from this package.
+ * Three conditions, all required:
+ *
+ * 1. the pack declares `normative` authority;
+ * 2. it declares a conformance claim other than `none`;
+ * 3. **the operator has named the pack in `trustedRulePackIds`.**
+ *
+ * The third is the trust boundary. Schema validation proves a pack's shape, not its provenance:
+ * any JSON file can assert `authority: "normative"`, so a pack cannot elevate itself. Authority is
+ * supplier-*declared* metadata until an operator makes an explicit, auditable decision to accept
+ * it. The bundled pack fails condition 1 regardless.
+ *
+ * There is no signature verification here. If you need cryptographic provenance rather than an
+ * operator allowlist, verify the pack before handing it to this package and keep the allowlist as
+ * the final gate.
  */
-export function packPermitsConformanceClaim(pack: RulePack): boolean {
-  return pack.metadata.authority === 'normative' && pack.metadata.conformanceClaim !== 'none';
+export function packPermitsConformanceClaim(
+  pack: RulePack,
+  trustedRulePackIds: readonly string[] = [],
+): boolean {
+  if (pack.metadata.authority !== 'normative') return false;
+  if (pack.metadata.conformanceClaim === 'none') return false;
+  return trustedRulePackIds.includes(pack.metadata.id);
+}
+
+/**
+ * The authority the linter will act on, as distinct from the authority the pack claims.
+ *
+ * An untrusted pack's diagnostics report `supplementary` — its rule data is used, but its claim to
+ * normative standing is not honoured. The pack's own assertion stays visible in
+ * `metadata.authority` for the audit trail.
+ */
+export function verifiedAuthority(
+  pack: RulePack,
+  trustedRulePackIds: readonly string[] = [],
+): RulePack['metadata']['authority'] {
+  if (pack.metadata.authority !== 'normative') return pack.metadata.authority;
+  return trustedRulePackIds.includes(pack.metadata.id) ? 'normative' : 'supplementary';
 }
 
 export { provisionalRulePack };

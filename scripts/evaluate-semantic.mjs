@@ -79,5 +79,16 @@ if (report.overall.failureRate > 0.5) {
     `\nMore than half the requests failed (${(report.overall.failureRate * 100).toFixed(0)}%). ` +
       'Check that the server is running and that the model can produce the required JSON.',
   );
-  process.exit(1);
+  process.exitCode = 1;
+}
+
+// A run that produced no labelled cases cannot report precision or recall. Exiting 0 would let a
+// caller record "no failures" for a measurement that measured nothing.
+if (report.overall.labelled === 0 && report.cases.length > 0) {
+  console.error(
+    `\nNo case in this split carries a gold label, so precision, recall and F1 are undefined. ` +
+      `${report.cases.length} candidate(s) were adjudicated but none is referenced by a fixture ` +
+      'annotation for the same rule. Add annotations for the candidate rules before quoting metrics.',
+  );
+  process.exitCode = 1;
 }

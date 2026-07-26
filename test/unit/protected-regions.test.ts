@@ -188,6 +188,32 @@ describe('protected-region extraction', () => {
     expect(doc.isProtected({ start: at, end: at + 8 })).toBe(true);
   });
 
+  it.each([
+    ['aws access key id', 'AKIAIOSFODNN7EXAMPLE'],
+    ['github token', 'ghp_16C7e42F292c6912E7710c838347Ae1781234'],
+    ['hex digest', 'a3f5c9d2e8b1074c6f2a9e5d3b8c1f70'],
+    ['jwt', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dozjgNryP4J3jVmNHl0w5N'],
+  ])('protects a bare %s in prose as a credential', (_what, token) => {
+    const text = `The service uses ${token} for the request.\n`;
+    // `credential` must be among the kinds: another pass may also claim part of the span (a JWT is
+    // dotted like an API path), but the credential classification is what the trace has to show.
+    expect(kindsAt(text, token)).toContain('credential');
+    expect(analyse(text).maskedText).not.toContain(token);
+  });
+
+  it('protects a password bound in prose but not the sentence around it', () => {
+    const text = 'The default password is hunter2 and it must be changed.\n';
+    const doc = analyse(text);
+    expect(doc.maskedText).not.toContain('hunter2');
+    expect(doc.maskedText).toContain('The default password is ');
+    expect(doc.maskedText).toContain(' and it must be changed.');
+  });
+
+  it('leaves prose that merely mentions a credential alone', () => {
+    const text = 'The password is set by the installer and the key is stored in the vault.\n';
+    expect(analyse(text).maskedText).toBe(text);
+  });
+
   it('does not protect prose that merely sits next to protected content', () => {
     const text = 'Utilise `foo` and utilise /etc/bar too.\n';
     const doc = analyse(text);

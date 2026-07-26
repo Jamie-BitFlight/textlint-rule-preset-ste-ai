@@ -130,7 +130,11 @@ deterministic finding set byte-identical to an offline run.
 
 - Bind to `127.0.0.1`. The client sends document text to the endpoint; do not expose it.
 - Protected content is masked out of the passages sent to evaluators, so code, credentials in
-  configuration fragments, URLs and identifiers are not transmitted as prose. Verify this for your own
-  corpus with `--trace` before pointing the linter at anything sensitive.
+  configuration fragments, URLs, paths and identifiers are not transmitted. Where an evaluator needs to
+  know that a protected token is present — the candidate-antecedent list, for instance — it receives a
+  placeholder naming the kind (`«file-path»`) rather than the literal. `test/integration/redaction.test.ts`
+  captures the actual HTTP request bodies and asserts that a set of planted secrets, tokens, paths and
+  hostnames appears in none of them. Still verify it for your own corpus with `--trace` before pointing
+  the linter at anything sensitive.
 - `semantic.apiKey` is sent as a bearer token if set. Supply it via the environment, not the
   committed config file.

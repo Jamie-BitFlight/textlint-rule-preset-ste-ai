@@ -4,7 +4,7 @@
 
 A working textlint extension: 14 deterministic rules, an optional semantic-adjudication subsystem
 for a local llama.cpp server, an 18-document fixture corpus with machine-checkable provenance and
-adjudication records, and 339 passing tests that need no model.
+adjudication records, and 344 passing tests that need no model.
 
 ## Was authorised ASD-STE100 material available?
 
@@ -78,7 +78,7 @@ Every command below was run in this session; the output is what it printed.
 | Type check (strict)            | `npx tsc -p tsconfig.json --noEmit`                                             | exit 0, no diagnostics                                                                                                                               |
 | Lint                           | `npx eslint .`                                                                  | exit 0, no problems                                                                                                                                  |
 | Format                         | `npx prettier --check .`                                                        | `All matched files use Prettier code style!`                                                                                                         |
-| Full test suite                | `npx vitest run`                                                                | **14 files, 339 tests, 339 passed**                                                                                                                  |
+| Full test suite                | `npx vitest run`                                                                | **15 files, 344 tests, 344 passed**                                                                                                                  |
 | Coverage                       | `npx vitest run --coverage`                                                     | statements 90.99% (1819/1999), branches 79.28% (980/1236), functions 86.53% (225/260), lines 93.74% (1634/1743)                                      |
 | Fixture provenance             | `node scripts/validate-fixtures.mjs`                                            | `OK: 18 fixtures, 18 with a rewritten counterpart, 12 dev / 6 heldout, 9 categories. Provenance, licences, digests and protected literals verified.` |
 | End-to-end textlint            | `npx vitest run test/e2e`                                                       | 16 kernel tests + 29 `textlint-tester` cases, all passed                                                                                             |
@@ -86,9 +86,9 @@ Every command below was run in this session; the output is what it printed.
 | Semantic mode vs fake server   | same file                                                                       | 22 integration tests passed over real HTTP                                                                                                           |
 | CLI on the corpus              | `node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json` | 18 files, **111 diagnostics**, `conformance.claim: "none"`                                                                                           |
 
-Test suite composition: 14 files — unit (rules, protected regions, offsets, fix safety, broker,
+Test suite composition: 15 files — unit (rules, protected regions, offsets, fix safety, broker,
 response schema, prompts, evaluation, pipeline smoke), architecture (module boundaries), integration
-(fake HTTP semantic service), fixtures (corpus integrity), e2e (textlint kernel, textlint-tester).
+(fake HTTP semantic service, redaction), fixtures (corpus integrity), e2e (textlint kernel, textlint-tester).
 
 ### Deterministic findings, original vs rewritten
 
@@ -164,9 +164,18 @@ Six real defects, all caught by tests or by the corpus rather than by inspection
 6. **User terminology lost to heuristics.** The approved-term pass ran after the CamelCase identifier
    pass, so a multi-word approved term such as `Acme WidgetPro` could not match — half of it was
    already masked. User-declared terminology now runs before every heuristic pass.
+7. **A protected literal reached the model.** `ambiguous-pronoun-candidate` sends a list of candidate
+   antecedents, and it included protected tokens' literal text. A probe that planted secrets, a bearer
+   token, an inline password and a private key path in a document, then captured the actual HTTP
+   bodies, showed `/srv/private/keys/id_rsa` being transmitted — contradicting the documented
+   redaction guarantee. A protected token now contributes a placeholder naming its kind
+   (`«file-path»`), which carries the whole of the signal the evaluator needs.
+   `test/integration/redaction.test.ts` captures the real request bodies and asserts that none of six
+   planted literals appears in any of them.
 
 Defects 3 and 4 are exactly what the fixture corpus was for: neither would have been found on
-synthetic examples.
+synthetic examples. Defect 7 was found by deliberately attacking the redaction claim rather than
+re-reading the code that implements it.
 
 ## What could not be implemented, and why
 

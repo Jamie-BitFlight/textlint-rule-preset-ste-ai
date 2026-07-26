@@ -448,14 +448,21 @@ export const ambiguousPronounCandidateRule: DeterministicRule<
   },
 };
 
-/** Candidate antecedents: content words in the current and previous sentence, de-duplicated. */
+/**
+ * Candidate antecedents: content words in the current and previous sentence, de-duplicated.
+ *
+ * A protected token contributes a **placeholder naming its kind**, never its literal text. A path,
+ * an inline code span or a configuration value is a candidate referent — the model needs to know one
+ * is present — but transmitting the literal would leak content the protected-region machinery exists
+ * to keep out of requests. `«file-path»` carries the whole of the signal that matters here.
+ */
 function countAntecedents(sentence: Sentence, previous: Sentence | undefined): string[] {
   const seen = new Set<string>();
   const collect = (s: Sentence | undefined): void => {
     if (s === undefined) return;
     for (const word of s.words) {
       if (word.protectedKind !== undefined) {
-        seen.add(word.text);
+        seen.add(`«${word.protectedKind}»`);
         continue;
       }
       if (isFunctionWord(word)) continue;

@@ -1,0 +1,124 @@
+{
+  "fixtureId": "osha-ppe-requirements",
+  "original": "original/osha-ppe-requirements.md",
+  "compliant": "compliant/osha-ppe-requirements.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "osha-ppe-requirements-p1",
+      "originalText": "Protective equipment, including personal protective equipment for eyes, face, head, and extremities, protective clothing, respiratory devices, and protective shields and barriers, shall be provided, used, and maintained in a sanitary and reliable condition wherever it is necessary by reason of hazards of processes or environment, chemical hazards, radiological hazards, or mechanical irritants encountered in a manner capable of causing injury or impairment in the function of any part of the body through absorption, inhalation or physical contact.",
+      "rewrittenText": "Protective equipment, including personal protective equipment for eyes, face, head, and extremities, protective clothing, respiratory devices, and protective shields and barriers, shall be provided, used, and maintained in a sanitary and reliable condition wherever it is necessary by reason of hazards of processes or environment, chemical hazards, radiological hazards, or mechanical irritants encountered in a manner capable of causing injury or impairment in the function of any part of the body through absorption, inhalation or physical contact.",
+      "ruleIds": ["sentence-length-descriptive", "punctuation-constraints"],
+      "originalSpans": [
+        { "start": 228, "end": 779 },
+        { "start": 746, "end": 747 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "Protective equipment, including personal protective equipment for eyes, face, head, and extremities, protective clothing, respiratory devices, and protective shields and barriers, shall be provided, used, and maintained in a sanitary and reliable condition wherever it is necessary by reason of hazards of processes or environment, chemical hazards, radiological hazards, or mechanical irritants encountered in a manner capable of causing injury or impairment in the function of any part of the body through absorption, inhalation or physical contact." },
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": "," }
+      ],
+      "reason": "This 77-word, 14-comma run is the entire '1910.132(a) Application' requirement as a single legal sentence: one 'shall be provided, used, and maintained' obligation governed by one 'wherever...' scope clause, with a long enumeration of covered equipment and covered hazard categories. Per the SAFETY constraint on this fixture we may only split over-long sentences, vocabulary-swap, and de-contract -- we may not restructure a requirement or move clauses. Every split we drafted that gets each resulting sentence under 25 words requires either extracting the equipment enumeration into its own lead sentence (reordering 'shall be provided' relative to the list it governs) or separating the hazard-scope clause from the obligation it qualifies -- both of which risk changing which equipment the obligation covers or whether the hazard clause still binds it. We decline to take that risk and defer this passage to a subject-matter/legal reviewer rather than force an edit.",
+      "semanticInvariants": [
+        "the enumerated list of protected body regions and equipment (eyes, face, head, extremities, protective clothing, respiratory devices, protective shields and barriers) must not be reordered, merged, or dropped",
+        "the modal 'shall' must not change to 'must' or any other modal",
+        "the 'wherever it is necessary by reason of...' scope clause must continue to govern the same obligation without being detached or reordered"
+      ],
+      "unresolved": [
+        "a safe way to shorten this sentence without reordering or extracting clauses was not found; needs legal/SME sign-off before any rewrite is attempted"
+      ],
+      "status": "deferred",
+      "reviewerConfidence": 0.55
+    },
+    {
+      "passageId": "osha-ppe-requirements-p2",
+      "originalText": "1910.132",
+      "rewrittenText": "1910.132",
+      "ruleIds": ["number-unit-format"],
+      "originalSpans": [
+        { "start": 781, "end": 789 },
+        { "start": 999, "end": 1007 },
+        { "start": 1126, "end": 1134 },
+        { "start": 1183, "end": 1191 },
+        { "start": 1446, "end": 1454 },
+        { "start": 1622, "end": 1630 },
+        { "start": 1707, "end": 1715 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "number-unit-format", "category": "deterministic-violation", "quote": "1910.132" }
+      ],
+      "reason": "'1910.132' is the 29 CFR regulatory citation number for this OSHA standard, repeated as a subsection marker (1910.132(b), (c), (d), (d)(1), (d)(1)(i)-(iii)) throughout the excerpt. It is not a quantity with a missing unit space; it is a legal citation. The SAFETY constraint for this fixture explicitly forbids changing any regulatory citation, so all seven occurrences are disputed together.",
+      "semanticInvariants": [
+        "every '1910.132' citation and its subsection suffix must remain byte-identical and in its original position"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.98
+    },
+    {
+      "passageId": "osha-ppe-requirements-p3",
+      "originalText": "The employer shall assess the workplace to determine if hazards are present, or are likely to be present, which necessitate the use of personal protective equipment (PPE).",
+      "rewrittenText": "The employer shall assess the workplace to determine if hazards are present, or are likely to be present. Such hazards need the use of personal protective equipment (PPE).",
+      "ruleIds": ["sentence-length-descriptive", "unapproved-vocabulary"],
+      "originalSpans": [
+        { "start": 1199, "end": 1370 },
+        { "start": 1311, "end": 1322 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "The employer shall assess the workplace to determine if hazards are present, or are likely to be present, which necessitate the use of personal protective equipment (PPE)." },
+        { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "necessitate" }
+      ],
+      "reason": "This standalone sentence (not part of the enumerated (i)-(iii) list) is 27 words, two over the limit, and uses 'necessitate' where 'need' is plainer. Unlike the Application paragraph, this sentence splits cleanly at its own internal clause boundary ('...likely to be present, which necessitate...') without reordering or merging any requirement: the relative clause becomes its own sentence with an anaphoric 'Such hazards' referring back to the same hazards just described. The modal 'shall' earlier in the sentence is untouched, and no regulatory citation is present in this span.",
+      "semanticInvariants": [
+        "the employer's duty to assess the workplace for present or likely hazards must be preserved",
+        "the requirement that such hazards are what necessitates/needs PPE use must be preserved",
+        "the modal 'shall' must not change"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "osha-ppe-requirements-p4",
+      "originalText": "Select, and have each affected employee use, the types of PPE that will protect the affected employee from the hazards identified in the hazard assessment;",
+      "rewrittenText": "Select, and have each affected employee use, the types of PPE that will protect the affected employee from the hazards identified in the hazard assessment;",
+      "ruleIds": ["sentence-length-procedural"],
+      "originalSpans": [{ "start": 1465, "end": 1620 }],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-procedural", "category": "deterministic-violation", "quote": "Select, and have each affected employee use, the types of PPE that will protect the affected employee from the hazards identified in the hazard assessment;" }
+      ],
+      "reason": "This is sub-item (d)(1)(i) of a three-part enumerated 'the employer shall: (i)...; (ii)...; and (iii)....' legal list. It genuinely runs 25 words against a 20-word procedural limit, but it is a single compound imperative ('Select X, and have Y use X') describing one legally atomic duty, terminated with the semicolon that connects it to sub-item (ii). Splitting it into two sentences would require ending it with a period instead of ';', breaking the enumerated-list punctuation convention this whole (d)(1) clause depends on -- exactly the kind of requirement restructuring the SAFETY constraint for this fixture prohibits. We defer this to an SME rather than risk altering the list structure.",
+      "semanticInvariants": [
+        "sub-item (i) must remain a single enumerated list item ending in a semicolon that connects it to sub-item (ii)",
+        "both duties (selecting PPE types and having the employee use them) must remain part of the same requirement"
+      ],
+      "unresolved": [
+        "whether a split that preserves the trailing semicolon (e.g. two sentences before the semicolon) would still count as 'restructuring' under this fixture's safety constraint; declined without SME guidance"
+      ],
+      "status": "deferred",
+      "reviewerConfidence": 0.55
+    },
+    {
+      "passageId": "osha-ppe-requirements-p5",
+      "originalText": ";",
+      "rewrittenText": ";",
+      "ruleIds": ["punctuation-constraints"],
+      "originalSpans": [
+        { "start": 1619, "end": 1620 },
+        { "start": 1699, "end": 1700 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": ";" }
+      ],
+      "reason": "Both semicolons are legal-list separators inside the enumerated '(d)(1)(i); (d)(1)(ii); and (d)(1)(iii).' structure, not semicolons joining two independent statements in ordinary prose. This is the same false-positive class explicitly called out for semicolons that are part of a formal syntax the rule doesn't recognise (there, SQL syntax; here, statutory list punctuation). Replacing them with periods would split single enumerated sub-items of one requirement into separate sentences, which the SAFETY constraint for this fixture prohibits ('do not restructure a requirement, do not merge requirements').",
+      "semanticInvariants": [
+        "the three-part enumerated structure (i); (ii); and (iii). must remain a single connected list under 'the employer shall:'"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    }
+  ],
+  "protectedLiterals": ["1910.132", "PPE"],
+  "reviewers": ["rewriter-b"],
+  "notes": "Safety-restricted fixture: only one clean, isolated sentence (not part of the enumerated (i)-(iii) list or the citation-heavy Application paragraph) could be split and vocabulary-swapped without risking a restructuring of a legal requirement, so it is the only accepted change. The 77-word Application sentence and the 25-word list item (i) are genuine over-length findings that we deferred rather than risk reordering or merging OSHA sub-requirements; all seven regulatory citation numbers and both enumerated-list semicolons are disputed as false positives against citations and statutory list punctuation."
+}

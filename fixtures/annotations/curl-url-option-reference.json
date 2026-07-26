@@ -1,0 +1,140 @@
+{
+  "fixtureId": "curl-url-option-reference",
+  "original": "original/curl-url-option-reference.md",
+  "compliant": "compliant/curl-url-option-reference.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "curl-url-option-reference-p1",
+      "originalText": "If the outermost subdomain\nname matches DICT, FTP, IMAP, LDAP, POP3 or SMTP case insensitively, then that\nprotocol is used, otherwise it assumes HTTP.",
+      "rewrittenText": "If the outermost subdomain\nname matches one of the following case insensitively, that protocol is used:\n\n- DICT\n- FTP\n- IMAP\n- LDAP\n- POP3\n- SMTP\n\nOtherwise, curl assumes HTTP.",
+      "ruleIds": ["punctuation-constraints"],
+      "originalSpans": [{ "start": 806, "end": 807 }],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": "," }
+      ],
+      "reason": "The sentence had 6 commas (limit 3), mostly from a 6-item protocol enumeration that cannot be shortened without dropping a protocol name; converted the inline enumeration to a bulleted list, which removes the list-internal commas and keeps every protocol name intact.",
+      "semanticInvariants": [
+        "all six protocol names (DICT, FTP, IMAP, LDAP, POP3, SMTP) are present, in the same order",
+        "the case-insensitive subdomain match determines which of the six is used; HTTP is the fallback"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "curl-url-option-reference-p2",
+      "originalText": "SPDX-License-Identifier: curl",
+      "rewrittenText": "SPDX-License-Identifier: curl",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 262, "end": 266 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "SPDX" }
+      ],
+      "reason": "SPDX-License-Identifier is a structured metadata field name inside the option's YAML-like front matter, consumed by curl's doc generator; it is not prose introducing a term to a reader.",
+      "semanticInvariants": ["the front-matter field name SPDX-License-Identifier is unchanged"],
+      "unresolved": ["rule scans front-matter metadata as if it were prose"],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "curl-url-option-reference-p3",
+      "originalText": "Arg: <url/file>",
+      "rewrittenText": "Arg: <url/file>",
+      "ruleIds": ["punctuation-constraints"],
+      "originalSpans": [{ "start": 311, "end": 312 }],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": "/" }
+      ],
+      "reason": "This slash is inside the front-matter Arg field's placeholder value `<url/file>`, denoting the argument may be a URL or a file path; it is not an ambiguous slash in narrative prose.",
+      "semanticInvariants": ["the Arg field's placeholder value <url/file> is unchanged"],
+      "unresolved": ["rule scans front-matter field values as if it were prose"],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "curl-url-option-reference-p4",
+      "originalText": "Added: 7.5",
+      "rewrittenText": "Added: 7.5",
+      "ruleIds": ["number-unit-format"],
+      "originalSpans": [{ "start": 366, "end": 369 }],
+      "expectedDiagnostics": [
+        { "ruleId": "number-unit-format", "category": "deterministic-violation", "quote": "7.5" }
+      ],
+      "reason": "7.5 is the curl version this option was added in (a front-matter metadata value), not a number-and-unit pair; there is no unit to space out.",
+      "semanticInvariants": ["the version number 7.5 is unchanged"],
+      "unresolved": ["rule misreads a version number's decimal point as a missing unit space"],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "curl-url-option-reference-p5",
+      "originalText": "Specify a URL to fetch or send data to.",
+      "rewrittenText": "Specify a URL to fetch or send data to.",
+      "ruleIds": ["one-instruction-per-sentence"],
+      "originalSpans": [{ "start": 514, "end": 553 }],
+      "expectedDiagnostics": [
+        { "ruleId": "one-instruction-per-sentence", "category": "deterministic-violation", "quote": "Specify a URL to fetch or send data to." }
+      ],
+      "reason": "There is one instruction here (\"Specify a URL\"); \"to fetch or send data to\" is a purpose clause describing the URL's two possible uses, not a second imperative action the reader must perform. The rule mis-detects the infinitives \"fetch\"/\"send\" as sibling actions.",
+      "semanticInvariants": ["the URL argument's dual purpose (fetching from it or sending data to it) is unchanged"],
+      "unresolved": ["rule cannot distinguish a purpose clause with alternative infinitives from two sequential instructions"],
+      "status": "disputed",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "curl-url-option-reference-p6",
+      "originalText": "matches DICT, FTP, IMAP, LDAP, POP3 or SMTP case insensitively",
+      "rewrittenText": "DICT\n- FTP\n- IMAP\n- LDAP\n- POP3\n- SMTP",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [
+        { "start": 724, "end": 728 },
+        { "start": 730, "end": 733 },
+        { "start": 735, "end": 739 },
+        { "start": 741, "end": 745 },
+        { "start": 755, "end": 759 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "DICT" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "FTP" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "IMAP" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "LDAP" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "SMTP" }
+      ],
+      "reason": "DICT, FTP, IMAP, LDAP and SMTP are URL scheme identifiers curl matches literally against the subdomain string, not narrative abbreviations being introduced to the reader; spelling out all five (e.g. \"Lightweight Directory Access Protocol (LDAP)\") for a case-insensitive string-match list would bloat the sentence far more than it would help.",
+      "semanticInvariants": ["the five scheme identifiers (DICT, FTP, IMAP, LDAP, SMTP) and POP3 are unchanged and unexpanded"],
+      "unresolved": ["rule does not distinguish literal scheme/protocol identifiers from prose abbreviations"],
+      "status": "disputed",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "curl-url-option-reference-p7",
+      "originalText": "Starting in curl 8.13.0, curl can be told to download URLs",
+      "rewrittenText": "Starting in curl 8.13.0, curl can be told to download URLs",
+      "ruleIds": ["number-unit-format"],
+      "originalSpans": [{ "start": 1384, "end": 1390 }],
+      "expectedDiagnostics": [
+        { "ruleId": "number-unit-format", "category": "deterministic-violation", "quote": "8.13.0" }
+      ],
+      "reason": "8.13.0 is a curl release version number, not a number-and-unit pair.",
+      "semanticInvariants": ["the version number 8.13.0 is unchanged"],
+      "unresolved": ["rule misreads a three-part version number's dots as missing unit spaces"],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": [
+    "--url",
+    "`--url @filename`",
+    "`@-`",
+    "--proto-default",
+    "--output",
+    "--remote-name",
+    "--remote-name-all",
+    "`http://`",
+    "`ftp://`",
+    "`file://`"
+  ],
+  "reviewers": ["rewriter-a"],
+  "notes": ""
+}

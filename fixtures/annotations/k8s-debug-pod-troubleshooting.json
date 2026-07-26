@@ -1,0 +1,43 @@
+{
+  "fixtureId": "k8s-debug-pod-troubleshooting",
+  "original": "original/k8s-debug-pod-troubleshooting.md",
+  "compliant": "compliant/k8s-debug-pod-troubleshooting.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "k8s-debug-pod-troubleshooting-p1",
+      "originalText": "**You don't have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster, in this case you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster.",
+      "rewrittenText": "**You do not have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster. In this case, you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster.",
+      "ruleIds": ["sentence-length-descriptive", "no-contractions"],
+      "originalSpans": [
+        { "start": 1316, "end": 1522 },
+        { "start": 1322, "end": 1327 }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "**You don't have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster, in this case you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster."
+        },
+        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "don't" }
+      ],
+      "reason": "36-word sentence combining a contraction, a resource-exhaustion description, and a 'need to' instruction; expanded the contraction and split at the existing comma into a description sentence and an instruction sentence.",
+      "semanticInvariants": [
+        "the negation ('do not have enough resources') is unchanged",
+        "the obligation ('you need to') to delete Pods, adjust resource requests, or add nodes is unchanged",
+        "the resource types named (CPU, Memory) are unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": [
+    "Pods",
+    "CPU",
+    "Memory",
+    "[Compute Resources document](/docs/concepts/configuration/manage-resources-containers/)"
+  ],
+  "reviewers": ["rewriter-a"],
+  "notes": ""
+}

@@ -1,0 +1,134 @@
+{
+  "fixtureId": "httpd-mod-ssl-directive-config",
+  "original": "original/httpd-mod-ssl-directive-config.md",
+  "compliant": "compliant/httpd-mod-ssl-directive-config.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p1",
+      "originalText": "2.4.64",
+      "rewrittenText": "2.4.64",
+      "ruleIds": ["number-unit-format"],
+      "originalSpans": [{ "start": 382, "end": 388 }],
+      "expectedDiagnostics": [
+        { "ruleId": "number-unit-format", "category": "deterministic-violation", "quote": "2.4.64" }
+      ],
+      "reason": "'2.4.64' is the Apache httpd release version in which the 'optional' SSLEngine argument was removed, not a quantity with a missing unit space. Reformatting it would misrepresent the version number.",
+      "semanticInvariants": ["the version number 2.4.64 must remain byte-identical"],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p2",
+      "originalText": "RFC",
+      "rewrittenText": "RFC",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 401, "end": 404 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "RFC" }
+      ],
+      "reason": "'RFC 2817' is a specific IETF document citation (like the FIPS 140-2 and CFR citations elsewhere in this corpus), not a general term being repeatedly used that benefits from first-use expansion. It appears exactly once, as part of a fixed document number, and is never referred to again.",
+      "semanticInvariants": ["the citation 'RFC 2817' must remain byte-identical"],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p3",
+      "originalText": "/",
+      "rewrittenText": "/",
+      "ruleIds": ["punctuation-constraints"],
+      "originalSpans": [
+        { "start": 477, "end": 478 },
+        { "start": 564, "end": 565 },
+        { "start": 612, "end": 613 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": "/" }
+      ],
+      "reason": "'SSL/TLS' is the fixed, compound name of the protocol pairing this directive controls ('SSL/TLS Protocol Engine'), not an ambiguous and/or slash between two independent words. Rewriting it as 'SSL or TLS' or 'SSL and TLS' would change the established product/protocol name and could misleadingly suggest the engine handles only one of the two.",
+      "semanticInvariants": ["the compound protocol name 'SSL/TLS' must remain unchanged everywhere it appears"],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.93
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p4",
+      "originalText": "#...",
+      "rewrittenText": "#...",
+      "ruleIds": ["punctuation-constraints"],
+      "originalSpans": [{ "start": 757, "end": 760 }],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": "..." }
+      ],
+      "reason": "This ellipsis is inside a literal Apache configuration example ('<VirtualHost _default_:443> / SSLEngine on / #... / </VirtualHost>'), where '#...' is the conventional config-comment placeholder meaning 'other directives go here'. It is example syntax, not prose, and editing it would corrupt the example.",
+      "semanticInvariants": ["the VirtualHost configuration example, including the '#...' placeholder comment, must remain byte-identical"],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.92
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p5",
+      "originalText": "FIPS",
+      "rewrittenText": "FIPS",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 789, "end": 793 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "FIPS" }
+      ],
+      "reason": "The flagged occurrence is inside the SSLFIPS directive reference heading ('SSLFIPS / SSL FIPS mode Switch / Syntax: SSLFIPS on|off ...'), where 'FIPS' is part of the literal directive name and the C API symbol 'FIPS_mode' used later, and reappears afterward only inside the fixed citation 'FIPS 140-2'. There is no ordinary-prose occurrence where expanding it would not require altering a protected identifier (SSLFIPS, FIPS_mode) or a citation number (FIPS 140-2).",
+      "semanticInvariants": [
+        "the directive name SSLFIPS, the C symbol FIPS_mode, and the citation 'FIPS 140-2' must all remain byte-identical"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p6",
+      "originalText": "140-2",
+      "rewrittenText": "140-2",
+      "ruleIds": ["number-unit-format"],
+      "originalSpans": [
+        { "start": 1262, "end": 1267 },
+        { "start": 1372, "end": 1377 },
+        { "start": 1484, "end": 1489 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "number-unit-format", "category": "deterministic-violation", "quote": "140-2" }
+      ],
+      "reason": "'140-2' is part of the fixed standard number 'FIPS 140-2', a NIST publication citation, not a quantity with a missing unit space. Inserting a space would corrupt the standard's name.",
+      "semanticInvariants": ["the standard citation 'FIPS 140-2' must remain byte-identical everywhere it appears"],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p7",
+      "originalText": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library for\nspecific requirements to use mod_ssl in a FIPS 140-2 approved mode\nof operation; note that mod_ssl itself is not validated, but may be\ndescribed as using FIPS 140-2 validated cryptographic module, when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy.",
+      "rewrittenText": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library. It states\nspecific requirements for using mod_ssl in a FIPS 140-2 approved mode\nof operation. Note that mod_ssl itself is not validated. It may be\ndescribed as using a FIPS 140-2 validated cryptographic module. This applies when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy.",
+      "ruleIds": ["sentence-length-descriptive", "punctuation-constraints"],
+      "originalSpans": [
+        { "start": 1244, "end": 1632 },
+        { "start": 1404, "end": 1405 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library for\nspecific requirements to use mod_ssl in a FIPS 140-2 approved mode\nof operation; note that mod_ssl itself is not validated, but may be\ndescribed as using FIPS 140-2 validated cryptographic module, when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy." },
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": ";" }
+      ],
+      "reason": "One 61-word sentence with a semicolon join. We split it into four short sentences at its existing clause boundaries ('for specific requirements' / semicolon / 'but may be described' / 'when all components') without reordering any clause or dropping any of the three 'FIPS 140-2' citations, so every requirement and every citation is preserved in its original order.",
+      "semanticInvariants": [
+        "all three occurrences of the citation 'FIPS 140-2' must remain byte-identical and in the same relative order",
+        "the identifier mod_ssl must remain byte-identical everywhere it appears",
+        "the claim that mod_ssl itself is not validated, but the assembled cryptographic module may be described as FIPS 140-2 validated, must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": ["2.4.64", "RFC 2817", "SSL/TLS", "FIPS_mode", "SSLFIPS", "FIPS 140-2", "mod_ssl", "#..."],
+  "reviewers": ["rewriter-b"],
+  "notes": "Six of seven diagnostics are false positives against version numbers, standard/document citation numbers, a fixed compound protocol name, a literal configuration-example placeholder, and directive-name identifiers; only the one genuinely overlong, semicolon-joined descriptive sentence is rewritten, preserving every identifier and citation in it."
+}

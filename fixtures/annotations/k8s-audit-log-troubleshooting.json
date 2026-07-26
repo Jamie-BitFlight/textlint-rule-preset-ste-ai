@@ -1,0 +1,69 @@
+{
+  "fixtureId": "k8s-audit-log-troubleshooting",
+  "original": "original/k8s-audit-log-troubleshooting.md",
+  "compliant": "compliant/k8s-audit-log-troubleshooting.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "k8s-audit-log-troubleshooting-p1",
+      "originalText": "Audit records begin their lifecycle inside the\n[kube-apiserver](/docs/reference/command-line-tools-reference/kube-apiserver/)\ncomponent.",
+      "rewrittenText": "Audit records begin their lifecycle inside the\n[kube-apiserver](/docs/reference/command-line-tools-reference/kube-apiserver/)\ncomponent.",
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 779,
+          "end": 1214
+        }
+      ],
+      "expectedDiagnostics": [],
+      "reason": "The reviewer diagnosed this finding as a tool defect rather than an over-long sentence, and demonstrated it by feeding the masked text straight to sentence-splitter: masking a markdown link destination together with its closing `]` left the opening `[` unpaired, so the splitter treated the remainder of the block as bracketed and merged several sentences into one 55-word span. The defect was corrected in linkDestinationPass (the mask now keeps brackets balanced) and the finding no longer occurs, so expectedDiagnostics is empty. The prose was left unchanged.",
+      "semanticInvariants": [
+        "the four-sentence description of how an audit event is generated, pre-processed, and persisted must remain unchanged",
+        "the markdown link to the kube-apiserver reference page must remain unchanged"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 1.0
+    },
+    {
+      "passageId": "k8s-audit-log-troubleshooting-p2",
+      "originalText": "what's",
+      "rewrittenText": "what is",
+      "ruleIds": [
+        "no-contractions"
+      ],
+      "originalSpans": [
+        {
+          "start": 1092,
+          "end": 1098
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "no-contractions",
+          "category": "deterministic-violation",
+          "quote": "what's"
+        }
+      ],
+      "reason": "Unambiguous contraction in 'The policy determines what's recorded' -- clearly 'what is recorded' (present tense), not 'what has recorded' which would be ungrammatical here. Expanding it changes nothing about meaning.",
+      "semanticInvariants": [
+        "the claim that policy determines what is recorded, and backends persist the records, must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.97
+    }
+  ],
+  "protectedLiterals": [
+    "kube-apiserver",
+    "/docs/reference/command-line-tools-reference/kube-apiserver/",
+    "RequestReceived",
+    "ResponseStarted"
+  ],
+  "reviewers": [
+    "rewriter-b"
+  ],
+  "notes": "The single sentence-length-descriptive finding is disputed as an empirically-verified tool artifact: masking the markdown link destination breaks the sentence-splitter for the remainder of the paragraph, merging four short, correct sentences into one falsely 'overlong' one. The only genuine, safe defect (an unambiguous contraction) is accepted. Passage p1 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery."
+}

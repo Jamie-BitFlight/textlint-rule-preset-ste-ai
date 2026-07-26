@@ -1,0 +1,173 @@
+# Fixture corpus
+
+## What it is
+
+18 excerpts of real, publicly licensed technical documentation, each with a carefully rewritten
+counterpart and a machine-readable adjudication record.
+
+```
+fixtures/
+  manifest.json           machine-readable provenance for every fixture
+  provenance.lock.json    written by scripts/fetch-sources.mjs: real URL, HTTP status, SHA-256, bytes
+  LICENSES.md             per-fixture attribution and verbatim licence quotes
+  original/<id>.md        verbatim excerpt from the source
+  compliant/<id>.md       this project's rewritten counterpart
+  annotations/<id>.json   what changed, why, and what must not change
+```
+
+## Licence rules
+
+Only sources whose licence permits redistribution **and is not share-alike or copyleft** are included:
+public domain (US federal government works, SQLite), MIT, BSD, Apache-2.0, the curl and PostgreSQL
+licences, and CC-BY-4.0. Share-alike and copyleft licences are excluded on purpose — they would
+propagate their obligations onto the rewritten counterparts, which are adaptations.
+
+`derivativeLicence` records the licence of the counterpart: `MIT (this repository)` for permissive and
+public-domain sources, and `CC-BY-4.0` for CC-BY sources, where attribution propagates. The validator
+enforces this, and rejects any share-alike or copyleft licence outright.
+
+Composition:
+
+| Licence                            | Fixtures |
+| ---------------------------------- | -------- |
+| Public Domain (SQLite)             | 4        |
+| Public Domain (US Government work) | 2        |
+| Apache-2.0                         | 4        |
+| Apache-2.0 WITH LLVM-exception     | 2        |
+| CC-BY-4.0                          | 2        |
+| PostgreSQL Licence                 | 1        |
+| BSD-3-Clause                       | 1        |
+| curl licence                       | 1        |
+| MIT                                | 1        |
+
+## Provenance is auditable, not asserted
+
+`scripts/fetch-sources.mjs` downloads every source and writes `provenance.lock.json` with the real
+HTTP status, byte count, SHA-256 and fetch timestamp. The manifest references a lock key per fixture,
+and the validator cross-checks: a fabricated entry cannot pass.
+
+```bash
+npm run fixtures:fetch      # re-download and rewrite the lock (needs network)
+npm run fixtures:validate   # build, then verify everything below
+```
+
+`validateFixtureCorpus()` checks:
+
+- the manifest and lock satisfy their schemas;
+- each `originalSha256` matches the committed file;
+- each `provenanceKey` resolves to a lock record with a 2xx status and non-zero bytes, whose URL
+  corresponds to the fixture's `sourceUrl`;
+- no share-alike or copyleft licence, and a licence quote of at least 10 characters with a URL;
+- CC-BY sources propagate attribution into `derivativeLicence`;
+- category minimums (≥ 2 per category across 9 categories) and corpus size (≥ 15);
+- `heldout` is at least 25% of the corpus, and the splits are disjoint by content hash;
+- no unlisted files in `fixtures/original/`;
+- **protected literals are byte-identical** between an original and its counterpart;
+- annotations parse, agree with the manifest split, quote text that actually exists, and use real
+  character offsets.
+
+## Categories
+
+Each category has at least two fixtures:
+
+`installation`, `maintenance`, `troubleshooting`, `safety-warning`, `descriptive`,
+`api-configuration`, `cli-reference`, `structured-content` (tables + lists + code blocks),
+`hard-negative`.
+
+`hard-negative` fixtures were selected because a naive linter flags them _wrongly_: long sentences
+that are really lists of identifiers, correct passive constructions, dense abbreviation use, SQL
+keywords that look like unintroduced abbreviations. They exist to keep false positives visible, and
+their annotations mostly record `disputed` findings rather than rewrites.
+
+## Splits
+
+`dev` (12 fixtures) is for tuning rules, prompts and thresholds. `heldout` (6) is for reporting
+evaluator quality and must not be tuned against.
+
+The separation is enforced three ways: the validator asserts the splits are disjoint by content hash
+and that `heldout` is ≥ 25% of the corpus; `npm run eval:semantic` defaults to `heldout` and requires
+`--split all` to mix; and a test asserts no `heldout` content hash appears in `dev`.
+
+## Rewriting rules
+
+A counterpart applies **minimal edits**. A sentence with no defect is copied through byte for byte.
+This is not a style rewrite.
+
+Byte-identical in both versions:
+
+- fenced and inline code, shell commands, literal output;
+- identifiers, API and field names, constants, flags, environment variables;
+- URLs, email addresses, file paths;
+- product, component and part names; version strings;
+- every number, quantity, tolerance, range and unit;
+- placeholders; table structure and cell literals;
+- the required order of procedural steps.
+
+Preserved in meaning:
+
+- negation; preconditions and conditions; actor responsibility;
+- modal force — `must` / `shall` / `should` / `can` / `may` / `do not` are never softened or
+  strengthened;
+- the distinction between instruction, description, note, caution and warning. A `WARNING` is never
+  downgraded to a note, and no hazard statement is removed.
+
+For the two safety fixtures the permitted changes are narrower still: vocabulary, contractions and
+sentence splitting only. No requirement is restructured or merged, and no regulatory citation is
+touched.
+
+## Annotation records
+
+`src/fixture-tools/annotation-schema.ts` is authoritative. Per change:
+
+```jsonc
+{
+  "passageId": "sqlite-vacuum-space-reclaim-p1",
+  "originalText": "…exact substring of the original…",
+  "rewrittenText": "…exact substring of the counterpart…",
+  "ruleIds": ["unapproved-vocabulary"],
+  "originalSpans": [{ "start": 412, "end": 420 }],   // real offsets, checked by the validator
+  "expectedDiagnostics": [
+    { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "utilise" }
+  ],
+  "reason": "…why the change was made, or why it was refused…",
+  "semanticInvariants": ["the 500-hour interval", "the prohibition on removing the cover"],
+  "unresolved": ["…anything a reviewer would not decide…"],
+  "status": "accepted" | "disputed" | "deferred",
+  "reviewerConfidence": 0.9
+}
+```
+
+`disputed` is a first-class outcome: it records that the linter was **wrong** and the prose was left
+alone. A reviewer is not obliged to satisfy a heuristic, and the tests are built so that refusing does
+not fail the build — a fixture with no accepted change must simply be a `hard-negative` or carry a
+`notes` explanation, and must record something as `disputed` or `deferred`.
+
+## Corpus tests
+
+`test/fixtures/corpus.test.ts` asserts, over the real corpus:
+
+| Assertion                                                          | Why                                           |
+| ------------------------------------------------------------------ | --------------------------------------------- |
+| the full validator passes                                          | provenance and licences                       |
+| no diagnostic lands inside a code fence, on any fixture            | the protected-region guarantee, on real input |
+| every diagnostic quotes non-empty real source                      | offset integrity, on real input               |
+| no fix lands inside an admonition, on any fixture                  | the autofix policy, on real input             |
+| protected literals survive every rewrite                           | corpus integrity                              |
+| code fences are byte-identical across a pair                       | corpus integrity                              |
+| violation count never increases after a rewrite                    | the rewrite did not make things worse         |
+| violations decrease whenever a change was accepted                 | the rewrite did what the annotation claims    |
+| every accepted change's expected diagnostic no longer fires        | the annotation is honest about the fix        |
+| every expected diagnostic actually fires on the original           | the annotation is honest about the defect     |
+| a fixture with no accepted change is documented as a hard negative | refusals are explicit                         |
+
+## Adding a fixture
+
+1. Add the source to `scripts/fetch-sources.mjs` and run `npm run fixtures:fetch`. Never hand-write a
+   provenance record.
+2. Verify the licence by fetching the licence page or the repository `LICENSE` file, and quote it
+   verbatim in the manifest and in `LICENSES.md`.
+3. Cut a verbatim excerpt of 300–2400 characters into `fixtures/original/<id>.md` with the header
+   comment the other fixtures use.
+4. Add the manifest entry, including the SHA-256 of the file as committed.
+5. Write the counterpart and the annotation.
+6. `npm run fixtures:validate && npx vitest run test/fixtures`.

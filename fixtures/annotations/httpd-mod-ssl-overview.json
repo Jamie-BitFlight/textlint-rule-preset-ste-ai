@@ -1,0 +1,35 @@
+{
+  "fixtureId": "httpd-mod-ssl-overview",
+  "original": "original/httpd-mod-ssl-overview.md",
+  "compliant": "compliant/httpd-mod-ssl-overview.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "httpd-mod-ssl-overview-p1",
+      "originalText": "This module can be configured to provide several items of SSL information\nas additional environment variables to the SSI and CGI namespace.",
+      "rewrittenText": "This module can be configured to provide several items of SSL information\nas more environment variables. These are added to the Server Side Includes (SSI) and Common Gateway Interface (CGI) namespace.",
+      "ruleIds": ["unapproved-vocabulary", "abbreviation-introduction"],
+      "originalSpans": [
+        { "start": 535, "end": 545 },
+        { "start": 575, "end": 578 },
+        { "start": 583, "end": 586 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "additional" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "SSI" },
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "CGI" }
+      ],
+      "reason": "\"additional\" is not approved vocabulary (replaced with \"more\"); SSI and CGI are genuine, un-expanded abbreviations (Server Side Includes, Common Gateway Interface) used before being introduced, so both are spelled out at first use. Expanding the abbreviations added words, pushing the sentence over the 25-word descriptive limit, so it was also split in two.",
+      "semanticInvariants": [
+        "the claim that this module can add SSL information as environment variables to the SSI and CGI namespace is unchanged",
+        "SSI expands to Server Side Includes and CGI to Common Gateway Interface"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.85
+    }
+  ],
+  "protectedLiterals": ["SSI", "CGI", "SSL", "TLS", "HTTPS", "SSL_TLS_SNI", "SSLOptions StdEnvVars"],
+  "reviewers": ["rewriter-a"],
+  "notes": ""
+}

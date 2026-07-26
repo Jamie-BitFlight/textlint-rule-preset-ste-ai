@@ -1,0 +1,124 @@
+{
+  "fixtureId": "postgres-vacuum-overview",
+  "original": "original/postgres-vacuum-overview.md",
+  "compliant": "compliant/postgres-vacuum-overview.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "postgres-vacuum-overview-p1",
+      "originalText": "In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not physically removed from their table; they remain present until a VACUUM is done.",
+      "rewrittenText": "In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not physically removed from their table. They remain present until a VACUUM is done.",
+      "ruleIds": ["sentence-length-descriptive", "punctuation-constraints"],
+      "originalSpans": [
+        { "start": 265, "end": 435 },
+        { "start": 390, "end": 391 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not physically removed from their table; they remain present until a VACUUM is done." },
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": ";" }
+      ],
+      "reason": "One 28-word sentence joined by a semicolon into two independent clauses. Splitting at the existing semicolon into two plain sentences fixes both the length and the semicolon-joins-two-statements finding without touching any wording.",
+      "semanticInvariants": [
+        "the fact that dead tuples are not physically removed until VACUUM runs must be preserved",
+        "the term VACUUM must remain unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.96
+    },
+    {
+      "passageId": "postgres-vacuum-overview-p2",
+      "originalText": "it's",
+      "rewrittenText": "it is",
+      "ruleIds": ["no-contractions"],
+      "originalSpans": [{ "start": 446, "end": 450 }],
+      "expectedDiagnostics": [
+        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "it's" }
+      ],
+      "reason": "Contraction in 'Therefore it's necessary to do VACUUM periodically'. Unambiguously 'it is necessary', a plain present-tense claim; expanding it changes nothing about meaning or modal force.",
+      "semanticInvariants": [
+        "the recommendation to run VACUUM periodically on frequently-updated tables must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "postgres-vacuum-overview-p3",
+      "originalText": "FULL",
+      "rewrittenText": "FULL",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 552, "end": 556 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "FULL" }
+      ],
+      "reason": "FULL is not an abbreviation here; it is the SQL option keyword in 'VACUUM FULL' (a distinct command variant from plain VACUUM). There is no expansion to write out -- 'FULL' is the literal keyword a reader would type. This is the same false-positive class as PRAGMA/VACUUM being flagged as unintroduced abbreviations.",
+      "semanticInvariants": [
+        "the distinction between plain VACUUM and VACUUM FULL as two different command forms must be preserved",
+        "the keyword FULL must remain unchanged"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "postgres-vacuum-overview-p4",
+      "originalText": "However, extra space is not returned to the operating system (in most cases); it's just kept available for re-use within the same table.",
+      "rewrittenText": "However, extra space is not returned to the operating system (in most cases). It is just kept available for re-use within the same table.",
+      "ruleIds": ["punctuation-constraints", "no-contractions"],
+      "originalSpans": [
+        { "start": 824, "end": 825 },
+        { "start": 826, "end": 830 }
+      ],
+      "expectedDiagnostics": [
+        { "ruleId": "punctuation-constraints", "category": "deterministic-violation", "quote": ";" },
+        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "it's" }
+      ],
+      "reason": "A semicolon joins two independent statements, and the second one uses the contraction 'it's' (unambiguously 'it is' here, describing where the reclaimed space stays). Splitting at the semicolon and expanding the contraction fixes both findings in a single edit.",
+      "semanticInvariants": [
+        "the fact that reclaimed space is not returned to the OS but stays available for re-use in the same table must be preserved",
+        "the parenthetical qualifier '(in most cases)' must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.96
+    },
+    {
+      "passageId": "postgres-vacuum-overview-p5",
+      "originalText": "in order to",
+      "rewrittenText": "to",
+      "ruleIds": ["unapproved-vocabulary"],
+      "originalSpans": [{ "start": 929, "end": 940 }],
+      "expectedDiagnostics": [
+        { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "in order to" }
+      ],
+      "reason": "The rule pack itself marks this substitution as safe/meaning-preserving: 'in order to' and 'to' are synonymous infinitive-of-purpose markers here.",
+      "semanticInvariants": [
+        "the claim that plain VACUUM lets PostgreSQL use multiple CPUs to process indexes must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "postgres-vacuum-overview-p6",
+      "originalText": "VACUUM",
+      "rewrittenText": "VACUUM",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 216, "end": 222 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "VACUUM" }
+      ],
+      "reason": "VACUUM is the SQL command name this entire document is about, not an abbreviation of a longer phrase. Writing 'Vacuum (VACUUM)' or any invented expansion would be nonsensical; the word is already the full, correct term.",
+      "semanticInvariants": [
+        "the command name VACUUM must remain unchanged throughout"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    }
+  ],
+  "protectedLiterals": ["VACUUM", "FULL", "PostgreSQL"],
+  "reviewers": ["rewriter-b"],
+  "notes": "Two abbreviation-introduction findings (VACUUM, FULL) are disputed as SQL command/keyword false positives; the remaining findings (two overlong semicolon-joined sentences, one ambiguous-free contraction, and one safe vocabulary substitution the rule pack itself proposes) are accepted with minimal, meaning-preserving edits."
+}

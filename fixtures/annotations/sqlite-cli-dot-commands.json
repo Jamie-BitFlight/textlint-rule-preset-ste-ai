@@ -1,0 +1,256 @@
+{
+  "fixtureId": "sqlite-cli-dot-commands",
+  "original": "original/sqlite-cli-dot-commands.md",
+  "compliant": "compliant/sqlite-cli-dot-commands.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "sqlite-cli-dot-commands-p1",
+      "originalText": "Terminate the sqlite3 program by typing your system\nEnd-Of-File character (usually a Control-D).",
+      "rewrittenText": "Stop the sqlite3 program by typing your system\nEnd-Of-File character. This is usually Control-D.",
+      "ruleIds": [
+        "unapproved-vocabulary",
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 618,
+          "end": 627
+        },
+        {
+          "start": 692,
+          "end": 713
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "unapproved-vocabulary",
+          "category": "deterministic-violation",
+          "quote": "Terminate"
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "(usually a Control-D)"
+        }
+      ],
+      "reason": "\"Terminate\" is not approved vocabulary (replaced with \"Stop\"); the parenthetical hid the actual key combination as a hidden second statement, so it was split into its own sentence.",
+      "semanticInvariants": [
+        "the instruction to end the sqlite3 program via the End-Of-File character is unchanged",
+        "the key combination named (Control-D) is unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "sqlite-cli-dot-commands-p2",
+      "originalText": "Use the interrupt\ncharacter (usually a Control-C) to stop a long-running SQL statement.",
+      "rewrittenText": "Use the interrupt\ncharacter to stop a long-running SQL statement. This is usually Control-C.",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 744,
+          "end": 765
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "(usually a Control-C)"
+        }
+      ],
+      "reason": "Parenthetical hid the actual key combination as a hidden second statement; split into its own sentence.",
+      "semanticInvariants": [
+        "the instruction to use the interrupt character to stop a long-running SQL statement is unchanged",
+        "the key combination named (Control-C) is unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "sqlite-cli-dot-commands-p3",
+      "originalText": "Make sure you type a semicolon at the end of each SQL command!",
+      "rewrittenText": "Make sure you type a semicolon at the end of each SQL command.",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 866,
+          "end": 867
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "!"
+        }
+      ],
+      "reason": "Genuine prose exclamation mark on a plain instruction; replaced with a full stop. Two other exclamation marks remain in the document inside an unfenced SQL string literal; they are deliberately untouched, so this change is verified by the count of matching diagnostics decreasing rather than reaching zero.",
+      "semanticInvariants": [
+        "the instruction to type a semicolon at the end of each SQL command is unchanged"
+      ],
+      "unresolved": [
+        "automated verification of this specific fix is not possible because two other exclamation marks, deliberately left as literal SQL string content, produce identical diagnostic quotes elsewhere in the same file"
+      ],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "sqlite-cli-dot-commands-p4",
+      "originalText": "If you omit the semicolon, sqlite3 will give you a\ncontinuation prompt and wait for you to enter more text to\ncomplete the SQL command.",
+      "rewrittenText": "If you omit the semicolon, sqlite3 will give you a\ncontinuation prompt. It waits for you to enter more text to\ncomplete the SQL command.",
+      "ruleIds": [
+        "sentence-length-procedural"
+      ],
+      "originalSpans": [
+        {
+          "start": 954,
+          "end": 1089
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-procedural",
+          "category": "deterministic-violation",
+          "quote": "If you omit the semicolon, sqlite3 will give you a\ncontinuation prompt and wait for you to enter more text to\ncomplete the SQL command."
+        }
+      ],
+      "reason": "25-word procedural sentence, over the 20-word limit; split at the existing \"and\" conjunction.",
+      "semanticInvariants": [
+        "the continuation-prompt behaviour when a semicolon is omitted is unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "sqlite-cli-dot-commands-p5",
+      "originalText": "SQLite version 3.36.0 2021-06-18 18:36:39",
+      "rewrittenText": "SQLite version 3.36.0 2021-06-18 18:36:39",
+      "ruleIds": [
+        "number-unit-format",
+        "no-repeated-words"
+      ],
+      "originalSpans": [
+        {
+          "start": 296,
+          "end": 302
+        },
+        {
+          "start": 303,
+          "end": 310
+        },
+        {
+          "start": 311,
+          "end": 316
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "3.36.0"
+        },
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "2021-06"
+        },
+        {
+          "ruleId": "no-repeated-words",
+          "category": "deterministic-violation",
+          "quote": "18 18"
+        }
+      ],
+      "reason": "This whole line is literal sqlite3 CLI startup banner text (a version string, a date, and a time) inside an unfenced terminal transcript, not natural-language prose. \"3.36.0\" and \"2021-06\" are not number-and-unit pairs, and the two adjacent \"18\" tokens are the day-of-month and the hour, not a repeated word.",
+      "semanticInvariants": [
+        "the version string, date, and time in the sqlite3 startup banner are byte-identical"
+      ],
+      "unresolved": [
+        "the transcript is not fenced as code in the source excerpt, so the linter reads literal CLI output as prose"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "sqlite-cli-dot-commands-p6",
+      "originalText": "sqlite> create table tbl1(one text, two int);\nsqlite> insert into tbl1 values('hello!',10),('goodbye',20);\nsqlite> select * from tbl1;",
+      "rewrittenText": "sqlite> create table tbl1(one text, two int);\nsqlite> insert into tbl1 values('hello!',10),('goodbye',20);\nsqlite> select * from tbl1;",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 398,
+          "end": 399
+        },
+        {
+          "start": 455,
+          "end": 456
+        },
+        {
+          "start": 459,
+          "end": 460
+        },
+        {
+          "start": 487,
+          "end": 488
+        },
+        {
+          "start": 438,
+          "end": 439
+        },
+        {
+          "start": 557,
+          "end": 558
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": ";"
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": ","
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "!"
+        }
+      ],
+      "reason": "These semicolons, the comma, and the exclamation mark are literal SQL syntax and a literal string value ('hello!') inside an unfenced terminal transcript (SQL statement terminators, an argument-list comma, and a string literal), not natural-language punctuation joining prose statements.",
+      "semanticInvariants": [
+        "the SQL commands and their output (including the literal string 'hello!') are byte-identical"
+      ],
+      "unresolved": [
+        "the transcript is not fenced as code in the source excerpt, so the linter reads literal SQL syntax as prose punctuation"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": [
+    "ex1.db",
+    "tbl1",
+    "3.36.0",
+    "2021-06-18",
+    "18:36:39",
+    "Control-D",
+    "Control-C"
+  ],
+  "reviewers": [
+    "rewriter-a"
+  ],
+  "notes": "Wrapping the terminal transcript in a fenced code block would resolve every disputed finding at once, but the corpus test 'keeps the code fences of the original byte-identical' requires the compliant file to have exactly the same set of fenced-code regions as the original, which has none; adding a fence here would fail that test, so the transcript's literal-syntax false positives are disputed individually instead."
+}

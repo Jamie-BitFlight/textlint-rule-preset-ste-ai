@@ -1,0 +1,7 @@
+<!-- fixture: sqlite-vacuum-space-reclaim | source: https://sqlite.org/lang_vacuum.html | licence: Public Domain | retrieved: 2026-07-26 | excerpt: verbatim -->
+
+The VACUUM command rebuilds the database file, repacking it into a minimal amount of disk space. There are several reasons an application might do this:
+
+- Unless SQLite is running in "auto_vacuum=FULL" mode, when a large amount of data is deleted from the database file it leaves behind empty space, or "free" database pages. This means the database file might be larger than strictly necessary. Running VACUUM to rebuild the database reclaims this space and reduces the size of the database file.
+- Frequent inserts, updates, and deletes can cause the database file to become fragmented - where data for a single table or index is scattered around the database file. Running VACUUM ensures that each table and index is largely stored contiguously within the database file. In some cases, VACUUM may also reduce the number of partially filled pages in the database, reducing the size of the database file further.
+- When content is deleted from an SQLite database, the content is not usually erased but rather the space used to hold the content is marked as being available for reuse. This can allow deleted content to be recovered by a hacker or by forensic analysis. Running VACUUM will clean the database of all traces of deleted content, thus preventing an adversary from recovering deleted content. Using VACUUM in this way is an alternative to setting PRAGMA secure_delete=ON.

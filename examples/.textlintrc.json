@@ -1,0 +1,25 @@
+{
+  "plugins": {
+    "@textlint/markdown": true,
+    "@textlint/text": true
+  },
+  "rules": {
+    "preset-ste-ai/sentence-length-procedural": { "maxWords": 20 },
+    "preset-ste-ai/sentence-length-descriptive": { "maxWords": 25 },
+    "preset-ste-ai/unapproved-vocabulary": true,
+    "preset-ste-ai/preferred-terminology": { "severity": "warning" },
+    "preset-ste-ai/no-contractions": true,
+    "preset-ste-ai/punctuation-constraints": { "maxCommas": 3 },
+    "preset-ste-ai/no-repeated-words": true,
+    "preset-ste-ai/abbreviation-introduction": {
+      "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL", "ANALYZE"],
+      "severity": "warning"
+    },
+    "preset-ste-ai/number-unit-format": { "severity": "warning" },
+    "preset-ste-ai/list-instruction-structure": { "severity": "warning" },
+    "preset-ste-ai/one-instruction-per-sentence": true,
+    "preset-ste-ai/passive-voice-candidate": { "severity": "info" },
+    "preset-ste-ai/noun-cluster-candidate": { "severity": "info" },
+    "preset-ste-ai/ambiguous-pronoun-candidate": { "severity": "info" }
+  }
+}

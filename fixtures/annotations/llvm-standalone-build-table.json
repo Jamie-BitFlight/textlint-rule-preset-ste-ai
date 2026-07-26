@@ -1,0 +1,93 @@
+{
+  "fixtureId": "llvm-standalone-build-table",
+  "original": "original/llvm-standalone-build-table.md",
+  "compliant": "compliant/llvm-standalone-build-table.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "llvm-standalone-build-table-p1",
+      "originalText": "LLVM",
+      "rewrittenText": "LLVM",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 334, "end": 338 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "LLVM" }
+      ],
+      "reason": "LLVM is the proper name of the project/product this document is about, not an abbreviation being introduced for a general term. There is no full expansion to write out on first use (analogous to 'SQLite' or 'Zephyr' elsewhere in this corpus); spelling out 'Low Level Virtual Machine (LLVM)' would be both historically inaccurate (the project disavows that expansion) and would not aid comprehension.",
+      "semanticInvariants": [
+        "the product name LLVM must remain unchanged everywhere it appears"
+      ],
+      "unresolved": [
+        "whether the rule pack should special-case known product/project proper nouns the way it already special-codes for command names"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "llvm-standalone-build-table-p2",
+      "originalText": "`LLVM_ROOT` should point to the prefix of your llvm installation,\n  so for example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, then you should pass `-DLLVM_ROOT=/usr/`.",
+      "rewrittenText": "`LLVM_ROOT` should point to the prefix of your llvm installation.\n  For example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, you should pass `-DLLVM_ROOT=/usr/`.",
+      "ruleIds": ["sentence-length-descriptive"],
+      "originalSpans": [{ "start": 387, "end": 569 }],
+      "expectedDiagnostics": [
+        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "`LLVM_ROOT` should point to the prefix of your llvm installation,\n  so for example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, then you should pass `-DLLVM_ROOT=/usr/`." }
+      ],
+      "reason": "Original is one 26-word sentence, one word over the 25-word descriptive limit. Splitting at the existing 'so for example' clause boundary into two sentences reduces both to well under the limit without touching any code identifier or path.",
+      "semanticInvariants": [
+        "the identifiers `LLVM_ROOT`, `/usr/bin`, `/usr/lib64` and `-DLLVM_ROOT=/usr/` must remain byte-identical",
+        "the conditional 'if llvm is installed into X, pass Y' relationship must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "llvm-standalone-build-table-p3",
+      "originalText": "Additional",
+      "rewrittenText": "More",
+      "ruleIds": ["unapproved-vocabulary"],
+      "originalSpans": [{ "start": 688, "end": 698 }],
+      "expectedDiagnostics": [
+        { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "Additional" }
+      ],
+      "reason": "Simple, meaning-preserving vocabulary substitution the rule pack itself suggests: 'Additional' is a Latinate synonym for the plainer 'More' with no change in scope or meaning.",
+      "semanticInvariants": [
+        "the sentence still refers to the CMake options table below and its content"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "llvm-standalone-build-table-p4",
+      "originalText": "ON",
+      "rewrittenText": "ON",
+      "ruleIds": ["abbreviation-introduction"],
+      "originalSpans": [{ "start": 1030, "end": 1032 }],
+      "expectedDiagnostics": [
+        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "ON" }
+      ],
+      "reason": "'ON' here is the literal CMake boolean value in the pipe-table cell 'LLVM_INSTALL_UTILS=ON', a build-option identifier, not an abbreviation of a general term being introduced in prose. It is also table-cell content and per this corpus's table rule must not be edited at all.",
+      "semanticInvariants": [
+        "the table cell literal LLVM_INSTALL_UTILS=ON must remain byte-identical",
+        "table column count and row order must not change"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.96
+    }
+  ],
+  "protectedLiterals": [
+    "LLVM_ROOT",
+    "LLVM_EXTERNAL_LIT",
+    "/usr/bin",
+    "/usr/lib64",
+    "-DLLVM_ROOT=/usr/",
+    "LLVM_INSTALL_UTILS=ON",
+    "CLANG_INCLUDE_TESTS=ON",
+    "check-$subproj",
+    "$builddir!=$builddir_subproj"
+  ],
+  "reviewers": ["rewriter-b"],
+  "notes": "Two of four diagnostics are false positives against a product proper noun (LLVM) and a table-cell CMake boolean literal (ON); the other two are safe, minimal, meaning-preserving edits (a sentence split and a vocabulary swap) that leave every code identifier and the pipe table untouched."
+}

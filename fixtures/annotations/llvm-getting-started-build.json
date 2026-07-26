@@ -1,0 +1,159 @@
+{
+  "fixtureId": "llvm-getting-started-build",
+  "original": "original/llvm-getting-started-build.md",
+  "compliant": "compliant/llvm-getting-started-build.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "llvm-getting-started-build-p1",
+      "originalText": "Check out LLVM (including subprojects like Clang):",
+      "rewrittenText": "Check out LLVM, including subprojects like Clang:",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 291,
+          "end": 325
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "(including subprojects like Clang)"
+        }
+      ],
+      "reason": "Parenthetical hid a clarifying clause inside a numbered instruction step; folded it into the main clause with a comma instead of a hidden aside.",
+      "semanticInvariants": [
+        "Clang is still named as an included subproject of the LLVM checkout"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "llvm-getting-started-build-p2",
+      "originalText": "You are likely not interested in the user branches in the repo (used for\n     stacked pull requests and reverts), you can filter them from your\n     `git fetch` (or `git pull`) with this configuration:",
+      "rewrittenText": "You are likely not interested in the user branches in the repo. These are\n     used for stacked pull requests and reverts. You can filter them from your\n     `git fetch` (or `git pull`) with this configuration:",
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 817,
+          "end": 1018
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "You are likely not interested in the user branches in the repo (used for\n     stacked pull requests and reverts), you can filter them from your\n     `git fetch` (or `git pull`) with this configuration:"
+        }
+      ],
+      "reason": "31-word sentence with a parenthetical; split into three shorter sentences at the existing clause boundaries.",
+      "semanticInvariants": [
+        "the `git fetch`/`git pull` filter configuration and its purpose (excluding user branches used for stacked PRs/reverts) is unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "llvm-getting-started-build-p3",
+      "originalText": "LLVM",
+      "rewrittenText": "LLVM",
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 267,
+          "end": 271
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "LLVM"
+        }
+      ],
+      "reason": "LLVM is the project's own name/brand as used throughout its own documentation, not a term this excerpt is introducing or that needs expansion.",
+      "semanticInvariants": [
+        "the project name LLVM is unchanged"
+      ],
+      "unresolved": [
+        "rule cannot distinguish a project's self-referential name from a true undefined abbreviation"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "llvm-getting-started-build-p4",
+      "originalText": "To save storage and speed up the checkout time, you may want to do a\n     [shallow clone](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---depthltdepthgt).\n     For example, to get the latest revision of the LLVM project, use",
+      "rewrittenText": "To save storage and speed up the checkout time, you may want to do a\n     [shallow clone](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---depthltdepthgt).\n     For example, to get the latest revision of the LLVM project, use",
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 500,
+          "end": 741
+        }
+      ],
+      "expectedDiagnostics": [],
+      "reason": "The reviewer diagnosed this finding as a tool defect, not an over-long sentence: masking a markdown link destination together with its closing `]` left the opening `[` unpaired, and sentence-splitter then treated the rest of the block as bracketed and merged three sentences into one 29-word span. The defect was corrected in linkDestinationPass (the mask now keeps brackets balanced) and the finding no longer occurs, so expectedDiagnostics is empty. The prose was left unchanged.",
+      "semanticInvariants": [
+        "the two-sentence structure (rationale for a shallow clone, then the example command lead-in) is unchanged",
+        "the shallow-clone link destination is unchanged"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 1.0
+    },
+    {
+      "passageId": "llvm-getting-started-build-p5",
+      "originalText": "Configure and build LLVM and Clang:",
+      "rewrittenText": "Configure and build LLVM and Clang:",
+      "ruleIds": [
+        "one-instruction-per-sentence"
+      ],
+      "originalSpans": [
+        {
+          "start": 1169,
+          "end": 1204
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "one-instruction-per-sentence",
+          "category": "deterministic-violation",
+          "quote": "Configure and build LLVM and Clang:"
+        }
+      ],
+      "reason": "This is the label for numbered step 2, introducing the two sub-commands (`cd`, `cmake`) that actually perform the configure-and-build action; it is a heading-like lead-in, not itself a single instruction to execute.",
+      "semanticInvariants": [
+        "step 2's label and its two sub-commands are unchanged, in the same order"
+      ],
+      "unresolved": [
+        "rule does not distinguish a step label from an executable instruction sentence"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.8
+    }
+  ],
+  "protectedLiterals": [
+    "`git clone https://github.com/llvm/llvm-project.git`",
+    "`git clone --depth 1 https://github.com/llvm/llvm-project.git`",
+    "`git fetch`",
+    "`git pull`",
+    "`cd llvm-project`",
+    "`cmake -S llvm -B build -G <generator> [options]`"
+  ],
+  "reviewers": [
+    "rewriter-a"
+  ],
+  "notes": "One sentence-length-descriptive finding is disputed as a tool segmentation bug, not a prose defect: masking the shallow-clone link's `](url)` destination leaves the anchor's unmatched `[` in the visible text, and the sentence splitter fails to find the sentence boundary at the following period as a result. Passage p4 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery."
+}

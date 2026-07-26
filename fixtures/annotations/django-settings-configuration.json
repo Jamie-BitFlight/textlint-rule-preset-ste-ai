@@ -1,0 +1,64 @@
+{
+  "fixtureId": "django-settings-configuration",
+  "original": "original/django-settings-configuration.md",
+  "compliant": "compliant/django-settings-configuration.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "django-settings-configuration-p1",
+      "originalText": "It doesn't allow for Python syntax errors.",
+      "rewrittenText": "It does not allow for Python syntax errors.",
+      "ruleIds": ["no-contractions"],
+      "originalSpans": [{ "start": 856, "end": 863 }],
+      "expectedDiagnostics": [
+        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "doesn't" }
+      ],
+      "reason": "Contraction \"doesn't\" expanded to \"does not\".",
+      "semanticInvariants": ["the negation (a settings module cannot contain Python syntax errors) is unchanged"],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "django-settings-configuration-p2",
+      "originalText": "It can assign settings dynamically using normal Python syntax.\n  For example::",
+      "rewrittenText": "It can assign settings dynamically using normal Python syntax.\n  For example.",
+      "ruleIds": ["list-instruction-structure"],
+      "originalSpans": [{ "start": 898, "end": 976 }],
+      "expectedDiagnostics": [
+        { "ruleId": "list-instruction-structure", "category": "deterministic-violation", "quote": "It can assign settings dynamically using normal Python syntax.\n  For example::" }
+      ],
+      "reason": "This list item ended with the RST literal-block marker \"::\" instead of a full stop, while its sibling bullets end with periods; changed to a period so every item in the list ends the same way. The indented code sample that follows is unaffected.",
+      "semanticInvariants": [
+        "the indented code sample `MY_SETTING = [str(i) for i in range(30)]` immediately below is byte-identical and still follows as the example",
+        "this bullet still introduces the code sample as an example"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "django-settings-configuration-p3",
+      "originalText": "you have to tell it which settings you're using.",
+      "rewrittenText": "you have to tell it which settings you are using.",
+      "ruleIds": ["no-contractions"],
+      "originalSpans": [{ "start": 1249, "end": 1255 }],
+      "expectedDiagnostics": [
+        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "you're" }
+      ],
+      "reason": "Contraction \"you're\" expanded to \"you are\".",
+      "semanticInvariants": ["the obligation ('you have to tell it') is unchanged"],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.95
+    }
+  ],
+  "protectedLiterals": [
+    "MY_SETTING = [str(i) for i in range(30)]",
+    "DJANGO_SETTINGS_MODULE",
+    "ALLOWED_HOSTS",
+    "DEBUG"
+  ],
+  "reviewers": ["rewriter-a"],
+  "notes": ""
+}

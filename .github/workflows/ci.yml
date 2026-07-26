@@ -35,24 +35,47 @@ jobs:
       - name: Fixture provenance and corpus integrity
         run: node scripts/validate-fixtures.mjs
 
+      # The original corpus deliberately contains violations, so `ste-ai lint` is expected to exit 1
+      # here. Asserting that exact code also tests the documented exit-code contract
+      # (0 clean, 1 errors present, 2 usage, 3 semantic-service failure).
       - name: Deterministic-only run over the fixture corpus
         run: |
+          set +e
           node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json > /tmp/ste-ai.json
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "expected exit 1 (the original corpus has known violations), got $status"
+            exit 1
+          fi
           node -e "
-            const r = require('/tmp/ste-ai.json');
+            const { readFileSync } = require('node:fs');
+            const r = JSON.parse(readFileSync('/tmp/ste-ai.json', 'utf8'));
             if (r.conformance.claim !== 'none') {
               throw new Error('bundled pack must not claim conformance');
             }
+            if (r.conformance.packAuthority !== 'provisional') {
+              throw new Error('bundled pack must report provisional authority');
+            }
             const total = r.results.reduce((n, x) => n + x.diagnostics.length, 0);
             if (total === 0) throw new Error('expected diagnostics on the original corpus');
-            console.log('deterministic-only run produced ' + total + ' diagnostics across ' + r.results.length + ' files');
+            console.log('deterministic-only run produced ' + total + ' diagnostics across ' + r.results.length + ' files, exit code 1 as documented');
           "
+
+      # A clean document must exit 0, which proves the exit code tracks findings rather than being
+      # constant.
+      - name: Exit code is 0 for a document with no findings
+        run: |
+          printf 'Remove the cover.\n' > /tmp/clean.md
+          node dist/cli/main.js lint /tmp/clean.md --deterministic-only
+          echo "clean document exited 0 as documented"
 
       - name: Confirm the rule set reports itself as provisional
         run: |
           node dist/cli/main.js rules --json > /tmp/rules.json
           node -e "
-            const rules = require('/tmp/rules.json');
+            const { readFileSync } = require('node:fs');
+            const rules = JSON.parse(readFileSync('/tmp/rules.json', 'utf8'));
             if (rules.length !== 14) throw new Error('expected 14 rules, got ' + rules.length);
             const nonProvisional = rules.filter((r) => r.status !== 'provisional');
             if (nonProvisional.length > 0) {

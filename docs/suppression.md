@@ -77,6 +77,29 @@ reason `directive text is not prose`. Without this, a `format: 'text'` document 
 are not masked out — would report findings on the directive line, which is not text anyone wrote
 for a reader.
 
+### Reformatting the prose
+
+Because `ste-ai-ignore-next-line` claims exactly one line, a formatter that rewraps prose can move
+the offending text off the claimed line and the suppression stops applying. Measured on a
+paragraph reflowed so the offending word moved to the second line:
+
+| Document                                          | Finding reported | Withheld | `suppression-unused` |
+| ------------------------------------------------- | ---------------: | -------: | -------------------: |
+| directive, offending word on the next line        |                0 |        1 |                    0 |
+| directive, word reflowed onto the second line     |                1 |        0 |                    1 |
+| `ignore-start` / `ignore-end` over the same prose |                0 |        1 |                    0 |
+| no directive, for comparison                      |                1 |        0 |                    0 |
+
+Prettier does not rewrap prose unless it is configured to. Its `proseWrap` option defaults to
+`preserve`, and this repository sets no value for it, so running Prettier over a document does not
+move a claimed line. A formatter run with `proseWrap: always`, or an author rewrapping a paragraph
+by hand, does.
+
+Note the second row: the finding comes back **and** `suppression-unused` is emitted. Drift of this
+kind fails towards reporting, never towards false silence, and the notice names the line so the
+directive can be moved. Where prose is expected to be reflowed, prefer the range form, which is not
+sensitive to where a line ends.
+
 ## Configuration
 
 ```jsonc

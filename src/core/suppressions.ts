@@ -32,6 +32,15 @@ const REASON_SEPARATOR = ' -- ';
 
 const COMMENT_RE = /<!--([\s\S]*?)-->/g;
 
+/**
+ * Blockquote markers, stripped before a line is tested for being nothing but a directive.
+ *
+ * `> <!-- ... -->` is a directive line in every sense that matters: the marker is structural markup,
+ * not content. Without this, stacked directives inside a blockquote each claimed the next one's
+ * line instead of the prose beneath them.
+ */
+const BLOCKQUOTE_PREFIX = /^[ \t]*(?:>[ \t]*)+/;
+
 /** Safety registers where a suppression is refused unless the operator has opted in. */
 const GUARDED_ADMONITIONS: ReadonlySet<AdmonitionKind> = new Set<AdmonitionKind>([
   'danger',
@@ -39,11 +48,21 @@ const GUARDED_ADMONITIONS: ReadonlySet<AdmonitionKind> = new Set<AdmonitionKind>
   'caution',
 ]);
 
-const DIRECTIVE_TEXT_REASON = 'directive text is not prose';
+/** Recorded against anything found inside a directive comment, valid directive or not. */
+export const DIRECTIVE_TEXT_REASON = 'directive text is not prose';
 
 export interface SuppressionScanResult {
   readonly directives: readonly SuppressionDirective[];
   readonly notices: readonly RunNotice[];
+  /**
+   * Spans of every live directive comment, well formed or not.
+   *
+   * Exposed because the analysis layer has to withhold candidates anchored in one *before* they are
+   * adjudicated. In `format: 'text'` a comment is ordinary prose, so the reason an author wrote to
+   * justify a suppression is itself lintable text — and left alone it is transmitted to the model,
+   * which is exactly what a suppression is supposed to prevent.
+   */
+  readonly commentRanges: readonly SourceRange[];
 }
 
 /** A comment that looks like a directive, before it is known to be well formed. */
@@ -83,7 +102,7 @@ export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
     open = undefined;
   };
 
-  for (const comment of directiveComments(text, lineStarts)) {
+  for (const comment of directiveComments(doc, lineStarts)) {
     if (comment.keyword === END_KEYWORD) {
       if (open === undefined) {
         notices.push(
@@ -157,7 +176,7 @@ export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
   directives.sort(
     (a, b) => a.directiveRange.start - b.directiveRange.start || a.range.start - b.range.start,
   );
-  return { directives, notices };
+  return { directives, notices, commentRanges: directiveCommentRanges(doc) };
 }
 
 /**
@@ -205,7 +224,7 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
   const { doc, diagnostics, directives, allowInAdmonitions, knownRuleIds } = input;
   const lineStarts = computeLineStarts(doc.text);
   const known = new Set(knownRuleIds);
-  const commentRanges = directiveCommentRanges(doc.text);
+  const commentRanges = directiveCommentRanges(doc);
   const kept: Diagnostic[] = [];
   const suppressions: SuppressionRecord[] = [];
   const notices: RunNotice[] = [];
@@ -247,16 +266,13 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
     // finding, so `suppression-unused` would be a second, misleading complaint about it.
     claimed.add(directive);
 
-    const admonition = admonitionAt(doc, anchor);
-    if (!allowInAdmonitions && GUARDED_ADMONITIONS.has(admonition)) {
-      notices.push(
-        notice(
-          'suppression-refused-in-admonition',
-          'warning',
-          `A suppression of "${diagnostic.ruleId}" was refused inside a ${admonition} admonition and the finding was kept`,
-          { ruleId: diagnostic.ruleId, admonition },
-        ),
-      );
+    const refusal = refuseInAdmonition(
+      diagnostic.ruleId,
+      admonitionAt(doc, anchor),
+      allowInAdmonitions,
+    );
+    if (refusal !== undefined) {
+      notices.push(refusal);
       kept.push(diagnostic);
       continue;
     }
@@ -286,20 +302,44 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
   return { diagnostics: kept, suppressions, notices };
 }
 
+/**
+ * The notice for a claim refused inside a safety admonition, or `undefined` when the claim stands.
+ *
+ * Exported because candidates are filtered out before adjudication, in the analysis layer, and that
+ * path is the *stronger* silencing of the two: the passage is not merely left unreported, it is
+ * never judged at all. It has to refuse on exactly these terms and say so in exactly these words,
+ * or the refusal becomes bypassable by aiming a directive at a candidate instead of a diagnostic.
+ */
+export function refuseInAdmonition(
+  ruleId: string,
+  admonition: AdmonitionKind,
+  allowInAdmonitions: boolean,
+): RunNotice | undefined {
+  if (allowInAdmonitions || !GUARDED_ADMONITIONS.has(admonition)) return undefined;
+  return notice(
+    'suppression-refused-in-admonition',
+    'warning',
+    `A suppression of "${ruleId}" was refused inside a ${admonition} admonition and the finding was kept`,
+    { ruleId, admonition },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
 
 function* directiveComments(
-  text: string,
+  doc: AnalysedDocument,
   lineStarts: readonly number[],
 ): Generator<DirectiveComment> {
-  for (const match of text.matchAll(COMMENT_RE)) {
+  for (const match of doc.text.matchAll(COMMENT_RE)) {
     const body = (match[1] ?? '').trim();
     if (!body.startsWith(KEYWORD_PREFIX)) continue;
+    const range = { start: match.index, end: match.index + match[0].length };
+    if (!isLiveDirectiveComment(doc, range)) continue;
     const keyword = /^\S+/.exec(body)?.[0] ?? '';
     yield {
-      directiveRange: { start: match.index, end: match.index + match[0].length },
+      directiveRange: range,
       keyword,
       rest: body.slice(keyword.length),
       line: positionAt(lineStarts, match.index).line,
@@ -307,14 +347,49 @@ function* directiveComments(
   }
 }
 
-/** Spans of every comment that opens with the keyword prefix, well formed or not. */
-function directiveCommentRanges(text: string): SourceRange[] {
+/** Spans of every live comment that opens with the keyword prefix, well formed or not. */
+function directiveCommentRanges(doc: AnalysedDocument): SourceRange[] {
   const out: SourceRange[] = [];
-  for (const match of text.matchAll(COMMENT_RE)) {
+  for (const match of doc.text.matchAll(COMMENT_RE)) {
     if (!(match[1] ?? '').trim().startsWith(KEYWORD_PREFIX)) continue;
-    out.push({ start: match.index, end: match.index + match[0].length });
+    const range = { start: match.index, end: match.index + match[0].length };
+    if (isLiveDirectiveComment(doc, range)) out.push(range);
   }
   return out;
+}
+
+/**
+ * Whether a comment is a directive the document is *giving* rather than one it is *showing*.
+ *
+ * Documentation for this feature has to be able to quote its own syntax, and before this every such
+ * sample was parsed as live — `docs/suppression.md` suppressed findings in any document that
+ * included it. Two shapes have to be excluded, and the pass order in `protected-regions.ts` means
+ * they present differently: `fencedCodePass` runs *before* `htmlCommentPass`, so a fenced sample is
+ * masked and never becomes a `comment` region at all; `inlineCodePass` and `indentedCodePass` run
+ * *after* it, so those samples do become `comment` regions but sit inside a wider opaque region that
+ * claimed the span. Hence both tests: a comment region of exactly this span must exist, and nothing
+ * opaque may enclose it.
+ *
+ * `format: 'text'` has no comment pass at all — a comment there is ordinary prose — so the raw scan
+ * stands and every match is live.
+ */
+function isLiveDirectiveComment(doc: AnalysedDocument, range: SourceRange): boolean {
+  if (doc.format !== 'markdown') return true;
+  let recognised = false;
+  for (const region of doc.protectedRegions) {
+    if (
+      region.kind === 'comment' &&
+      region.range.start === range.start &&
+      region.range.end === range.end
+    ) {
+      recognised = true;
+      continue;
+    }
+    if (region.opaque && region.range.start <= range.start && region.range.end >= range.end) {
+      return false;
+    }
+  }
+  return recognised;
 }
 
 /** `undefined` when the directive carries no reason, which makes it inert. */
@@ -372,7 +447,7 @@ function directiveOnlyLines(text: string, lineStarts: readonly number[]): Set<nu
     const start = lineStarts[index];
     if (start === undefined) continue;
     const end = lineStarts[index + 1] ?? text.length;
-    const trimmed = text.slice(start, end).trim();
+    const trimmed = text.slice(start, end).replace(BLOCKQUOTE_PREFIX, '').trim();
     const inner = /^<!--([\s\S]*?)-->$/.exec(trimmed)?.[1];
     if (inner !== undefined && inner.trim().startsWith(KEYWORD_PREFIX)) out.add(index + 1);
   }

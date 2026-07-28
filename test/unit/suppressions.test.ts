@@ -118,6 +118,31 @@ const NOTE_DOC = [
   '',
 ].join('\n');
 
+const SAMPLES = [
+  '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Live directive. -->',
+  'Utilise the bracket.',
+  '',
+  '```markdown',
+  '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Fenced sample. -->',
+  'Utilise the fenced example.',
+  '```',
+  '',
+  'Write `<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Inline sample. -->` in the file.',
+  '',
+  'Indented sample:',
+  '',
+  '    <!-- ste-ai-ignore-next-line unapproved-vocabulary -- Indented sample. -->',
+  '',
+].join('\n');
+
+const QUOTED_STACK = [
+  '> [!NOTE]',
+  "> <!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor's API verb. -->",
+  '> <!-- ste-ai-ignore-next-line sentence-length-procedural -- Quoted verbatim. -->',
+  '> Terminate the session before you remove the module.',
+  '',
+].join('\n');
+
 describe('scanSuppressions', () => {
   it('parses a next-line directive with its rule ids and reason', () => {
     const doc = analyseDocument({ id: 't', format: 'markdown', text: NEXT_LINE });
@@ -147,6 +172,25 @@ describe('scanSuppressions', () => {
       start: RANGE.indexOf('-->') + 3,
       end: RANGE.indexOf('<!-- ste-ai-ignore-end'),
     });
+  });
+
+  it('ignores a directive that a markdown document only shows as a sample', () => {
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: SAMPLES });
+    const { directives } = scanSuppressions(doc);
+    // Documentation about this feature has to be able to quote it. A fenced, inline-code or
+    // indented sample is a picture of a directive, not one.
+    expect(directives.map((d) => d.reason)).toEqual(['Live directive.']);
+  });
+
+  it('reads every comment in a plain-text document, which has no code regions', () => {
+    const doc = analyseDocument({ id: 't', format: 'text', text: SAMPLES });
+    const { directives } = scanSuppressions(doc);
+    expect(directives.map((d) => d.reason)).toEqual([
+      'Live directive.',
+      'Fenced sample.',
+      'Inline sample.',
+      'Indented sample.',
+    ]);
   });
 
   it('reports a comment that starts with the keyword but parses as no known form', () => {
@@ -410,6 +454,28 @@ describe('applySuppressions', () => {
       "Vendor's API verb.",
       'Quoted verbatim.',
     ]);
+  });
+
+  it('lets stacked directives inside a blockquote claim the same prose line', () => {
+    const result = run(QUOTED_STACK, [
+      diagnosticFor(QUOTED_STACK, 'Terminate'),
+      diagnosticFor(
+        QUOTED_STACK,
+        'Terminate the session before you remove the module.',
+        'sentence-length-procedural',
+      ),
+    ]);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions.map((s) => s.reason)).toEqual([
+      "Vendor's API verb.",
+      'Quoted verbatim.',
+    ]);
+  });
+
+  it('does not treat a sampled directive comment as directive text', () => {
+    const result = run(SAMPLES, [diagnosticFor(SAMPLES, 'Fenced sample')]);
+    expect(result.suppressions).toEqual([]);
+    expect(result.diagnostics).toHaveLength(1);
   });
 
   it('claims a multi-line diagnostic by the line it starts on', () => {

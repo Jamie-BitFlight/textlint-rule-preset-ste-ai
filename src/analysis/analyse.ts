@@ -1,7 +1,13 @@
 import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
 import { analyseDocument } from '../core/document.js';
 import { runDeterministicRules } from '../core/runner.js';
-import { applySuppressions, directiveFor, scanSuppressions } from '../core/suppressions.js';
+import {
+  applySuppressions,
+  DIRECTIVE_TEXT_REASON,
+  directiveFor,
+  refuseInAdmonition,
+  scanSuppressions,
+} from '../core/suppressions.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -10,6 +16,7 @@ import type {
   RulePack,
   RunNotice,
   SemanticTrace,
+  SourceRange,
   SuppressionDirective,
   SuppressionRecord,
 } from '../core/types.js';
@@ -160,35 +167,72 @@ function suppressCandidates(
   }
 
   const scan = scanSuppressions(document);
+  const notices: RunNotice[] = [...scan.notices];
   const kept: CandidatePassage[] = [];
   const records: SuppressionRecord[] = [];
   const claimed = new Set<SuppressionDirective>();
 
   for (const candidate of candidates) {
+    // Unconditional, and ahead of any directive match: in `format: 'text'` the comment is not
+    // masked, so the reason an author wrote inside one is lintable prose and would otherwise be
+    // shipped to the model — spending a request on text nobody wrote for a reader, and sending the
+    // very passage the directive exists to keep in the process.
+    const commentRange = scan.commentRanges.find(
+      (range) => candidate.range.start >= range.start && candidate.range.start < range.end,
+    );
+    if (commentRange !== undefined) {
+      records.push(candidateRecord(candidate, DIRECTIVE_TEXT_REASON, commentRange));
+      continue;
+    }
+
     const directive = directiveFor(scan.directives, candidate.ruleId, candidate.range.start);
     if (directive === undefined) {
       kept.push(candidate);
       continue;
     }
+    // Counted as used even when the claim is refused below: the directive did point at a real
+    // passage, so `suppression-unused` would be a second and misleading complaint about it.
     claimed.add(directive);
-    records.push({
-      ruleId: candidate.ruleId,
-      // A candidate would have become a `review-required` diagnostic had it survived, so that is
-      // what the record says was withheld.
-      category: 'review-required',
-      range: candidate.range,
-      message: candidate.reason,
-      reason: directive.reason,
-      directiveRange: directive.directiveRange,
-    });
+
+    // A refused claim leaves the candidate in the run, so the passage is still adjudicated and
+    // still reported. Withholding it here would silence a safety notice more completely than any
+    // directive aimed at a diagnostic can.
+    const refusal = refuseInAdmonition(
+      candidate.ruleId,
+      candidate.admonition,
+      config.suppressions.allowInAdmonitions,
+    );
+    if (refusal !== undefined) {
+      notices.push(refusal);
+      kept.push(candidate);
+      continue;
+    }
+
+    records.push(candidateRecord(candidate, directive.reason, directive.directiveRange));
   }
 
+  return { directives: scan.directives, notices, candidates: kept, records, claimed: [...claimed] };
+}
+
+/**
+ * A record for a candidate withheld before adjudication.
+ *
+ * `review-required` is the category the candidate would have carried had it survived, so that is
+ * what the record says was withheld; its `reason` field is the candidate's own, which is the
+ * message the diagnostic would have explained itself with.
+ */
+function candidateRecord(
+  candidate: CandidatePassage,
+  reason: string,
+  directiveRange: SourceRange,
+): SuppressionRecord {
   return {
-    directives: scan.directives,
-    notices: scan.notices,
-    candidates: kept,
-    records,
-    claimed: [...claimed],
+    ruleId: candidate.ruleId,
+    category: 'review-required',
+    range: candidate.range,
+    message: candidate.reason,
+    reason,
+    directiveRange,
   };
 }
 

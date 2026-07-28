@@ -45,6 +45,16 @@ const CANDIDATE_DOC = [
   '',
 ].join('\n');
 
+const admonitionDoc = (kind: 'WARNING' | 'NOTE'): string =>
+  [
+    `> [!${kind}]`,
+    '> <!-- ste-ai-ignore-next-line passive-voice-candidate -- Quoted verbatim. -->',
+    '> The bracket is removed by the technician.',
+    '',
+  ].join('\n');
+
+const CANDIDATE_RULE = 'passive-voice-candidate';
+
 /** Only the vocabulary findings: the fixtures also raise candidates the assertions do not concern. */
 function vocabulary(findings: readonly { readonly ruleId: string }[]): string[] {
   return findings.filter((d) => d.ruleId === 'unapproved-vocabulary').map((d) => d.ruleId);
@@ -101,6 +111,42 @@ describe('inline suppression in a deterministic run', () => {
   });
 });
 
+describe('a claim on a candidate inside a safety admonition', () => {
+  it('is refused, and the candidate survives to be adjudicated', () => {
+    const text = admonitionDoc('WARNING');
+    const result = analyseTextDeterministic(text);
+
+    expect(result.candidates.map((c) => c.ruleId)).toEqual([CANDIDATE_RULE]);
+    expect(result.suppressions.filter((s) => s.ruleId === CANDIDATE_RULE)).toEqual([]);
+
+    const refusal = result.notices.find((n) => n.code === 'suppression-refused-in-admonition');
+    expect(refusal?.level).toBe('warning');
+    expect(refusal?.detail).toEqual({ ruleId: CANDIDATE_RULE, admonition: 'warning' });
+
+    // Filtering a candidate is the stronger silencing of the two, so the refusal must not leave the
+    // passage unreported either: it still becomes a review-required diagnostic.
+    expect(result.diagnostics.map((d) => d.ruleId)).toContain(CANDIDATE_RULE);
+  });
+
+  it('is honoured once the operator allows it', () => {
+    const result = analyseTextDeterministic(admonitionDoc('WARNING'), {
+      config: { suppressions: { allowInAdmonitions: true } },
+    });
+
+    expect(result.candidates).toEqual([]);
+    expect(result.suppressions.map((s) => s.ruleId)).toEqual([CANDIDATE_RULE]);
+    expect(result.notices.map((n) => n.code)).not.toContain('suppression-refused-in-admonition');
+  });
+
+  it('is honoured without the flag inside a note, which is not a safety register', () => {
+    const result = analyseTextDeterministic(admonitionDoc('NOTE'));
+
+    expect(result.candidates).toEqual([]);
+    expect(result.suppressions.map((s) => s.ruleId)).toEqual([CANDIDATE_RULE]);
+    expect(result.notices.map((n) => n.code)).not.toContain('suppression-refused-in-admonition');
+  });
+});
+
 describe('a suppressed candidate is never sent to the model', () => {
   it('dispatches the unclaimed passage and not the claimed one', async () => {
     const bodies: string[] = [];
@@ -145,5 +191,94 @@ describe('a suppressed candidate is never sent to the model', () => {
     expect(record?.message).toBe('Auxiliary plus past participle.');
     expect(record?.reason).toBe('Quoted verbatim from the supplier.');
     expect(result.notices.map((n) => n.code)).not.toContain('suppression-unused');
+  });
+
+  it('never dispatches the directive comment itself in a plain-text document', async () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- The bracket is removed by the technician. -->',
+      'Utilise the cover.',
+      '',
+      'The filter is opened by the operator.',
+      '',
+    ].join('\n');
+    const bodies: string[] = [];
+    service = await startFakeSemanticService({
+      handler: (body) => {
+        bodies.push(JSON.stringify(body));
+        return {
+          content: verdictJson({
+            ruleId: CANDIDATE_RULE,
+            status: 'compliant',
+            confidence: 0.9,
+            explanation: 'ok',
+            suggestedReplacements: [],
+          }),
+        };
+      },
+    });
+
+    const result = await analyseText(text, {
+      format: 'text',
+      config: {
+        semantic: {
+          enabled: true,
+          endpoint: service.url,
+          model: 'fake',
+          cache: false,
+          maxRepairAttempts: 0,
+        },
+      },
+    });
+
+    // Positive control: the genuine passage is still adjudicated.
+    expect(service.requestCount()).toBe(1);
+    const sent = bodies.join('\n');
+    expect(sent).toContain('The filter is opened by the operator');
+
+    // The reason a person wrote to explain a suppression is not prose for a reader, and it must
+    // not leave the process to be judged as though it were.
+    expect(sent).not.toContain('The bracket is removed by the technician');
+    expect(sent).not.toContain('ste-ai-ignore-next-line');
+
+    // The withheld candidate is still on the record, with the reason the diagnostic path uses.
+    const record = result.suppressions.find((s) => s.ruleId === CANDIDATE_RULE);
+    expect(record?.reason).toBe('directive text is not prose');
+    expect(record?.category).toBe('review-required');
+    expect(record?.message).toBe('Auxiliary plus past participle.');
+  });
+
+  it('dispatches a candidate whose claim was refused inside a safety admonition', async () => {
+    const bodies: string[] = [];
+    service = await startFakeSemanticService({
+      handler: (body) => {
+        bodies.push(JSON.stringify(body));
+        return {
+          content: verdictJson({
+            ruleId: CANDIDATE_RULE,
+            status: 'compliant',
+            confidence: 0.9,
+            explanation: 'ok',
+            suggestedReplacements: [],
+          }),
+        };
+      },
+    });
+
+    await analyseText(admonitionDoc('WARNING'), {
+      config: {
+        semantic: {
+          enabled: true,
+          endpoint: service.url,
+          model: 'fake',
+          cache: false,
+          maxRepairAttempts: 0,
+        },
+      },
+    });
+
+    // The refusal has to reach the wire. A refused claim that still kept the passage out of the
+    // model would be the refusal in name only.
+    expect(service.requestCount()).toBe(1);
+    expect(bodies.join('\n')).toContain('The bracket is removed by the technician');
   });
 });

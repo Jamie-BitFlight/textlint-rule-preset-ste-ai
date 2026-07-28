@@ -245,8 +245,12 @@ async function lint(args: Args): Promise<number> {
       const document = documents[index];
       for (const suppression of result.suppressions) {
         const position = document?.positionAt(suppression.range.start);
+        // `positionAt` returns the textlint AST's 0-based column, which is right for an AST and
+        // wrong for a line a person reads next to their editor's gutter. The JSON range is left
+        // as the raw offset it is.
+        const column = position === undefined ? 1 : position.column + 1;
         process.stdout.write(
-          `  suppressed  ${suppression.ruleId} at ${position?.line ?? 0}:${position?.column ?? 0}` +
+          `  suppressed  ${suppression.ruleId} at ${position?.line ?? 1}:${column}` +
             ` — ${suppression.reason}\n`,
         );
       }

@@ -1,0 +1,363 @@
+{
+  "reviewer": "reviewer-d",
+  "verdicts": {
+    "sqlite-vacuum-space-reclaim": [
+      {
+        "passageId": "ambiguous-pronoun-candidate:s1:219",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 219, "end": 221 },
+        "verdict": "non-violation",
+        "reason": "In \"rebuilds the database file, repacking it into a minimal amount of disk space\", the only thing that can be repacked into disk space is the database file; the command itself is not a plausible object. The heuristic's antecedent list is a bag of content words, not competing referents.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s3:399",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is deleted",
+        "span": { "start": 399, "end": 409 },
+        "verdict": "non-violation",
+        "reason": "Descriptive prose about what happens to the file when data is removed, not an instruction; the deleting agent is any application and is genuinely irrelevant to the point being made. Naming an actor would narrow a general statement.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s3:433",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 433, "end": 435 },
+        "verdict": "non-violation",
+        "reason": "The \"it\" in \"it leaves behind empty space\" is loose — it could be read as the deletion or as the database file — but both readings deliver the same fact to the reader, that free pages remain in the file, so the choice does not change the meaning. Weakest of the sqlite pronouns and I would not defend it as clean writing, only as non-defective.",
+        "reviewerConfidence": 0.6
+      },
+      {
+        "passageId": "noun-cluster-candidate:s3:436",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "leaves behind empty space",
+        "span": { "start": 436, "end": 461 },
+        "verdict": "non-violation",
+        "reason": "This is a verb plus particle plus adjective plus noun, not a noun run at all; there is nothing for a reader to group wrongly. The heuristic's content-word counter has misfired on ordinary predicate structure.",
+        "reviewerConfidence": 0.95
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s4:489",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "This",
+        "span": { "start": 489, "end": 493 },
+        "verdict": "non-violation",
+        "reason": "\"This means the database file might be larger than strictly necessary\" refers to the whole preceding proposition about leftover free pages, which is the only available reading and a standard discourse move. No competing referent is on offer.",
+        "reviewerConfidence": 0.8
+      },
+      {
+        "passageId": "passive-voice-candidate:s6:792",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is scattered",
+        "span": { "start": 792, "end": 804 },
+        "verdict": "non-violation",
+        "reason": "\"where data for a single table or index is scattered around the database file\" describes a resulting state of fragmentation, closer to an adjectival property than to a verb with a suppressed actor, and it is descriptive prose rather than an instruction.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s7:880",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is largely stored",
+        "span": { "start": 880, "end": 897 },
+        "verdict": "non-violation",
+        "reason": "Descriptive statement of the guarantee VACUUM provides about on-disk layout; the storing agent is the database engine and is both obvious and beside the point. Not an instruction to the reader.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s7:883",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "largely stored contiguously within",
+        "span": { "start": 883, "end": 917 },
+        "verdict": "non-violation",
+        "reason": "Adverb, participle, adverb and preposition — a normal verb phrase, not a noun pile, and it ends on a preposition that binds to the following noun phrase. There is no grouping ambiguity for a reader to resolve.",
+        "reviewerConfidence": 0.95
+      },
+      {
+        "passageId": "passive-voice-candidate:s9:1092",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is deleted",
+        "span": { "start": 1092, "end": 1102 },
+        "verdict": "non-violation",
+        "reason": "\"When content is deleted from an SQLite database\" is a general precondition in descriptive prose; the deleter is any application and naming one would wrongly narrow the scope of the statement.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s9:1208",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is marked",
+        "span": { "start": 1208, "end": 1217 },
+        "verdict": "non-violation",
+        "reason": "Describes internal engine behaviour — the space is flagged reusable by SQLite itself — in prose contrasted against \"is not usually erased\". The agent is the database engine and is irrelevant to the security point being made.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s10:1248",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "This",
+        "span": { "start": 1248, "end": 1252 },
+        "verdict": "non-violation",
+        "reason": "\"This can allow deleted content to be recovered\" points at the preceding whole fact that space is marked reusable rather than erased. That is the only reading that makes sense of \"can allow\", so there is no competing antecedent.",
+        "reviewerConfidence": 0.8
+      },
+      {
+        "passageId": "passive-voice-candidate:s10:1282",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be recovered by",
+        "span": { "start": 1282, "end": 1297 },
+        "verdict": "non-violation",
+        "reason": "The agent is stated explicitly — \"by a hacker or by forensic analysis\" — so nothing is hidden, and the sentence is descriptive risk prose rather than an instruction. The passive is what keeps the deleted content in subject position where the reader's attention belongs.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s11:1388",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "deleted content, thus preventing",
+        "span": { "start": 1388, "end": 1420 },
+        "verdict": "non-violation",
+        "reason": "The run spans a comma and a clause boundary, joining the object of one clause to the participle opening the next; it is not a noun cluster anyone would try to parse as a unit.",
+        "reviewerConfidence": 0.95
+      }
+    ],
+    "osha-ppe-requirements": [
+      {
+        "passageId": "noun-cluster-candidate:s2:228",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Protective equipment, including personal protective equipment",
+        "span": { "start": 228, "end": 289 },
+        "verdict": "non-violation",
+        "reason": "The run crosses a comma and the word \"including\"; the only real noun group inside it, \"personal protective equipment\", is an established term of art that this very document goes on to abbreviate as PPE. Component identity outranks simplification here.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s2:316",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "extremities, protective clothing, respiratory devices",
+        "span": { "start": 316, "end": 369 },
+        "verdict": "non-violation",
+        "reason": "This is a comma-separated enumeration of three list items, each of which is a transparent two-word term. The commas tell the reader exactly how to group the words, which is the opposite of an opaque noun run.",
+        "reviewerConfidence": 0.95
+      },
+      {
+        "passageId": "passive-voice-candidate:s2:414",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be provided",
+        "span": { "start": 414, "end": 425 },
+        "verdict": "violation",
+        "reason": "\"shall be provided, used, and maintained\" is a mandatory requirement — an instruction in substance despite the descriptive mode label — and it suppresses three different actors, most consequentially who must provide the equipment. That the surrounding standard needs a separate paragraph for employee-owned equipment shows the actor is a live question, not an obvious one, so this is a genuine hidden-agent defect rather than mere wordiness.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s2:494",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 494, "end": 496 },
+        "verdict": "non-violation",
+        "reason": "\"wherever it is necessary by reason of hazards\" uses \"it\" either as an impersonal subject or as the protective equipment, and both readings deliver the same requirement — equipment is required where the listed hazards exist. The choice does not change what a reader must do.",
+        "reviewerConfidence": 0.8
+      },
+      {
+        "passageId": "noun-cluster-candidate:s2:547",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "environment, chemical hazards, radiological hazards",
+        "span": { "start": 547, "end": 598 },
+        "verdict": "non-violation",
+        "reason": "Another comma-separated enumeration of hazard categories, each an adjective plus \"hazards\". Grouping is fixed by the commas and by repetition of the head noun, so nothing is opaque.",
+        "reviewerConfidence": 0.95
+      },
+      {
+        "passageId": "noun-cluster-candidate:s5:924",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "adequacy, including proper maintenance",
+        "span": { "start": 924, "end": 962 },
+        "verdict": "non-violation",
+        "reason": "The run crosses a comma and the connective \"including\"; \"proper maintenance\" on its own is a transparent adjective-noun pair. No reader has to guess at grouping.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s8:1111",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be performed",
+        "span": { "start": 1111, "end": 1123 },
+        "verdict": "non-violation",
+        "reason": "\"for the work to be performed\" is a reduced relative that scopes the design requirement to whatever work is at hand; the performer is deliberately unspecified because the requirement holds for any worker and any task. Naming an actor would wrongly narrow the rule.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s12:1334",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "personal protective equipment (PPE",
+        "span": { "start": 1334, "end": 1368 },
+        "verdict": "non-violation",
+        "reason": "This is the standard term of art being formally introduced together with its abbreviation, exactly the Full Name (ABC) pattern good documentation should use. Established naming outranks simplification.",
+        "reviewerConfidence": 0.95
+      },
+      {
+        "passageId": "one-instruction-per-sentence:s15",
+        "ruleId": "one-instruction-per-sentence",
+        "evaluatorId": "one-instruction-per-sentence",
+        "quote": "Select, and have each affected employee use, the types of PPE that will protect the affected employee from the hazards identified in the hazard assessment;",
+        "span": { "start": 1465, "end": 1620 },
+        "verdict": "violation",
+        "reason": "The employer is told to do two genuinely separable things: choose the PPE, and then ensure every affected employee actually wears it. These are different duties discharged at different times by different means, and the interrupting comma-clause forces the reader to hold the shared object in suspense across 100 characters before learning what is selected.",
+        "reviewerConfidence": 0.85
+      }
+    ],
+    "node-cli-hard-negative": [
+      {
+        "passageId": "passive-voice-candidate:s4:413",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "been requested\nby",
+        "span": { "start": 413, "end": 430 },
+        "verdict": "non-violation",
+        "reason": "\"resolved as if it's been requested by require()\" names its agent explicitly and describes runtime resolution semantics, not an action the reader performs. Rewriting to an active imperative would misstate what Node does.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s5:504",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is found",
+        "span": { "start": 504, "end": 512 },
+        "verdict": "non-violation",
+        "reason": "\"If no corresponding file is found\" is a condition on runtime behaviour; the finder is the module resolver and is irrelevant to the reader. Descriptive prose, not an instruction.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s5:523",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is thrown",
+        "span": { "start": 523, "end": 532 },
+        "verdict": "non-violation",
+        "reason": "\"an error is thrown\" is the conventional way to state that the runtime raises an error, and the thrower is the runtime itself. Making it active would add nothing a reader needs.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s6:591",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "been requested by",
+        "span": { "start": 591, "end": 608 },
+        "verdict": "non-violation",
+        "reason": "Same construction as earlier in the section, with the agent stated as require(). It describes how Node loads the resolved path, so the actor is present and the passage is not an instruction.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s6:691",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "been requested\nby",
+        "span": { "start": 691, "end": 708 },
+        "verdict": "non-violation",
+        "reason": "The parallel \"as if it's been requested by import()\" clause names its agent and states loader semantics. The as-if framing is precisely what the passive is doing, and an active rewrite would lose it.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s7:736",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "was started",
+        "span": { "start": 736, "end": 747 },
+        "verdict": "non-violation",
+        "reason": "\"The program was started with a command-line flag\" is one of a bulleted set of conditions under which a different loader applies, not a step the reader is told to take. Who started it does not affect the condition.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s7:806",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be loaded",
+        "span": { "start": 806, "end": 815 },
+        "verdict": "non-violation",
+        "reason": "\"forces the entry point to be loaded with ECMAScript module loader\" already names the forcing agent (the flag) and describes runtime behaviour. The loading agent is Node and is not a reader-facing choice.",
+        "reviewerConfidence": 0.9
+      }
+    ],
+    "django-settings-configuration": [
+      {
+        "passageId": "noun-cluster-candidate:s2:256",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Django settings file contains",
+        "span": { "start": 256, "end": 285 },
+        "verdict": "non-violation",
+        "reason": "The run swallows the main verb \"contains\"; the actual noun group is \"Django settings file\", a product-specific term used throughout the Django documentation. Component identity outranks simplification.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s10:853",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 853, "end": 855 },
+        "verdict": "non-violation",
+        "reason": "The lead-in \"Because a settings file is a Python module, the following apply:\" establishes the settings file as the subject of every bullet, so \"It doesn't allow for Python syntax errors\" has one referent. No competing candidate is grammatically available.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s11:898",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 898, "end": 900 },
+        "verdict": "non-violation",
+        "reason": "Second bullet in a parallel list sharing the same lead-in; \"It\" is the settings file, exactly as in the bullet above. The parallel structure removes any ambiguity the local word count suggests.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s11:905",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "assign settings dynamically using normal Python syntax",
+        "span": { "start": 905, "end": 959 },
+        "verdict": "non-violation",
+        "reason": "A verb, object, adverb and a gerund phrase — normal clause structure, not a stack of nouns. \"normal Python syntax\" is the only noun group and it is transparent.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s13:1028",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 1028, "end": 1030 },
+        "verdict": "non-violation",
+        "reason": "Third bullet of the same parallel list; the intervening code block makes the heuristic see \"For example::\" as the previous sentence, but a reader tracks the list structure and resolves \"It\" to the settings file. Referent is unambiguous.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s19:1231",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 1231, "end": 1233 },
+        "verdict": "non-violation",
+        "reason": "\"When you use Django, you have to tell it which settings you're using\" — only Django can be told something, and it is the immediately preceding subject of the clause. The settings are the content of the telling, not the addressee.",
+        "reviewerConfidence": 0.9
+      }
+    ]
+  }
+}

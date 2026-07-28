@@ -1,0 +1,230 @@
+import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
+import { analyseDocument } from '../core/document.js';
+import { runDeterministicRules } from '../core/runner.js';
+import type {
+  AnalysedDocument,
+  CandidatePassage,
+  Diagnostic,
+  DocumentFormat,
+  RulePack,
+  RunNotice,
+  SemanticTrace,
+} from '../core/types.js';
+import { deterministicRules } from '../deterministic/index.js';
+import { LlamaCppClient } from '../model-client/llama-client.js';
+import type { ModelTransport } from '../model-client/types.js';
+import { resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
+import { analyseSemantically } from '../semantic/analyse.js';
+import { SemanticBroker, type SemanticBrokerDeps } from '../semantic/broker.js';
+import { resolveOverlappingFixes } from '../core/runner.js';
+
+/**
+ * The programmatic entry point.
+ *
+ * This module composes the pieces — rule pack, document analysis, deterministic rules, optional
+ * semantic adjudication — and contains no rule logic of its own. It is what both the textlint
+ * adapter and the CLI call.
+ */
+
+export interface AnalyseTextOptions {
+  readonly id?: string;
+  readonly path?: string;
+  readonly format?: DocumentFormat;
+  readonly config?: SteAiConfigInput;
+  /** Base directory used to resolve a relative `rulePack` path. */
+  readonly baseDir?: string;
+  /** Injected transport. When absent and semantic analysis is on, a llama.cpp client is built. */
+  readonly transport?: ModelTransport;
+  readonly brokerDeps?: Partial<Omit<SemanticBrokerDeps, 'transport'>>;
+  readonly signal?: AbortSignal;
+}
+
+export interface AnalysisResult {
+  readonly document: AnalysedDocument;
+  readonly diagnostics: readonly Diagnostic[];
+  /**
+   * Passages the deterministic rules handed to a semantic evaluator.
+   *
+   * Exposed because these, and only these, are what the semantic evaluators are measured on: the
+   * evaluation harness and the fixture-adjudication tooling both need the exact passage list, with
+   * spans, and recomputing it from diagnostics would not recover the evaluator routing or payload.
+   */
+  readonly candidates: readonly CandidatePassage[];
+  readonly notices: readonly RunNotice[];
+  readonly traces: readonly SemanticTrace[];
+  readonly pack: RulePack;
+  readonly config: SteAiConfig;
+}
+
+/** Deterministic-only analysis. Never performs I/O beyond reading the rule pack. */
+export function analyseTextDeterministic(
+  text: string,
+  options: AnalyseTextOptions = {},
+): AnalysisResult {
+  const config = resolveConfig(options.config ?? {});
+  const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
+  const format = options.format ?? 'markdown';
+
+  const document = analyseDocument(
+    {
+      id: options.id ?? options.path ?? 'document',
+      format,
+      text,
+      ...(options.path === undefined ? {} : { path: options.path }),
+    },
+    {
+      protectedRegions: {
+        approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
+        extraPatterns: config.extraProtectedPatterns,
+      },
+      structure: { extraImperativeVerbs: config.extraImperativeVerbs },
+    },
+  );
+
+  const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
+
+  // Candidates are passages no deterministic rule could decide. Returning only `run.diagnostics`
+  // discarded them, so a document whose only findings needed adjudication reported clean — the
+  // exact "silence means compliant" failure the diagnostic policy exists to prevent.
+  const undecided = undecidedCandidateDiagnostics(
+    run.candidates,
+    config,
+    verifiedAuthority(pack, config.trustedRulePackIds),
+  );
+
+  return {
+    document,
+    candidates: run.candidates,
+    diagnostics: [...run.diagnostics, ...undecided.diagnostics].sort(
+      (a, b) =>
+        a.range.start - b.range.start ||
+        a.range.end - b.range.end ||
+        a.ruleId.localeCompare(b.ruleId),
+    ),
+    notices: [...run.notices, ...undecided.notices],
+    traces: [],
+    pack,
+    config,
+  };
+}
+
+/**
+ * Turn unadjudicated candidates into `review-required` diagnostics plus a run notice.
+ *
+ * Used by the deterministic-only path, which never contacts a service and therefore never receives
+ * a verdict for them. The semantic path does the equivalent through `analyseSemantically`.
+ */
+function undecidedCandidateDiagnostics(
+  candidates: readonly CandidatePassage[],
+  config: SteAiConfig,
+  ruleStatus: RulePack['metadata']['authority'],
+): { diagnostics: Diagnostic[]; notices: RunNotice[] } {
+  if (candidates.length === 0) return { diagnostics: [], notices: [] };
+
+  const diagnostics: Diagnostic[] = config.diagnostics.reportReviewRequired
+    ? candidates.map((candidate) => ({
+        ruleId: candidate.ruleId,
+        ruleStatus,
+        category: 'review-required' as const,
+        severity: config.diagnostics.severity['review-required'],
+        message:
+          'This passage needs semantic adjudication, which did not run, so it was not decided. ' +
+          `A reviewer must decide it. Reason: ${candidate.reason}`,
+        range: candidate.range,
+        producedBy: 'deterministic' as const,
+        meta: { evaluatorId: candidate.evaluatorId },
+      }))
+    : [];
+
+  return {
+    diagnostics,
+    notices: [
+      {
+        code: 'semantic-disabled',
+        level: 'info',
+        message:
+          `${candidates.length} passage(s) needed semantic adjudication, which did not run. They ` +
+          'are reported as review-required. No compliance conclusion was drawn about them.',
+        detail: { candidates: candidates.length },
+      },
+    ],
+  };
+}
+
+/**
+ * Full analysis: deterministic rules, then semantic adjudication of any candidates when the
+ * semantic subsystem is enabled.
+ *
+ * With `semantic.enabled` false this returns exactly what {@link analyseTextDeterministic}
+ * returns plus `review-required` diagnostics for undecided candidates, and performs no network I/O.
+ */
+export async function analyseText(
+  text: string,
+  options: AnalyseTextOptions = {},
+): Promise<AnalysisResult> {
+  const config = resolveConfig(options.config ?? {});
+  const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
+  const format = options.format ?? 'markdown';
+
+  const document = analyseDocument(
+    {
+      id: options.id ?? options.path ?? 'document',
+      format,
+      text,
+      ...(options.path === undefined ? {} : { path: options.path }),
+    },
+    {
+      protectedRegions: {
+        approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
+        extraPatterns: config.extraProtectedPatterns,
+      },
+      structure: { extraImperativeVerbs: config.extraImperativeVerbs },
+    },
+  );
+
+  const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
+
+  const transport: ModelTransport =
+    options.transport ??
+    new LlamaCppClient({
+      endpoint: config.semantic.endpoint,
+      requestTimeoutMs: config.semantic.requestTimeoutMs,
+      ...(config.semantic.apiKey === undefined ? {} : { apiKey: config.semantic.apiKey }),
+    });
+
+  const broker = new SemanticBroker(config.semantic, { transport, ...options.brokerDeps });
+
+  const semantic = await analyseSemantically({
+    doc: document,
+    candidates: run.candidates,
+    broker,
+    config: config.semantic,
+    policy: config.diagnostics,
+    autofix: config.autofix,
+    // The authority the linter acts on, not the authority the pack claims for itself. An
+    // untrusted pack's findings are reported as `supplementary`, never `normative`.
+    ruleStatus: verifiedAuthority(pack, config.trustedRulePackIds),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
+
+  // Overlap resolution must see deterministic and semantic fixes together.
+  const merged = resolveOverlappingFixes([...run.diagnostics, ...semantic.diagnostics]);
+
+  merged.diagnostics.sort(
+    (a, b) =>
+      a.range.start - b.range.start ||
+      a.range.end - b.range.end ||
+      a.ruleId.localeCompare(b.ruleId) ||
+      a.category.localeCompare(b.category),
+  );
+
+  return {
+    document,
+    candidates: run.candidates,
+    diagnostics: merged.diagnostics,
+    notices: [...run.notices, ...semantic.notices, ...merged.notices],
+    traces: semantic.traces,
+    pack,
+    config,
+  };
+}

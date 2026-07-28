@@ -1,0 +1,147 @@
+{
+  "fixtureId": "zephyr-dependency-setup",
+  "original": "original/zephyr-dependency-setup.md",
+  "compliant": "compliant/zephyr-dependency-setup.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "zephyr-dependency-setup-p1",
+      "originalText": "Set up a command-line Zephyr development environment on Ubuntu, macOS, or\n  Windows (instructions for other Linux distributions are discussed in\n  :ref:`installation_linux`)",
+      "rewrittenText": "Set up a command-line Zephyr development environment on Ubuntu, macOS, or\n  Windows. Instructions for other Linux distributions are discussed in\n  :ref:`installation_linux`",
+      "ruleIds": [
+        "sentence-length-procedural",
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 314,
+          "end": 487
+        },
+        {
+          "start": 398,
+          "end": 487
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-procedural",
+          "category": "deterministic-violation",
+          "quote": "Set up a command-line Zephyr development environment on Ubuntu, macOS, or\n  Windows (instructions for other Linux distributions are discussed in\n  :ref:`installation_linux`)"
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "(instructions for other Linux distributions are discussed in\n  :ref:`installation_linux`)"
+        }
+      ],
+      "reason": "22-word procedural instruction with a parenthetical hiding a second statement; split the parenthetical into its own sentence, which also brings the first sentence under the 20-word limit.",
+      "semanticInvariants": [
+        "the three target platforms (Ubuntu, macOS, Windows) are unchanged",
+        "the :ref:`installation_linux` cross-reference and its meaning are unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "zephyr-dependency-setup-p2",
+      "originalText": "Build, flash, and run a sample application",
+      "rewrittenText": "Build a sample application\n- Flash a sample application\n- Run a sample application",
+      "ruleIds": [
+        "one-instruction-per-sentence"
+      ],
+      "originalSpans": [
+        {
+          "start": 512,
+          "end": 554
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "one-instruction-per-sentence",
+          "category": "deterministic-violation",
+          "quote": "Build, flash, and run a sample application"
+        }
+      ],
+      "reason": "List item bundled three actions (build, flash, run) in one line; split into three list items, keeping the same order.",
+      "semanticInvariants": [
+        "the three actions (build, flash, run) and their order are unchanged",
+        "the object of the actions (a sample application) is unchanged"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "zephyr-dependency-setup-p3",
+      "originalText": "Select and Update OS",
+      "rewrittenText": "Select and Update OS",
+      "ruleIds": [
+        "one-instruction-per-sentence"
+      ],
+      "originalSpans": [
+        {
+          "start": 573,
+          "end": 593
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "one-instruction-per-sentence",
+          "category": "deterministic-violation",
+          "quote": "Select and Update OS"
+        }
+      ],
+      "reason": "This is a section heading (title text underlined with '*' in the source RST), not an executable instruction sentence; the two-action heuristic does not apply to titles.",
+      "semanticInvariants": [
+        "the section heading text and its meaning are unchanged"
+      ],
+      "unresolved": [
+        "rule does not distinguish headings from instruction sentences"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    }
+  ],
+  "protectedLiterals": [
+    ":ref:`installation_linux`",
+    "Ubuntu",
+    "macOS",
+    "Windows"
+  ],
+  "reviewers": [
+    "reviewer-a",
+    "rewriter-a"
+  ],
+  "notes": "Heading 'Select and Update OS' is left unchanged; rewriting a document title to dodge a heuristic aimed at instruction sentences would be cosmetic surgery on the rule, not a genuine prose defect.",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s5:323",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "command-line Zephyr development environment",
+      "span": {
+        "start": 323,
+        "end": 366
+      },
+      "verdict": "non-violation",
+      "reason": "A reader groups this as [command-line] [Zephyr development environment]; the hyphenated modifier and the established product name 'Zephyr' fix the structure without guesswork.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "passive-voice-candidate:s5:442",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are discussed",
+      "span": {
+        "start": 442,
+        "end": 455
+      },
+      "verdict": "non-violation",
+      "reason": "'instructions for other Linux distributions are discussed in :ref:`installation_linux`' is a parenthetical cross-reference about the document itself, not part of the instruction; the agent is the documentation and is irrelevant.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    }
+  ]
+}

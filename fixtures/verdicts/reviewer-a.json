@@ -1,0 +1,392 @@
+{
+  "reviewer": "reviewer-a",
+  "verdicts": {
+    "httpd-mod-ssl-directive-config": [
+      {
+        "passageId": "noun-cluster-candidate:s1:207",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "SSLEngine\nSSL Engine Operation",
+        "span": {
+          "start": 207,
+          "end": 237
+        },
+        "verdict": "non-violation",
+        "reason": "The span joins the directive name SSLEngine to the title line 'SSL Engine Operation Switch' across a line break; both are component identity (a directive name and its title), not a prose noun pile a reader must parse.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s1:293",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Context: server config, virtual host",
+        "span": {
+          "start": 293,
+          "end": 329
+        },
+        "verdict": "non-violation",
+        "reason": "'Context: server config, virtual host' is a labelled metadata field listing two established httpd configuration scopes, comma-separated; there is no ambiguous grouping for a reader to guess.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s2:367",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "was removed",
+        "span": {
+          "start": 367,
+          "end": 378
+        },
+        "verdict": "non-violation",
+        "reason": "'Support ... was removed in 2.4.64' is descriptive release history, not an instruction; the actor (the httpd developers) is irrelevant and naming them would add nothing.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s3:390",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": {
+          "start": 390,
+          "end": 392
+        },
+        "verdict": "non-violation",
+        "reason": "The only sensible referent for 'It enabled RFC 2817 support' is the 'optional' argument (or, equivalently, support for it); reading 'It' as the version 2.4.64 contradicts the same sentence, so the competing readings do not change the meaning.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "noun-cluster-candidate:s4:474",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "SSL/TLS Protocol Engine",
+        "span": {
+          "start": 474,
+          "end": 497
+        },
+        "verdict": "non-violation",
+        "reason": "'SSL/TLS Protocol Engine' is the capitalised component name mod_ssl uses for itself; component identity outranks simplification.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s5:499",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "This",
+        "span": {
+          "start": 499,
+          "end": 503
+        },
+        "verdict": "non-violation",
+        "reason": "The bare 'This' parallels 'This directive' in the immediately preceding sentence, and only a directive can be 'used inside a VirtualHost section'; the engine and the usage do not fit the predicate.",
+        "reviewerConfidence": 0.65
+      },
+      {
+        "passageId": "noun-cluster-candidate:s6:609",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "SSL/TLS Protocol Engine",
+        "span": {
+          "start": 609,
+          "end": 632
+        },
+        "verdict": "non-violation",
+        "reason": "Second occurrence of the established component name 'SSL/TLS Protocol Engine'; a real product/component name is never a noun-cluster defect.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s6:633",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is\ndisabled",
+        "span": {
+          "start": 633,
+          "end": 644
+        },
+        "verdict": "non-violation",
+        "reason": "'By default the ... Engine is disabled' states a configuration state, adjectival rather than a passive action, and describes the shipped default where no actor performed anything.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s9:777",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "SSLFIPS\nSSL FIPS mode",
+        "span": {
+          "start": 777,
+          "end": 798
+        },
+        "verdict": "non-violation",
+        "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across a line break to its title 'SSL FIPS mode Switch'. Directive identity, not an opaque noun run.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s11:942",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": {
+          "start": 942,
+          "end": 944
+        },
+        "verdict": "violation",
+        "reason": "'It must be set in the global server context' follows a sentence containing both 'This directive' and 'the SSL library FIPS_mode flag'; proximity favours the flag but the truth is the SSLFIPS directive, and the two readings tell the reader to configure different things.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "passive-voice-candidate:s11:950",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be set",
+        "span": {
+          "start": 950,
+          "end": 956
+        },
+        "verdict": "non-violation",
+        "reason": "The passive states a placement constraint on the directive (where it must appear), not an action assigned to an actor; who edits the configuration file is immaterial to the constraint.",
+        "reviewerConfidence": 0.6
+      },
+      {
+        "passageId": "passive-voice-candidate:s11:997",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be configured",
+        "span": {
+          "start": 997,
+          "end": 1010
+        },
+        "verdict": "non-violation",
+        "reason": "'cannot be configured with conflicting settings' is a stated property/limitation of the directive in reference prose, not an instruction whose actor matters.",
+        "reviewerConfidence": 0.75
+      },
+      {
+        "passageId": "passive-voice-candidate:s13:1144",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "was compiled",
+        "span": {
+          "start": 1144,
+          "end": 1156
+        },
+        "verdict": "non-violation",
+        "reason": "'If httpd was compiled against an SSL library ...' is a descriptive condition about an existing build; whoever compiled httpd is genuinely unknown and naming an actor would be misleading.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s14:1457",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be\ndescribed",
+        "span": {
+          "start": 1457,
+          "end": 1469
+        },
+        "verdict": "non-violation",
+        "reason": "'may be described as ...' is a careful compliance statement in descriptive prose where the describing party is deliberately unnamed; supplying an actor would change the claim.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s14:1542",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are assembled",
+        "span": {
+          "start": 1542,
+          "end": 1555
+        },
+        "verdict": "non-violation",
+        "reason": "'when all components are assembled and operated under the guidelines' is a compliance condition, not an instruction; the agent is intentionally generic because the condition holds regardless of who performs it.",
+        "reviewerConfidence": 0.8
+      }
+    ],
+    "sqlite-cli-description": [
+      {
+        "passageId": "ambiguous-pronoun-candidate:s2:313",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": {
+          "start": 313,
+          "end": 315
+        },
+        "verdict": "non-violation",
+        "reason": "'accepts user input and passes it down into the SQLite library' — 'it' is the direct object of the coordinated verb and can only be 'user input'; the other nouns are not candidates for being passed down.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s4:450",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "they",
+        "span": {
+          "start": 450,
+          "end": 454
+        },
+        "verdict": "non-violation",
+        "reason": "'When somebody says ... they might be referring to' is the singular 'they' bound to 'somebody'; no competing referent is grammatically available.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s7:771",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is written by",
+        "span": {
+          "start": 771,
+          "end": 784
+        },
+        "verdict": "non-violation",
+        "reason": "'is written by and for the core SQLite developers' is descriptive and already names the agent; an active rewrite would break the 'by and for' coordination and lose meaning.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s7:859",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "accessing SQLite database files interactively",
+        "span": {
+          "start": 859,
+          "end": 904
+        },
+        "verdict": "non-violation",
+        "reason": "'accessing SQLite database files interactively' is a gerund phrase with an object and an adverb, not a noun pile; the grouping is fixed by the verb and needs no guessing.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s8:941",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Graphical User Interface (GUI",
+        "span": {
+          "start": 941,
+          "end": 970
+        },
+        "verdict": "non-violation",
+        "reason": "'Graphical User Interface (GUI)' is a standard term of art being formally introduced with its abbreviation; the run is conventional and unambiguous.",
+        "reviewerConfidence": 0.95
+      }
+    ],
+    "llvm-getting-started-build": [
+      {
+        "passageId": "noun-cluster-candidate:s2:286",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "LLVM (including subprojects like Clang",
+        "span": {
+          "start": 286,
+          "end": 324
+        },
+        "verdict": "non-violation",
+        "reason": "The span is 'LLVM (including subprojects like Clang' — two product names separated by an ordinary parenthetical phrase that the heuristic failed to treat as function words. There is no noun run to disambiguate.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s6:946",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "them",
+        "span": {
+          "start": 946,
+          "end": 950
+        },
+        "verdict": "non-violation",
+        "reason": "'you can filter them from your git fetch' can only refer to the user branches named as the topic of the same sentence; nothing else in context is filterable from a fetch refspec.",
+        "reviewerConfidence": 0.9
+      }
+    ],
+    "llvm-standalone-build-table": [
+      {
+        "passageId": "passive-voice-candidate:s2:339",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "was built",
+        "span": {
+          "start": 339,
+          "end": 348
+        },
+        "verdict": "non-violation",
+        "reason": "'the original folder where LLVM was built' is a descriptive relative clause identifying a folder; the builder is the reader and is already obvious, and the sentence is about location, not about who acted.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s3:479",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is installed",
+        "span": {
+          "start": 479,
+          "end": 491
+        },
+        "verdict": "non-violation",
+        "reason": "'if llvm is installed into /usr/bin' is a conditional describing an existing installation state; how it got there and who installed it are irrelevant to the condition.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s4:625",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are\n  required",
+        "span": {
+          "start": 625,
+          "end": 639
+        },
+        "verdict": "non-violation",
+        "reason": "'options are required' is an adjectival predicate stating a requirement, not a passive verb with a suppressed actor.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s5:743",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be found",
+        "span": {
+          "start": 743,
+          "end": 751
+        },
+        "verdict": "non-violation",
+        "reason": "'can be found in the table below' is a descriptive cross-reference, not an instruction; the sentence points at a table rather than assigning an action to anyone.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "passive-voice-candidate:s6:824",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are supported",
+        "span": {
+          "start": 824,
+          "end": 837
+        },
+        "verdict": "non-violation",
+        "reason": "'build targets are supported for the sub-projects listed' describes a capability of the build system; there is no actor a reader needs to know.",
+        "reviewerConfidence": 0.85
+      }
+    ],
+    "zephyr-dependency-setup": [
+      {
+        "passageId": "noun-cluster-candidate:s5:323",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "command-line Zephyr development environment",
+        "span": {
+          "start": 323,
+          "end": 366
+        },
+        "verdict": "non-violation",
+        "reason": "A reader groups this as [command-line] [Zephyr development environment]; the hyphenated modifier and the established product name 'Zephyr' fix the structure without guesswork.",
+        "reviewerConfidence": 0.75
+      },
+      {
+        "passageId": "passive-voice-candidate:s5:442",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are discussed",
+        "span": {
+          "start": 442,
+          "end": 455
+        },
+        "verdict": "non-violation",
+        "reason": "'instructions for other Linux distributions are discussed in :ref:`installation_linux`' is a parenthetical cross-reference about the document itself, not part of the instruction; the agent is the documentation and is irrelevant.",
+        "reviewerConfidence": 0.85
+      }
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "plugins": {
+    "@textlint/markdown": true,
+    "@textlint/text": true
+  },
+  "rules": {
+    "preset-ste-ai": {
+      "sentence-length-procedural": { "maxWords": 20 },
+      "sentence-length-descriptive": { "maxWords": 25 },
+      "unapproved-vocabulary": true,
+      "preferred-terminology": { "severity": "warning" },
+      "no-contractions": true,
+      "punctuation-constraints": { "maxCommas": 3 },
+      "no-repeated-words": true,
+      "abbreviation-introduction": {
+        "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL", "ANALYZE"],
+        "severity": "warning"
+      },
+      "number-unit-format": { "severity": "warning" },
+      "list-instruction-structure": { "severity": "warning" },
+      "one-instruction-per-sentence": true,
+      "passive-voice-candidate": { "severity": "info" },
+      "noun-cluster-candidate": { "severity": "info" },
+      "ambiguous-pronoun-candidate": { "severity": "info" }
+    }
+  }
+}

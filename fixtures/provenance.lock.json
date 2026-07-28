@@ -1,0 +1,237 @@
+{
+  "generatedAt": "2026-07-26T11:54:01.978Z",
+  "records": {
+    "sqlite-copyright": {
+      "url": "https://sqlite.org/copyright.html",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:57.022Z",
+      "sha256": "44ca9f793055c8e32fc65f65a4f5bcf813a33f5bdaaa084067dd617a4ed3cc70",
+      "bytes": 8351,
+      "contentType": "text/html; charset=utf-8"
+    },
+    "sqlite-pragma": {
+      "url": "https://sqlite.org/pragma.html",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.070Z",
+      "sha256": "b9bcb335ae818497f3fa05114a10492f64f35503f275da2264f2d5d436db3f5d",
+      "bytes": 139778,
+      "contentType": "text/html; charset=utf-8"
+    },
+    "sqlite-lang-vacuum": {
+      "url": "https://sqlite.org/lang_vacuum.html",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.174Z",
+      "sha256": "740f02ade00626f50c7a71ded2615995362fedfc30e09aa22dbe4535b7615c54",
+      "bytes": 15215,
+      "contentType": "text/html; charset=utf-8"
+    },
+    "sqlite-cli": {
+      "url": "https://sqlite.org/cli.html",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.240Z",
+      "sha256": "8639b3a639eb44f9ad7a1f498511867dc54faf893338ff988a03c02c17d8b82f",
+      "bytes": 94110,
+      "contentType": "text/html; charset=utf-8"
+    },
+    "curl-license-raw": {
+      "url": "https://raw.githubusercontent.com/curl/curl/master/COPYING",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.328Z",
+      "sha256": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681",
+      "bytes": 1088,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "curl-cmdline-url-raw": {
+      "url": "https://raw.githubusercontent.com/curl/curl/master/docs/cmdline-opts/url.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.365Z",
+      "sha256": "a3371dacca59bd70ee6a77a8b3f7ed0d0392ae41eff611314fc7137b9e7bba78",
+      "bytes": 1779,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "curl-cmdline-retry-raw": {
+      "url": "https://raw.githubusercontent.com/curl/curl/master/docs/cmdline-opts/retry.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.434Z",
+      "sha256": "f8c60989bf7f6873aa27a6aef8f49a8a3a432232ab9fa2a634bc6df814d528bc",
+      "bytes": 1156,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "postgres-license-raw": {
+      "url": "https://raw.githubusercontent.com/postgres/postgres/master/COPYRIGHT",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.512Z",
+      "sha256": "3d6af92ff8a4c2cdf69afb1cf44edea727922f5cd0cf8b5f72b11cdecac8fdfd",
+      "bytes": 1198,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "postgres-vacuum-sgml-raw": {
+      "url": "https://raw.githubusercontent.com/postgres/postgres/master/doc/src/sgml/ref/vacuum.sgml",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.534Z",
+      "sha256": "94367937fb5218e41c4a93720260bc1fffb38dc05d50880e25b1fa1612be14e0",
+      "bytes": 22234,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "httpd-license-raw": {
+      "url": "https://raw.githubusercontent.com/apache/httpd/trunk/LICENSE",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.559Z",
+      "sha256": "47b8c2b6c3309282a99d4a3001575c790fead690cc14734628c4667d2bbffc43",
+      "bytes": 25479,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "httpd-mod-ssl-xml-raw": {
+      "url": "https://raw.githubusercontent.com/apache/httpd/trunk/docs/manual/mod/mod_ssl.xml",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.583Z",
+      "sha256": "330656b3e95fb365621f91421cecc2d02e7f4489c3338ef06208cf9070816860",
+      "bytes": 149833,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "zephyr-license-raw": {
+      "url": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/LICENSE",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.605Z",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "bytes": 11358,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "zephyr-getting-started-raw": {
+      "url": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/doc/develop/getting_started/index.rst",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.628Z",
+      "sha256": "cc466f2d16e54bd01e8bf15f73ea3bee56601654d28a2cd416563724a361b26f",
+      "bytes": 18341,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "k8s-website-license-raw": {
+      "url": "https://raw.githubusercontent.com/kubernetes/website/main/LICENSE",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.654Z",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "k8s-debug-pods-raw": {
+      "url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-application/debug-pods.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.674Z",
+      "sha256": "fa0695bdcee4608cf1ebd4d7a3891e353e7764e566eb40ef738c5b98f5bc3645",
+      "bytes": 8225,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "k8s-audit-raw": {
+      "url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-cluster/audit.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.697Z",
+      "sha256": "8886dbd0e43eb408967de225f511a0291321fc342b615fde45edff76daa0f3e6",
+      "bytes": 12710,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "django-license-raw": {
+      "url": "https://raw.githubusercontent.com/django/django/main/LICENSE",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.772Z",
+      "sha256": "b846415d1b514e9c1dff14a22deb906d794bc546ca6129f950a18cd091e2a669",
+      "bytes": 1552,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "django-settings-doc-raw": {
+      "url": "https://raw.githubusercontent.com/django/django/main/docs/topics/settings.txt",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.811Z",
+      "sha256": "9390999ba947308534cdeb547bca99a338387021250c5684c5fa5484eaf2d6f1",
+      "bytes": 10583,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "node-license-raw": {
+      "url": "https://raw.githubusercontent.com/nodejs/node/main/LICENSE",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.832Z",
+      "sha256": "5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace",
+      "bytes": 157609,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "node-cli-doc-raw": {
+      "url": "https://raw.githubusercontent.com/nodejs/node/main/doc/api/cli.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.854Z",
+      "sha256": "8f789cadd9330f99e769cd17f1cab8938a91749f5faf7fb9a5522976594160ea",
+      "bytes": 127255,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "openssl-license-raw": {
+      "url": "https://raw.githubusercontent.com/openssl/openssl/master/LICENSE.txt",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.881Z",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "bytes": 10175,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "llvm-license-raw": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/main/LICENSE.TXT",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.921Z",
+      "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+      "bytes": 15141,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "llvm-getting-started-raw": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/main/llvm/docs/GettingStarted.md",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:58.942Z",
+      "sha256": "5eacede0d38a7e7280fd2479c798533ced8fd10195c5d84b42e3dbb8fee210f9",
+      "bytes": 42795,
+      "contentType": "text/plain; charset=utf-8"
+    },
+    "osha-1910-147-lockout-tagout": {
+      "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.147",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:59.016Z",
+      "sha256": "03e0e8018d8f3905ca2baccdcea2f1891d1e6f78dd827a9e6fc594a85bd0d15b",
+      "bytes": 171110,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    "osha-1910-132-ppe": {
+      "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.132",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:59.668Z",
+      "sha256": "afce3230e0d13f1babc3b1add86966ad700472e60e02919f886d166b7f3fd6a9",
+      "bytes": 113518,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    "osha-1910-212-machine-guarding": {
+      "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.212",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:59.702Z",
+      "sha256": "a6d2e3f45787ed006fe77087a42728b86d85cc2ebf5c456464e834835654df25",
+      "bytes": 104322,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    "copyright-gov-title17-section105": {
+      "url": "https://www.copyright.gov/title17/92chap1.html",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:53:59.769Z",
+      "sha256": "97999d678e2877c8142da81a0dce819b210e9f92aa5a405d130bf2f2e50c7d75",
+      "bytes": 675161,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    "usa-gov-government-copyright": {
+      "url": "https://www.usa.gov/government-copyright",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:54:00.471Z",
+      "sha256": "dd6bac0f8b4a432adf7a9560980958b7feb6ab70135e0807184ff9990bf7019b",
+      "bytes": 40675,
+      "contentType": "text/html"
+    },
+    "nist-licensing": {
+      "url": "https://www.nist.gov/director/licensing",
+      "httpStatus": 200,
+      "fetchedAt": "2026-07-26T11:54:00.973Z",
+      "sha256": "d7f8ec48afcdd9920d9f5176af57401a486eb91b00b2dc0edcd1a2c375ae7e13",
+      "bytes": 94106,
+      "contentType": "text/html; charset=UTF-8"
+    }
+  }
+}

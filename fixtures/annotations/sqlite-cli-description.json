@@ -1,0 +1,119 @@
+{
+  "fixtureId": "sqlite-cli-description",
+  "original": "original/sqlite-cli-description.md",
+  "compliant": "compliant/sqlite-cli-description.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "sqlite-cli-description-p1",
+      "originalText": "When somebody says \"SQLite\" or \"sqlite3\" they might be referring to either the SQLite library itself, or the CLI that provides a human interface to the library.",
+      "rewrittenText": "When somebody says \"SQLite\" or \"sqlite3\" they might be referring to either the SQLite library itself, or the CLI. The CLI provides a human interface to the library.",
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 409,
+          "end": 569
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "When somebody says \"SQLite\" or \"sqlite3\" they might be referring to either the SQLite library itself, or the CLI that provides a human interface to the library."
+        }
+      ],
+      "reason": "27-word sentence, two over the descriptive limit. Splitting at the 'that' relative clause into a second sentence with 'The CLI provides...' both fixes the length and removes a relative-clause dependency, without changing which of the two things (library vs. CLI) is being distinguished.",
+      "semanticInvariants": [
+        "the distinction between the SQLite library and the CLI (sqlite3) must be preserved exactly",
+        "the claim that the CLI, not the library, provides the human interface must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.95
+    }
+  ],
+  "protectedLiterals": [
+    "SQLite",
+    "sqlite3",
+    "CLI"
+  ],
+  "reviewers": [
+    "reviewer-a",
+    "rewriter-b"
+  ],
+  "notes": "Only one diagnostic on this fixture (an overlong descriptive sentence); it is fixed with a single, minimal split that leaves every other sentence in the excerpt byte-identical.",
+  "candidateAdjudications": [
+    {
+      "passageId": "ambiguous-pronoun-candidate:s2:313",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 313,
+        "end": 315
+      },
+      "verdict": "non-violation",
+      "reason": "'accepts user input and passes it down into the SQLite library' — 'it' is the direct object of the coordinated verb and can only be 'user input'; the other nouns are not candidates for being passed down.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s4:450",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "they",
+      "span": {
+        "start": 450,
+        "end": 454
+      },
+      "verdict": "non-violation",
+      "reason": "'When somebody says ... they might be referring to' is the singular 'they' bound to 'somebody'; no competing referent is grammatically available.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s7:771",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is written by",
+      "span": {
+        "start": 771,
+        "end": 784
+      },
+      "verdict": "non-violation",
+      "reason": "'is written by and for the core SQLite developers' is descriptive and already names the agent; an active rewrite would break the 'by and for' coordination and lose meaning.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "noun-cluster-candidate:s7:859",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "accessing SQLite database files interactively",
+      "span": {
+        "start": 859,
+        "end": 904
+      },
+      "verdict": "non-violation",
+      "reason": "'accessing SQLite database files interactively' is a gerund phrase with an object and an adverb, not a noun pile; the grouping is fixed by the verb and needs no guessing.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s8:941",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Graphical User Interface (GUI",
+      "span": {
+        "start": 941,
+        "end": 970
+      },
+      "verdict": "non-violation",
+      "reason": "'Graphical User Interface (GUI)' is a standard term of art being formally introduced with its abbreviation; the run is conventional and unambiguous.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.95
+    }
+  ]
+}

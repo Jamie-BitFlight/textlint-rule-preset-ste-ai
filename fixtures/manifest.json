@@ -1,0 +1,530 @@
+{
+  "generatedAt": "2026-07-26T12:09:41.733Z",
+  "licenceStatement": "Every fixture in fixtures/original/ is redistributed under a licence that explicitly permits redistribution and is not copyleft or share-alike: public-domain U.S. federal government works and SQLite (public domain), Apache-2.0 (and Apache-2.0 WITH LLVM-exception), MIT, BSD-3-Clause, the PostgreSQL Licence, the curl licence, and CC-BY-4.0. No GPL, LGPL, AGPL, GFDL, or CC-BY-SA material is included anywhere in this corpus. Each fixture entry records the upstream licence, a verbatim licence-evidence quote and the URL it was read from, and the `derivativeLicence` this repository applies to its own rewritten/compliant counterpart of that fixture. CC-BY-4.0 sources (Kubernetes documentation) propagate their attribution requirement forward as `derivativeLicence: \"CC-BY-4.0\"`; all other, permissive/public-domain sources are re-licensed as `derivativeLicence: \"MIT (this repository)\"`. Full attributions, organisations, retrieval dates, and verbatim licence text for every fixture are listed in fixtures/LICENSES.md.",
+  "fixtures": [
+    {
+      "id": "sqlite-vacuum-space-reclaim",
+      "title": "SQLite VACUUM: reasons to reclaim database space",
+      "sourceOrganisation": "SQLite Development Team",
+      "sourceUrl": "https://sqlite.org/lang_vacuum.html",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain",
+      "licenceEvidence": {
+        "url": "https://sqlite.org/copyright.html",
+        "quote": "All of the code and documentation in SQLite has been dedicated to the public domain by the authors.",
+        "method": "licence-page"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "maintenance",
+      "expectedClassification": "mixed",
+      "difficultFeatures": [
+        "passive-voice",
+        "long-sentences",
+        "lists",
+        "identifiers"
+      ],
+      "originalPath": "original/sqlite-vacuum-space-reclaim.md",
+      "compliantPath": "compliant/sqlite-vacuum-space-reclaim.md",
+      "annotationPath": "annotations/sqlite-vacuum-space-reclaim.json",
+      "split": "dev",
+      "originalSha256": "e3658029986914be1e75ea158fa33f120a9eb01f1c69f84a6bd13ee3cf289f2e",
+      "provenanceKey": "sqlite-lang-vacuum",
+      "notes": "Bulleted rationale for running VACUUM; mixes descriptive rationale with implicit procedural cues (e.g. forensic recovery risk)."
+    },
+    {
+      "id": "postgres-vacuum-overview",
+      "title": "PostgreSQL VACUUM: reclaiming storage from dead tuples",
+      "sourceOrganisation": "PostgreSQL Global Development Group",
+      "sourceUrl": "https://raw.githubusercontent.com/postgres/postgres/master/doc/src/sgml/ref/vacuum.sgml",
+      "retrievedAt": "2026-07-26",
+      "licence": "PostgreSQL Licence",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/postgres/postgres/master/COPYRIGHT",
+        "quote": "Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "maintenance",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "contractions",
+        "passive-voice",
+        "long-sentences",
+        "identifiers"
+      ],
+      "originalPath": "original/postgres-vacuum-overview.md",
+      "compliantPath": "compliant/postgres-vacuum-overview.md",
+      "annotationPath": "annotations/postgres-vacuum-overview.json",
+      "split": "heldout",
+      "originalSha256": "2c86bf2cf0d125cc48de39f1c4fc2d93ae49aceebdf8f199e81121266a524945",
+      "provenanceKey": "postgres-vacuum-sgml-raw"
+    },
+    {
+      "id": "zephyr-dependency-setup",
+      "title": "Zephyr Getting Started: selecting an OS and updating packages",
+      "sourceOrganisation": "Zephyr Project (Linux Foundation)",
+      "sourceUrl": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/doc/develop/getting_started/index.rst",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/LICENSE",
+        "quote": "\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "installation",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "lists",
+        "code-blocks",
+        "admonitions",
+        "identifiers"
+      ],
+      "originalPath": "original/zephyr-dependency-setup.md",
+      "compliantPath": "compliant/zephyr-dependency-setup.md",
+      "annotationPath": "annotations/zephyr-dependency-setup.json",
+      "split": "dev",
+      "originalSha256": "aa3c70a7afa9d7902f53a9cf3d58b8a8c0542f65ab556c3eb0ac2e248f2b00d1",
+      "provenanceKey": "zephyr-getting-started-raw"
+    },
+    {
+      "id": "llvm-getting-started-build",
+      "title": "LLVM Getting Started: cloning and configuring the source tree",
+      "sourceOrganisation": "LLVM Project",
+      "sourceUrl": "https://raw.githubusercontent.com/llvm/llvm-project/main/llvm/docs/GettingStarted.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/llvm/llvm-project/main/LICENSE.TXT",
+        "quote": "The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "installation",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "lists",
+        "code-blocks",
+        "identifiers",
+        "multiple-instructions"
+      ],
+      "originalPath": "original/llvm-getting-started-build.md",
+      "compliantPath": "compliant/llvm-getting-started-build.md",
+      "annotationPath": "annotations/llvm-getting-started-build.json",
+      "split": "dev",
+      "originalSha256": "9b7247b8f5aa956486c8ced07a6fb0d3b115789092f259933bd0d39383134dc0",
+      "provenanceKey": "llvm-getting-started-raw"
+    },
+    {
+      "id": "k8s-debug-pod-troubleshooting",
+      "title": "Kubernetes: diagnosing a Pod stuck in Pending",
+      "sourceOrganisation": "Kubernetes Authors / Cloud Native Computing Foundation",
+      "sourceUrl": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-application/debug-pods.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "CC-BY-4.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/kubernetes/website/main/LICENSE",
+        "quote": "Subject to the terms and conditions of this Public License, the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "CC-BY-4.0",
+      "category": "troubleshooting",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "code-blocks",
+        "lists",
+        "identifiers"
+      ],
+      "originalPath": "original/k8s-debug-pod-troubleshooting.md",
+      "compliantPath": "compliant/k8s-debug-pod-troubleshooting.md",
+      "annotationPath": "annotations/k8s-debug-pod-troubleshooting.json",
+      "split": "dev",
+      "originalSha256": "8b6ede4169445f14fcc10433a5b65d5e07c484899484db1cd0933a8d8eea52df",
+      "provenanceKey": "k8s-debug-pods-raw"
+    },
+    {
+      "id": "k8s-audit-log-troubleshooting",
+      "title": "Kubernetes Auditing: request stages and record lifecycle",
+      "sourceOrganisation": "Kubernetes Authors / Cloud Native Computing Foundation",
+      "sourceUrl": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-cluster/audit.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "CC-BY-4.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/kubernetes/website/main/LICENSE",
+        "quote": "Subject to the terms and conditions of this Public License, the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "CC-BY-4.0",
+      "category": "troubleshooting",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "lists",
+        "contractions",
+        "passive-voice",
+        "identifiers"
+      ],
+      "originalPath": "original/k8s-audit-log-troubleshooting.md",
+      "compliantPath": "compliant/k8s-audit-log-troubleshooting.md",
+      "annotationPath": "annotations/k8s-audit-log-troubleshooting.json",
+      "split": "dev",
+      "originalSha256": "bd66cb8afc476965d2e9cbf1aa5e16353b8be7f49931057ddfcbeb024796dea9",
+      "provenanceKey": "k8s-audit-raw"
+    },
+    {
+      "id": "osha-lockout-tagout-warning",
+      "title": "OSHA 1910.147: hazardous energy control procedure requirements",
+      "sourceOrganisation": "Occupational Safety and Health Administration (U.S. Department of Labor)",
+      "sourceUrl": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.147",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain (U.S. Government Work)",
+      "licenceEvidence": {
+        "url": "https://www.copyright.gov/title17/92chap1.html",
+        "quote": "Copyright protection under this title is not available for any work of the United States Government, but the United States Government is not precluded from receiving and holding copyrights transferred to it by assignment, bequest, or otherwise.",
+        "method": "statute"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "safety-warning",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "passive-voice",
+        "nested-conditions",
+        "long-sentences",
+        "identifiers",
+        "multiple-instructions"
+      ],
+      "originalPath": "original/osha-lockout-tagout-warning.md",
+      "compliantPath": "compliant/osha-lockout-tagout-warning.md",
+      "annotationPath": "annotations/osha-lockout-tagout-warning.json",
+      "split": "dev",
+      "originalSha256": "c557faa6af15d3ea98bcfc2abda2b65bc6f858c1fbc96bfd263bc87c23f0152a",
+      "provenanceKey": "osha-1910-147-lockout-tagout"
+    },
+    {
+      "id": "osha-ppe-requirements",
+      "title": "OSHA 1910.132: personal protective equipment application and hazard assessment",
+      "sourceOrganisation": "Occupational Safety and Health Administration (U.S. Department of Labor)",
+      "sourceUrl": "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.132",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain (U.S. Government Work)",
+      "licenceEvidence": {
+        "url": "https://www.copyright.gov/title17/92chap1.html",
+        "quote": "Copyright protection under this title is not available for any work of the United States Government, but the United States Government is not precluded from receiving and holding copyrights transferred to it by assignment, bequest, or otherwise.",
+        "method": "statute"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "safety-warning",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "passive-voice",
+        "long-sentences",
+        "abbreviations",
+        "identifiers",
+        "nested-conditions"
+      ],
+      "originalPath": "original/osha-ppe-requirements.md",
+      "compliantPath": "compliant/osha-ppe-requirements.md",
+      "annotationPath": "annotations/osha-ppe-requirements.json",
+      "split": "heldout",
+      "originalSha256": "56f1edfb298c46f6ced99cc16e178b624f444968ce6474a5a37f5f7ac1e5109d",
+      "provenanceKey": "osha-1910-132-ppe"
+    },
+    {
+      "id": "httpd-mod-ssl-overview",
+      "title": "Apache mod_ssl: module summary and environment variables",
+      "sourceOrganisation": "The Apache Software Foundation",
+      "sourceUrl": "https://raw.githubusercontent.com/apache/httpd/trunk/docs/manual/mod/mod_ssl.xml",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/apache/httpd/trunk/LICENSE",
+        "quote": "\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "descriptive",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "abbreviations",
+        "identifiers",
+        "passive-voice"
+      ],
+      "originalPath": "original/httpd-mod-ssl-overview.md",
+      "compliantPath": "compliant/httpd-mod-ssl-overview.md",
+      "annotationPath": "annotations/httpd-mod-ssl-overview.json",
+      "split": "heldout",
+      "originalSha256": "04581dcc27f7fd3109a01afdcc44334607e63ed6e1df444833612202c62a5dd8",
+      "provenanceKey": "httpd-mod-ssl-xml-raw"
+    },
+    {
+      "id": "sqlite-cli-description",
+      "title": "SQLite CLI: distinguishing the library from the command-line shell",
+      "sourceOrganisation": "SQLite Development Team",
+      "sourceUrl": "https://sqlite.org/cli.html",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain",
+      "licenceEvidence": {
+        "url": "https://sqlite.org/copyright.html",
+        "quote": "All of the code and documentation in SQLite has been dedicated to the public domain by the authors.",
+        "method": "licence-page"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "descriptive",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "ambiguous-pronoun",
+        "long-sentences"
+      ],
+      "originalPath": "original/sqlite-cli-description.md",
+      "compliantPath": "compliant/sqlite-cli-description.md",
+      "annotationPath": "annotations/sqlite-cli-description.json",
+      "split": "dev",
+      "originalSha256": "5eba83a15ce0fd4242fdd303144430185e01e94723211dce9b6ecf2ab9d626c0",
+      "provenanceKey": "sqlite-cli"
+    },
+    {
+      "id": "django-settings-configuration",
+      "title": "Django settings: module-level configuration and DJANGO_SETTINGS_MODULE",
+      "sourceOrganisation": "Django Software Foundation",
+      "sourceUrl": "https://raw.githubusercontent.com/django/django/main/docs/topics/settings.txt",
+      "retrievedAt": "2026-07-26",
+      "licence": "BSD-3-Clause",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/django/django/main/LICENSE",
+        "quote": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "api-configuration",
+      "expectedClassification": "mixed",
+      "difficultFeatures": [
+        "code-blocks",
+        "lists",
+        "contractions",
+        "identifiers",
+        "admonitions"
+      ],
+      "originalPath": "original/django-settings-configuration.md",
+      "compliantPath": "compliant/django-settings-configuration.md",
+      "annotationPath": "annotations/django-settings-configuration.json",
+      "split": "dev",
+      "originalSha256": "ce8a9271d584bd7d3d76e079e587e21b7d390c6a883e9b9826cad76c917b3e97",
+      "provenanceKey": "django-settings-doc-raw"
+    },
+    {
+      "id": "httpd-mod-ssl-directive-config",
+      "title": "Apache mod_ssl: SSLEngine and SSLFIPS directive reference",
+      "sourceOrganisation": "The Apache Software Foundation",
+      "sourceUrl": "https://raw.githubusercontent.com/apache/httpd/trunk/docs/manual/mod/mod_ssl.xml",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/apache/httpd/trunk/LICENSE",
+        "quote": "\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "api-configuration",
+      "expectedClassification": "mixed",
+      "difficultFeatures": [
+        "identifiers",
+        "abbreviations",
+        "code-blocks",
+        "long-sentences"
+      ],
+      "originalPath": "original/httpd-mod-ssl-directive-config.md",
+      "compliantPath": "compliant/httpd-mod-ssl-directive-config.md",
+      "annotationPath": "annotations/httpd-mod-ssl-directive-config.json",
+      "split": "heldout",
+      "originalSha256": "fc96c12ee1683fe62292dd5c232e5660984701aff6dfee29ab56c1f5e08f9e57",
+      "provenanceKey": "httpd-mod-ssl-xml-raw",
+      "notes": "Contains an unedited upstream wording slip (\"This is should be used ... for a that virtual host\"), preserved verbatim."
+    },
+    {
+      "id": "curl-url-option-reference",
+      "title": "curl --url option: scheme guessing and URL-list files",
+      "sourceOrganisation": "curl project (Daniel Stenberg and contributors)",
+      "sourceUrl": "https://raw.githubusercontent.com/curl/curl/master/docs/cmdline-opts/url.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "curl licence",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/curl/curl/master/COPYING",
+        "quote": "Permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "cli-reference",
+      "expectedClassification": "mixed",
+      "difficultFeatures": [
+        "front-matter",
+        "abbreviations",
+        "identifiers",
+        "long-sentences"
+      ],
+      "originalPath": "original/curl-url-option-reference.md",
+      "compliantPath": "compliant/curl-url-option-reference.md",
+      "annotationPath": "annotations/curl-url-option-reference.json",
+      "split": "heldout",
+      "originalSha256": "f8f7c6e9f0cd99dc823630bff69deb24b043e4daffc4f4451e395fd724bac3a7",
+      "provenanceKey": "curl-cmdline-url-raw"
+    },
+    {
+      "id": "sqlite-cli-dot-commands",
+      "title": "SQLite CLI: creating a database and terminating a session",
+      "sourceOrganisation": "SQLite Development Team",
+      "sourceUrl": "https://sqlite.org/cli.html",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain",
+      "licenceEvidence": {
+        "url": "https://sqlite.org/copyright.html",
+        "quote": "All of the code and documentation in SQLite has been dedicated to the public domain by the authors.",
+        "method": "licence-page"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "cli-reference",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "code-blocks",
+        "identifiers",
+        "multiple-instructions"
+      ],
+      "originalPath": "original/sqlite-cli-dot-commands.md",
+      "compliantPath": "compliant/sqlite-cli-dot-commands.md",
+      "annotationPath": "annotations/sqlite-cli-dot-commands.json",
+      "split": "dev",
+      "originalSha256": "d6ddc33d23a5b0ba57a4f6e118b362c208a4c413120a61b765e9a35585189b18",
+      "provenanceKey": "sqlite-cli"
+    },
+    {
+      "id": "zephyr-dependency-table",
+      "title": "Zephyr Getting Started: minimum dependency versions and apt install",
+      "sourceOrganisation": "Zephyr Project (Linux Foundation)",
+      "sourceUrl": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/doc/develop/getting_started/index.rst",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/LICENSE",
+        "quote": "\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "structured-content",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "tables",
+        "lists",
+        "code-blocks",
+        "admonitions"
+      ],
+      "originalPath": "original/zephyr-dependency-table.md",
+      "compliantPath": "compliant/zephyr-dependency-table.md",
+      "annotationPath": "annotations/zephyr-dependency-table.json",
+      "split": "dev",
+      "originalSha256": "fe9cd77e5211f1092c6bff3ad5f00ee195c7b4abc871d3b0ed33869866535531",
+      "provenanceKey": "zephyr-getting-started-raw",
+      "notes": "RST list-table (dependency versions) + numbered list + code-block satisfy the structured-content requirement."
+    },
+    {
+      "id": "llvm-standalone-build-table",
+      "title": "LLVM: stand-alone build requirements per sub-project",
+      "sourceOrganisation": "LLVM Project",
+      "sourceUrl": "https://raw.githubusercontent.com/llvm/llvm-project/main/llvm/docs/GettingStarted.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/llvm/llvm-project/main/LICENSE.TXT",
+        "quote": "The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "structured-content",
+      "expectedClassification": "procedural",
+      "difficultFeatures": [
+        "tables",
+        "lists",
+        "code-blocks",
+        "identifiers"
+      ],
+      "originalPath": "original/llvm-standalone-build-table.md",
+      "compliantPath": "compliant/llvm-standalone-build-table.md",
+      "annotationPath": "annotations/llvm-standalone-build-table.json",
+      "split": "dev",
+      "originalSha256": "4eca87aecfa2900b7cd267070011995b29233f3331f7ee6e190335627a0396c8",
+      "provenanceKey": "llvm-getting-started-raw",
+      "notes": "Markdown pipe table (sub-project requirements) + bullet list + fenced shell code-block."
+    },
+    {
+      "id": "sqlite-pragma-hard-negative",
+      "title": "SQLite PRAGMA index: an unbroken run of PRAGMA identifiers",
+      "sourceOrganisation": "SQLite Development Team",
+      "sourceUrl": "https://sqlite.org/pragma.html",
+      "retrievedAt": "2026-07-26",
+      "licence": "Public Domain",
+      "licenceEvidence": {
+        "url": "https://sqlite.org/copyright.html",
+        "quote": "All of the code and documentation in SQLite has been dedicated to the public domain by the authors.",
+        "method": "licence-page"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "hard-negative",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "long-sentences",
+        "identifiers"
+      ],
+      "originalPath": "original/sqlite-pragma-hard-negative.md",
+      "compliantPath": "compliant/sqlite-pragma-hard-negative.md",
+      "annotationPath": "annotations/sqlite-pragma-hard-negative.json",
+      "split": "dev",
+      "originalSha256": "2f8f148f6e6a81ce7842f7308534b4d4713121d04233839fcffb0962fa3cedc0",
+      "provenanceKey": "sqlite-pragma",
+      "notes": "Rendered as continuous text this reads as one enormous run-on \"sentence\"; it is actually the master index of PRAGMA names (an HTML table of links). A naive long-sentence rule would misfire here."
+    },
+    {
+      "id": "node-cli-hard-negative",
+      "title": "Node.js CLI: program entry point resolution rules",
+      "sourceOrganisation": "OpenJS Foundation (Node.js)",
+      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/main/doc/api/cli.md",
+      "retrievedAt": "2026-07-26",
+      "licence": "MIT",
+      "licenceEvidence": {
+        "url": "https://raw.githubusercontent.com/nodejs/node/main/LICENSE",
+        "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction",
+        "method": "repository-licence-file"
+      },
+      "reproduction": "excerpted",
+      "derivativeLicence": "MIT (this repository)",
+      "category": "hard-negative",
+      "expectedClassification": "descriptive",
+      "difficultFeatures": [
+        "passive-voice",
+        "nested-conditions",
+        "contractions",
+        "identifiers"
+      ],
+      "originalPath": "original/node-cli-hard-negative.md",
+      "compliantPath": "compliant/node-cli-hard-negative.md",
+      "annotationPath": "annotations/node-cli-hard-negative.json",
+      "split": "heldout",
+      "originalSha256": "3d49955f64e9880ddf41a6ef98258a8deffdad32fe893dd0291632900081a4f5",
+      "provenanceKey": "node-cli-doc-raw",
+      "notes": "Dense, correct passive voice describing implementation resolution order (\"it's resolved as...\", \"an error is thrown\"); rewriting to active voice would obscure the actor-agnostic algorithm description."
+    }
+  ]
+}

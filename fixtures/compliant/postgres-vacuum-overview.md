@@ -1,0 +1,5 @@
+<!-- fixture: postgres-vacuum-overview (rewritten counterpart) | source: https://raw.githubusercontent.com/postgres/postgres/master/doc/src/sgml/ref/vacuum.sgml | licence: PostgreSQL Licence | derivative-licence: MIT (this repository) | note: prose simplified by this project; literals unchanged -->
+
+VACUUM reclaims storage occupied by dead tuples. In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not physically removed from their table. They remain present until a VACUUM is done. Therefore it is necessary to do VACUUM periodically, especially on frequently-updated tables.
+
+Plain VACUUM (without FULL) simply reclaims space and makes it available for re-use. This form of the command can operate in parallel with normal reading and writing of the table, as an exclusive lock is not obtained. However, extra space is not returned to the operating system (in most cases). It is just kept available for re-use within the same table. It also allows us to leverage multiple CPUs to process indexes.

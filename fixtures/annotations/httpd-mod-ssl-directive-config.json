@@ -1,0 +1,459 @@
+{
+  "fixtureId": "httpd-mod-ssl-directive-config",
+  "original": "original/httpd-mod-ssl-directive-config.md",
+  "compliant": "compliant/httpd-mod-ssl-directive-config.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p1",
+      "originalText": "2.4.64",
+      "rewrittenText": "2.4.64",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 382,
+          "end": 388
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "2.4.64"
+        }
+      ],
+      "reason": "'2.4.64' is the Apache httpd release version in which the 'optional' SSLEngine argument was removed, not a quantity with a missing unit space. Reformatting it would misrepresent the version number.",
+      "semanticInvariants": [
+        "the version number 2.4.64 must remain byte-identical"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p2",
+      "originalText": "RFC",
+      "rewrittenText": "RFC",
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 401,
+          "end": 404
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "RFC"
+        }
+      ],
+      "reason": "'RFC 2817' is a specific IETF document citation (like the FIPS 140-2 and CFR citations elsewhere in this corpus), not a general term being repeatedly used that benefits from first-use expansion. It appears exactly once, as part of a fixed document number, and is never referred to again.",
+      "semanticInvariants": [
+        "the citation 'RFC 2817' must remain byte-identical"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p3",
+      "originalText": "/",
+      "rewrittenText": "/",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 477,
+          "end": 478
+        },
+        {
+          "start": 564,
+          "end": 565
+        },
+        {
+          "start": 612,
+          "end": 613
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "/"
+        }
+      ],
+      "reason": "'SSL/TLS' is the fixed, compound name of the protocol pairing this directive controls ('SSL/TLS Protocol Engine'), not an ambiguous and/or slash between two independent words. Rewriting it as 'SSL or TLS' or 'SSL and TLS' would change the established product/protocol name and could misleadingly suggest the engine handles only one of the two.",
+      "semanticInvariants": [
+        "the compound protocol name 'SSL/TLS' must remain unchanged everywhere it appears"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.93
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p4",
+      "originalText": "#...",
+      "rewrittenText": "#...",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 757,
+          "end": 760
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "..."
+        }
+      ],
+      "reason": "This ellipsis is inside a literal Apache configuration example ('<VirtualHost _default_:443> / SSLEngine on / #... / </VirtualHost>'), where '#...' is the conventional config-comment placeholder meaning 'other directives go here'. It is example syntax, not prose, and editing it would corrupt the example.",
+      "semanticInvariants": [
+        "the VirtualHost configuration example, including the '#...' placeholder comment, must remain byte-identical"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.92
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p5",
+      "originalText": "FIPS",
+      "rewrittenText": "FIPS",
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 789,
+          "end": 793
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "FIPS"
+        }
+      ],
+      "reason": "The flagged occurrence is inside the SSLFIPS directive reference heading ('SSLFIPS / SSL FIPS mode Switch / Syntax: SSLFIPS on|off ...'), where 'FIPS' is part of the literal directive name and the C API symbol 'FIPS_mode' used later, and reappears afterward only inside the fixed citation 'FIPS 140-2'. There is no ordinary-prose occurrence where expanding it would not require altering a protected identifier (SSLFIPS, FIPS_mode) or a citation number (FIPS 140-2).",
+      "semanticInvariants": [
+        "the directive name SSLFIPS, the C symbol FIPS_mode, and the citation 'FIPS 140-2' must all remain byte-identical"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p6",
+      "originalText": "140-2",
+      "rewrittenText": "140-2",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 1262,
+          "end": 1267
+        },
+        {
+          "start": 1372,
+          "end": 1377
+        },
+        {
+          "start": 1484,
+          "end": 1489
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "140-2"
+        }
+      ],
+      "reason": "'140-2' is part of the fixed standard number 'FIPS 140-2', a NIST publication citation, not a quantity with a missing unit space. Inserting a space would corrupt the standard's name.",
+      "semanticInvariants": [
+        "the standard citation 'FIPS 140-2' must remain byte-identical everywhere it appears"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "httpd-mod-ssl-directive-config-p7",
+      "originalText": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library for\nspecific requirements to use mod_ssl in a FIPS 140-2 approved mode\nof operation; note that mod_ssl itself is not validated, but may be\ndescribed as using FIPS 140-2 validated cryptographic module, when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy.",
+      "rewrittenText": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library. It states\nspecific requirements for using mod_ssl in a FIPS 140-2 approved mode\nof operation. Note that mod_ssl itself is not validated. It may be\ndescribed as using a FIPS 140-2 validated cryptographic module. This applies when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy.",
+      "ruleIds": [
+        "sentence-length-descriptive",
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 1244,
+          "end": 1632
+        },
+        {
+          "start": 1404,
+          "end": 1405
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "Refer to the\nFIPS 140-2 Security Policy document of the SSL provider library for\nspecific requirements to use mod_ssl in a FIPS 140-2 approved mode\nof operation; note that mod_ssl itself is not validated, but may be\ndescribed as using FIPS 140-2 validated cryptographic module, when\nall components are assembled and operated under the guidelines imposed\nby the applicable Security Policy."
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": ";"
+        }
+      ],
+      "reason": "One 61-word sentence with a semicolon join. We split it into four short sentences at its existing clause boundaries ('for specific requirements' / semicolon / 'but may be described' / 'when all components') without reordering any clause or dropping any of the three 'FIPS 140-2' citations, so every requirement and every citation is preserved in its original order.",
+      "semanticInvariants": [
+        "all three occurrences of the citation 'FIPS 140-2' must remain byte-identical and in the same relative order",
+        "the identifier mod_ssl must remain byte-identical everywhere it appears",
+        "the claim that mod_ssl itself is not validated, but the assembled cryptographic module may be described as FIPS 140-2 validated, must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": [
+    "2.4.64",
+    "RFC 2817",
+    "SSL/TLS",
+    "FIPS_mode",
+    "SSLFIPS",
+    "FIPS 140-2",
+    "mod_ssl",
+    "#..."
+  ],
+  "reviewers": [
+    "reviewer-a",
+    "rewriter-b"
+  ],
+  "notes": "Six of seven diagnostics are false positives against version numbers, standard/document citation numbers, a fixed compound protocol name, a literal configuration-example placeholder, and directive-name identifiers; only the one genuinely overlong, semicolon-joined descriptive sentence is rewritten, preserving every identifier and citation in it.",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s1:207",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "SSLEngine\nSSL Engine Operation",
+      "span": {
+        "start": 207,
+        "end": 237
+      },
+      "verdict": "non-violation",
+      "reason": "The span joins the directive name SSLEngine to the title line 'SSL Engine Operation Switch' across a line break; both are component identity (a directive name and its title), not a prose noun pile a reader must parse.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s1:293",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Context: server config, virtual host",
+      "span": {
+        "start": 293,
+        "end": 329
+      },
+      "verdict": "non-violation",
+      "reason": "'Context: server config, virtual host' is a labelled metadata field listing two established httpd configuration scopes, comma-separated; there is no ambiguous grouping for a reader to guess.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s2:367",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "was removed",
+      "span": {
+        "start": 367,
+        "end": 378
+      },
+      "verdict": "non-violation",
+      "reason": "'Support ... was removed in 2.4.64' is descriptive release history, not an instruction; the actor (the httpd developers) is irrelevant and naming them would add nothing.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s3:390",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 390,
+        "end": 392
+      },
+      "verdict": "non-violation",
+      "reason": "The only sensible referent for 'It enabled RFC 2817 support' is the 'optional' argument (or, equivalently, support for it); reading 'It' as the version 2.4.64 contradicts the same sentence, so the competing readings do not change the meaning.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "noun-cluster-candidate:s4:474",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "SSL/TLS Protocol Engine",
+      "span": {
+        "start": 474,
+        "end": 497
+      },
+      "verdict": "non-violation",
+      "reason": "'SSL/TLS Protocol Engine' is the capitalised component name mod_ssl uses for itself; component identity outranks simplification.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s5:499",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "This",
+      "span": {
+        "start": 499,
+        "end": 503
+      },
+      "verdict": "non-violation",
+      "reason": "The bare 'This' parallels 'This directive' in the immediately preceding sentence, and only a directive can be 'used inside a VirtualHost section'; the engine and the usage do not fit the predicate.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.65
+    },
+    {
+      "passageId": "noun-cluster-candidate:s6:609",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "SSL/TLS Protocol Engine",
+      "span": {
+        "start": 609,
+        "end": 632
+      },
+      "verdict": "non-violation",
+      "reason": "Second occurrence of the established component name 'SSL/TLS Protocol Engine'; a real product/component name is never a noun-cluster defect.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s6:633",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is\ndisabled",
+      "span": {
+        "start": 633,
+        "end": 644
+      },
+      "verdict": "non-violation",
+      "reason": "'By default the ... Engine is disabled' states a configuration state, adjectival rather than a passive action, and describes the shipped default where no actor performed anything.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "noun-cluster-candidate:s9:777",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "SSLFIPS\nSSL FIPS mode",
+      "span": {
+        "start": 777,
+        "end": 798
+      },
+      "verdict": "non-violation",
+      "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across a line break to its title 'SSL FIPS mode Switch'. Directive identity, not an opaque noun run.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s11:942",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 942,
+        "end": 944
+      },
+      "verdict": "violation",
+      "reason": "'It must be set in the global server context' follows a sentence containing both 'This directive' and 'the SSL library FIPS_mode flag'; proximity favours the flag but the truth is the SSLFIPS directive, and the two readings tell the reader to configure different things.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "passive-voice-candidate:s11:950",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be set",
+      "span": {
+        "start": 950,
+        "end": 956
+      },
+      "verdict": "non-violation",
+      "reason": "The passive states a placement constraint on the directive (where it must appear), not an action assigned to an actor; who edits the configuration file is immaterial to the constraint.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.6
+    },
+    {
+      "passageId": "passive-voice-candidate:s11:997",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be configured",
+      "span": {
+        "start": 997,
+        "end": 1010
+      },
+      "verdict": "non-violation",
+      "reason": "'cannot be configured with conflicting settings' is a stated property/limitation of the directive in reference prose, not an instruction whose actor matters.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "passive-voice-candidate:s13:1144",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "was compiled",
+      "span": {
+        "start": 1144,
+        "end": 1156
+      },
+      "verdict": "non-violation",
+      "reason": "'If httpd was compiled against an SSL library ...' is a descriptive condition about an existing build; whoever compiled httpd is genuinely unknown and naming an actor would be misleading.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s14:1457",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be\ndescribed",
+      "span": {
+        "start": 1457,
+        "end": 1469
+      },
+      "verdict": "non-violation",
+      "reason": "'may be described as ...' is a careful compliance statement in descriptive prose where the describing party is deliberately unnamed; supplying an actor would change the claim.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s14:1542",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are assembled",
+      "span": {
+        "start": 1542,
+        "end": 1555
+      },
+      "verdict": "non-violation",
+      "reason": "'when all components are assembled and operated under the guidelines' is a compliance condition, not an instruction; the agent is intentionally generic because the condition holds regardless of who performs it.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.8
+    }
+  ]
+}

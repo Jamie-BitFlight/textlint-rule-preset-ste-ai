@@ -1,0 +1,180 @@
+{
+  "fixtureId": "zephyr-dependency-table",
+  "original": "original/zephyr-dependency-table.md",
+  "compliant": "compliant/zephyr-dependency-table.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "zephyr-dependency-table-p1",
+      "originalText": "3.20.5",
+      "rewrittenText": "3.20.5",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 660,
+          "end": 666
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "3.20.5"
+        }
+      ],
+      "reason": "This is a software version identifier (CMake minimum version) in a list-table cell, not a number+unit measurement. The rule's dot-as-decimal-separator heuristic misreads a three-part semantic version as a quantity needing a space before a unit. Inserting a space would corrupt the version string.",
+      "semanticInvariants": [
+        "the version string 3.20.5 must remain byte-identical",
+        "table cell content and column count must not change"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "zephyr-dependency-table-p2",
+      "originalText": "3.12",
+      "rewrittenText": "3.12",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 718,
+          "end": 722
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "3.12"
+        }
+      ],
+      "reason": "Python minimum version identifier in a list-table cell. Not a quantity-plus-unit; it is a dotted version number and must not be reformatted.",
+      "semanticInvariants": [
+        "the version string 3.12 must remain byte-identical",
+        "table cell content and column count must not change"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "zephyr-dependency-table-p3",
+      "originalText": "1.4.6",
+      "rewrittenText": "1.4.6",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 791,
+          "end": 796
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "1.4.6"
+        }
+      ],
+      "reason": "Devicetree compiler minimum version identifier in a list-table cell. Same false-positive class as the other two dotted version numbers in this table: the rule cannot tell a semantic version apart from a quantity with a missing unit space.",
+      "semanticInvariants": [
+        "the version string 1.4.6 must remain byte-identical",
+        "table cell content and column count must not change"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    },
+    {
+      "passageId": "zephyr-dependency-table-p4",
+      "originalText": "Python 3.12 is strongly recommended.",
+      "rewrittenText": "Python 3.12 is strongly recommended.",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 819,
+          "end": 823
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "3.12"
+        }
+      ],
+      "reason": "Same version number, this time repeated in the admonition prose rather than the table. It is still a software version, not a measurement with a unit, so the number-unit-format rule's suggested space would misrepresent the release number.",
+      "semanticInvariants": [
+        "the version string 3.12 must remain byte-identical",
+        "the recommendation and its admonition status (note) must not be downgraded or altered"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 0.96
+    }
+  ],
+  "protectedLiterals": [
+    "3.20.5",
+    "3.12",
+    "1.4.6",
+    "``apt``",
+    "sudo apt install"
+  ],
+  "reviewers": [
+    "reviewer-b",
+    "rewriter-b"
+  ],
+  "notes": "Every diagnostic the linter produced on this fixture is a number-unit-format false positive against dotted software version identifiers that live either in list-table cells or in prose that quotes the same version number. No prose sentence in this excerpt has a genuine length, vocabulary, contraction, or punctuation defect, so there is no accepted change: the compliant file is byte-identical to the original apart from the required rewritten-counterpart header line.",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s2:283",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "host tools Zephyr needs",
+      "span": {
+        "start": 283,
+        "end": 306
+      },
+      "verdict": "non-violation",
+      "reason": "This is 'the host tools [that] Zephyr needs' - a two-word head noun plus a reduced relative clause, not a stacked noun pile. The grouping is fixed by the verb 'needs'.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s4:481",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "current minimum required versions",
+      "span": {
+        "start": 481,
+        "end": 514
+      },
+      "verdict": "non-violation",
+      "reason": "All three pre-modifiers are adjectival and scope left to right over the single head 'versions'; 'minimum required version' is a conventional term in software dependency documentation.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s10:824",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is strongly recommended",
+      "span": {
+        "start": 824,
+        "end": 847
+      },
+      "verdict": "non-violation",
+      "reason": "Inside a note, 'Python 3.12 is strongly recommended' states a status of the release rather than directing an action, and the recommender is self-evidently the document; the following sentence supplies the reason.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.7
+    }
+  ]
+}

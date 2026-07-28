@@ -1,0 +1,268 @@
+{
+  "fixtureId": "k8s-audit-log-troubleshooting",
+  "original": "original/k8s-audit-log-troubleshooting.md",
+  "compliant": "compliant/k8s-audit-log-troubleshooting.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "k8s-audit-log-troubleshooting-p1",
+      "originalText": "Audit records begin their lifecycle inside the\n[kube-apiserver](/docs/reference/command-line-tools-reference/kube-apiserver/)\ncomponent.",
+      "rewrittenText": "Audit records begin their lifecycle inside the\n[kube-apiserver](/docs/reference/command-line-tools-reference/kube-apiserver/)\ncomponent.",
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 779,
+          "end": 1214
+        }
+      ],
+      "expectedDiagnostics": [],
+      "reason": "The reviewer diagnosed this finding as a tool defect rather than an over-long sentence, and demonstrated it by feeding the masked text straight to sentence-splitter: masking a markdown link destination together with its closing `]` left the opening `[` unpaired, so the splitter treated the remainder of the block as bracketed and merged several sentences into one 55-word span. The defect was corrected in linkDestinationPass (the mask now keeps brackets balanced) and the finding no longer occurs, so expectedDiagnostics is empty. The prose was left unchanged.",
+      "semanticInvariants": [
+        "the four-sentence description of how an audit event is generated, pre-processed, and persisted must remain unchanged",
+        "the markdown link to the kube-apiserver reference page must remain unchanged"
+      ],
+      "unresolved": [],
+      "status": "disputed",
+      "reviewerConfidence": 1
+    },
+    {
+      "passageId": "k8s-audit-log-troubleshooting-p2",
+      "originalText": "what's",
+      "rewrittenText": "what is",
+      "ruleIds": [
+        "no-contractions"
+      ],
+      "originalSpans": [
+        {
+          "start": 1092,
+          "end": 1098
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "no-contractions",
+          "category": "deterministic-violation",
+          "quote": "what's"
+        }
+      ],
+      "reason": "Unambiguous contraction in 'The policy determines what's recorded' -- clearly 'what is recorded' (present tense), not 'what has recorded' which would be ungrammatical here. Expanding it changes nothing about meaning.",
+      "semanticInvariants": [
+        "the claim that policy determines what is recorded, and backends persist the records, must be preserved"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.97
+    }
+  ],
+  "protectedLiterals": [
+    "kube-apiserver",
+    "/docs/reference/command-line-tools-reference/kube-apiserver/",
+    "RequestReceived",
+    "ResponseStarted"
+  ],
+  "reviewers": [
+    "reviewer-c",
+    "rewriter-b"
+  ],
+  "notes": "The single sentence-length-descriptive finding is disputed as an empirically-verified tool artifact: masking the markdown link destination breaks the sentence-splitter for the remainder of the paragraph, merging four short, correct sentences into one falsely 'overlong' one. The only genuine, safe defect (an unambiguous contraction) is accepted. Passage p1 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery.",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s3:516",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Auditing allows cluster administrators",
+      "span": {
+        "start": 516,
+        "end": 554
+      },
+      "verdict": "non-violation",
+      "reason": "This is not a noun run at all: the span straddles the finite verb 'allows', so the reader parses subject-verb-object with no grouping decision to make. The only real noun pair, 'cluster administrators', is entirely transparent.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.92
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s5:621",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 621,
+        "end": 623
+      },
+      "verdict": "non-violation",
+      "reason": "In the parallel list of audit questions, 'it' consistently denotes the audited event or action, and no competing referent is on offer; the heuristic's candidate antecedents are verbs ('happened', 'happen'), not nouns a reader could select.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s6:649",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 649,
+        "end": 651
+      },
+      "verdict": "non-violation",
+      "reason": "Same parallel question list: 'when did it happen?' uses the same single implied referent (the audited event) as every sibling bullet, so there is nothing for a reader to choose between.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s7:668",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 668,
+        "end": 670
+      },
+      "verdict": "non-violation",
+      "reason": "'who initiated it?' carries the same event referent as the rest of the list; the parallel structure fixes the reading and no alternative antecedent competes.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s8:692",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 692,
+        "end": 694
+      },
+      "verdict": "non-violation",
+      "reason": "'on what did it happen?' repeats the same single implied referent used throughout the question list, so a reader cannot resolve it two ways.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s9:723",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 723,
+        "end": 725
+      },
+      "verdict": "non-violation",
+      "reason": "'where was it observed?' is another member of the same parallel list with the same event referent; the flagged alternatives are past participles, not selectable antecedents.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s10:753",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 753,
+        "end": 755
+      },
+      "verdict": "non-violation",
+      "reason": "'from where was it initiated?' shares the single implied event referent of the surrounding bullets, so the pronoun is not open to a meaning-changing second reading.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s14:1150",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "current backend implementations\ninclude logs files",
+      "span": {
+        "start": 1150,
+        "end": 1200
+      },
+      "verdict": "non-violation",
+      "reason": "The span crosses the main verb 'include', so it is not a single noun run; the genuine phrase 'current backend implementations' is three transparent words and 'log files' is a conventional term.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s15:1233",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be recorded",
+      "span": {
+        "start": 1233,
+        "end": 1244
+      },
+      "verdict": "non-violation",
+      "reason": "'Each request can be recorded with an associated stage' is descriptive prose about apiserver behaviour, not an instruction; the actor is the audit subsystem and naming it would add nothing for the reader.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s17:1415",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 1415,
+        "end": 1417
+      },
+      "verdict": "non-violation",
+      "reason": "In 'before it is delegated down the handler chain', 'it' is the request just mentioned - the nearest noun and the only thing that traverses a handler chain. The audit event is a weak alternative but not a plausible one for a reader of this text.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.65
+    },
+    {
+      "passageId": "passive-voice-candidate:s17:1418",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is delegated",
+      "span": {
+        "start": 1418,
+        "end": 1430
+      },
+      "verdict": "non-violation",
+      "reason": "Descriptive prose about internal request routing; the passage describes when a stage occurs rather than telling anyone to act, and the delegating component is an implementation detail the reader neither controls nor needs.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.88
+    },
+    {
+      "passageId": "passive-voice-candidate:s18:1505",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are sent",
+      "span": {
+        "start": 1505,
+        "end": 1513
+      },
+      "verdict": "non-violation",
+      "reason": "'Once the response headers are sent' marks a point in the server's own lifecycle; there is no instruction and no reader-relevant actor to promote.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s18:1546",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is sent",
+      "span": {
+        "start": 1546,
+        "end": 1553
+      },
+      "verdict": "non-violation",
+      "reason": "'before the response body is sent' is the same kind of timing marker in descriptive prose about system behaviour, where the agent is genuinely irrelevant.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s19:1566",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is only generated",
+      "span": {
+        "start": 1566,
+        "end": 1583
+      },
+      "verdict": "non-violation",
+      "reason": "'This stage is only generated for long-running requests' states a property of the system, not an instruction; the generating component is the apiserver and naming it would not help the reader.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.88
+    }
+  ]
+}

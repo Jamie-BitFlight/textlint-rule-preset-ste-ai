@@ -1,0 +1,172 @@
+{
+  "fixtureId": "osha-lockout-tagout-warning",
+  "original": "original/osha-lockout-tagout-warning.md",
+  "compliant": "compliant/osha-lockout-tagout-warning.md",
+  "split": "dev",
+  "changes": [
+    {
+      "passageId": "osha-lockout-tagout-warning-p1",
+      "originalText": "Note: Exception: The employer need not document the required procedure for a particular machine or equipment, when all of the following elements exist: (1) The machine or equipment has no potential for stored or residual energy or reaccumulation of stored energy after shut down which could endanger employees; (2) the machine or equipment has a single energy source which can be readily identified and isolated; (3) the isolation and locking out of that energy source will completely deenergize and deactivate the machine or equipment; (4) the machine or equipment is isolated from that energy source and locked out during servicing or maintenance; (5) a single lockout device will achieve a locked-out condition; (6) the lockout device is under the exclusive control of the authorized employee performing the servicing or maintenance; (7) the servicing or maintenance does not create hazards for other employees; and (8) the employer, in utilizing this exception, has had no accidents involving the unexpected activation or reenergization of the machine or equipment during servicing or maintenance.",
+      "rewrittenText": "Note: Exception: The employer need not document the required procedure for a particular machine or equipment, when all of the following elements exist. (1) The machine or equipment has no potential for stored or residual energy or reaccumulation of stored energy after shut down which could endanger employees. (2) The machine or equipment has a single energy source which can be readily identified and isolated. (3) The isolation and locking out of that energy source will completely deenergize and deactivate the machine or equipment. (4) The machine or equipment is isolated from that energy source and locked out during servicing or maintenance. (5) A single lockout device will achieve a locked-out condition. (6) The lockout device is under the exclusive control of the authorized employee performing the servicing or maintenance. (7) The servicing or maintenance does not create hazards for other employees. (8) The employer, utilizing this exception, has had no accidents involving the unexpected activation or reenergization of the machine or equipment during servicing or maintenance.",
+      "ruleIds": [
+        "sentence-length-descriptive",
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 441,
+          "end": 1542
+        },
+        {
+          "start": 750,
+          "end": 751
+        },
+        {
+          "start": 852,
+          "end": 853
+        },
+        {
+          "start": 976,
+          "end": 977
+        },
+        {
+          "start": 1089,
+          "end": 1090
+        },
+        {
+          "start": 1154,
+          "end": 1155
+        },
+        {
+          "start": 1276,
+          "end": 1277
+        },
+        {
+          "start": 1354,
+          "end": 1355
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "Note: Exception: The employer need not document the required procedure for a particular machine or equipment, when all of the following elements exist: (1) The machine or equipment has no potential for stored or residual energy or reaccumulation of stored energy after shut down which could endanger employees; (2) the machine or equipment has a single energy source which can be readily identified and isolated; (3) the isolation and locking out of that energy source will completely deenergize and deactivate the machine or equipment; (4) the machine or equipment is isolated from that energy source and locked out during servicing or maintenance; (5) a single lockout device will achieve a locked-out condition; (6) the lockout device is under the exclusive control of the authorized employee performing the servicing or maintenance; (7) the servicing or maintenance does not create hazards for other employees; and (8) the employer, in utilizing this exception, has had no accidents involving the unexpected activation or reenergization of the machine or equipment during servicing or maintenance."
+        },
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": ";"
+        }
+      ],
+      "reason": "SAFETY-restricted change: only the allowed operation of splitting an over-long sentence was applied. The single 169-word run-on listing the 8 exception elements (joined by semicolons) was split into the intro sentence plus eight numbered sentences, one per (1)-(8) element, in the same order. No requirement was merged, removed, or reordered, and no wording inside any element was rephrased except dropping the coordinating 'and' before (8) (redundant once each element is its own sentence) and dropping 'in' before 'utilizing' in element (8) to bring its word count from 26 to 25.",
+      "semanticInvariants": [
+        "all eight numbered exception elements (1) through (8) are present, in the same order, with the same conditions",
+        "the conjunctive requirement that ALL of the following elements exist (not just one) is unchanged",
+        "the citation 1910.147(c)(4)(i) above this text is untouched",
+        "no hazard statement or requirement is merged, removed, or reordered"
+      ],
+      "unresolved": [
+        "converting the run-on into one-sentence-per-numbered-element is a judgment call about how far 'splitting an over-long sentence' may go for a verbatim regulatory Note; a more conservative reviewer might leave the whole Note untouched"
+      ],
+      "status": "accepted",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "osha-lockout-tagout-warning-p2",
+      "originalText": "1910.147",
+      "rewrittenText": "1910.147",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 248,
+          "end": 256
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "1910.147"
+        }
+      ],
+      "reason": "1910.147 is a CFR regulatory section citation, not a number-and-unit pair; the rule misreads the section-number dot as a missing unit space. Changing a legal citation is explicitly disallowed for this fixture.",
+      "semanticInvariants": [
+        "the citation 1910.147(c)(4)(i) is byte-identical to the regulatory text and unchanged"
+      ],
+      "unresolved": [
+        "rule does not recognize regulatory section-number notation and treats the dot as a number/unit boundary"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.97
+    }
+  ],
+  "protectedLiterals": [
+    "1910.147",
+    "1910.147(c)(4)(i)"
+  ],
+  "reviewers": [
+    "reviewer-c",
+    "rewriter-a"
+  ],
+  "notes": "Safety fixture: edits were restricted to splitting the one over-long sentence, per the task's safety rule; no hazard statement was downgraded, no requirement merged or removed, and the 1910.147(c)(4)(i) citation is untouched.",
+  "candidateAdjudications": [
+    {
+      "passageId": "passive-voice-candidate:s3:284",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be developed",
+      "span": {
+        "start": 284,
+        "end": 296
+      },
+      "verdict": "violation",
+      "reason": "'Procedures shall be developed' is a mandatory requirement with the duty-holder suppressed, and in safety content who is accountable for producing the procedure matters; the following note confirms the actor is the employer, so naming it would be neither wrong nor misleading.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.65
+    },
+    {
+      "passageId": "passive-voice-candidate:s3:385",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are engaged",
+      "span": {
+        "start": 385,
+        "end": 396
+      },
+      "verdict": "non-violation",
+      "reason": "'when employees are engaged in the activities' is a scope condition describing a state that employees are in, with the actor already named as the subject; there is no suppressed agent and no instruction here.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s4:818",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be readily identified",
+      "span": {
+        "start": 818,
+        "end": 839
+      },
+      "verdict": "non-violation",
+      "reason": "'a single energy source which can be readily identified and isolated' states a property of the energy source that qualifies the exception, not an instruction; the point is the source's identifiability, and pinning an actor to it would narrow a deliberately general condition.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.78
+    },
+    {
+      "passageId": "passive-voice-candidate:s4:1007",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is isolated",
+      "span": {
+        "start": 1007,
+        "end": 1018
+      },
+      "verdict": "non-violation",
+      "reason": "Element (4) sits in a list of elements that must 'exist', so 'is isolated ... and locked out' describes the required state of the machine rather than instructing anyone to isolate it; this is an adjectival state reading.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.75
+    }
+  ]
+}

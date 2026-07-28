@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Every step invokes a script or an npm script. No logic is inlined in this file: inline YAML code
+# is not linted, not type-checked, not syntax-highlighted and not runnable locally. Anything a step
+# needs to do lives in scripts/ci/ where it can be reviewed and executed like any other code.
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint and format check
+        run: npm run lint
+
+      - name: Build from a clean state
+        run: npm run build:clean
+
+      # The default suite must never need a model service. If this step starts requiring network
+      # access, that is a regression in the deterministic-only guarantee.
+      - name: Unit, integration, fixture and e2e tests
+        run: npm test
+
+      - name: Fixture provenance and corpus integrity
+        run: node scripts/validate-fixtures.mjs
+
+      - name: CLI exit-code contract over the fixture corpus
+        run: scripts/ci/check-exit-codes.sh
+
+      - name: Confirm the rule set reports itself as provisional
+        run: scripts/ci/check-rules-provisional.sh
+
+      - name: Confirm every candidate passage still has reviewer ground truth
+        run: scripts/ci/check-candidate-ground-truth.sh

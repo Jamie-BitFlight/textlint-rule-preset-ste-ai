@@ -1,0 +1,468 @@
+{
+  "fixtureId": "curl-url-option-reference",
+  "original": "original/curl-url-option-reference.md",
+  "compliant": "compliant/curl-url-option-reference.md",
+  "split": "heldout",
+  "changes": [
+    {
+      "passageId": "curl-url-option-reference-p1",
+      "originalText": "If the outermost subdomain\nname matches DICT, FTP, IMAP, LDAP, POP3 or SMTP case insensitively, then that\nprotocol is used, otherwise it assumes HTTP.",
+      "rewrittenText": "If the outermost subdomain\nname matches one of the following case insensitively, that protocol is used:\n\n- DICT\n- FTP\n- IMAP\n- LDAP\n- POP3\n- SMTP\n\nOtherwise, curl assumes HTTP.",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 806,
+          "end": 807
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": ","
+        }
+      ],
+      "reason": "The sentence had 6 commas (limit 3), mostly from a 6-item protocol enumeration that cannot be shortened without dropping a protocol name; converted the inline enumeration to a bulleted list, which removes the list-internal commas and keeps every protocol name intact.",
+      "semanticInvariants": [
+        "all six protocol names (DICT, FTP, IMAP, LDAP, POP3, SMTP) are present, in the same order",
+        "the case-insensitive subdomain match determines which of the six is used; HTTP is the fallback"
+      ],
+      "unresolved": [],
+      "status": "accepted",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "curl-url-option-reference-p2",
+      "originalText": "SPDX-License-Identifier: curl",
+      "rewrittenText": "SPDX-License-Identifier: curl",
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 262,
+          "end": 266
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "SPDX"
+        }
+      ],
+      "reason": "SPDX-License-Identifier is a structured metadata field name inside the option's YAML-like front matter, consumed by curl's doc generator; it is not prose introducing a term to a reader.",
+      "semanticInvariants": [
+        "the front-matter field name SPDX-License-Identifier is unchanged"
+      ],
+      "unresolved": [
+        "rule scans front-matter metadata as if it were prose"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "curl-url-option-reference-p3",
+      "originalText": "Arg: <url/file>",
+      "rewrittenText": "Arg: <url/file>",
+      "ruleIds": [
+        "punctuation-constraints"
+      ],
+      "originalSpans": [
+        {
+          "start": 311,
+          "end": 312
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "punctuation-constraints",
+          "category": "deterministic-violation",
+          "quote": "/"
+        }
+      ],
+      "reason": "This slash is inside the front-matter Arg field's placeholder value `<url/file>`, denoting the argument may be a URL or a file path; it is not an ambiguous slash in narrative prose.",
+      "semanticInvariants": [
+        "the Arg field's placeholder value <url/file> is unchanged"
+      ],
+      "unresolved": [
+        "rule scans front-matter field values as if it were prose"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "curl-url-option-reference-p4",
+      "originalText": "Added: 7.5",
+      "rewrittenText": "Added: 7.5",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 366,
+          "end": 369
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "7.5"
+        }
+      ],
+      "reason": "7.5 is the curl version this option was added in (a front-matter metadata value), not a number-and-unit pair; there is no unit to space out.",
+      "semanticInvariants": [
+        "the version number 7.5 is unchanged"
+      ],
+      "unresolved": [
+        "rule misreads a version number's decimal point as a missing unit space"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "curl-url-option-reference-p5",
+      "originalText": "Specify a URL to fetch or send data to.",
+      "rewrittenText": "Specify a URL to fetch or send data to.",
+      "ruleIds": [
+        "one-instruction-per-sentence"
+      ],
+      "originalSpans": [
+        {
+          "start": 514,
+          "end": 553
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "one-instruction-per-sentence",
+          "category": "deterministic-violation",
+          "quote": "Specify a URL to fetch or send data to."
+        }
+      ],
+      "reason": "There is one instruction here (\"Specify a URL\"); \"to fetch or send data to\" is a purpose clause describing the URL's two possible uses, not a second imperative action the reader must perform. The rule mis-detects the infinitives \"fetch\"/\"send\" as sibling actions.",
+      "semanticInvariants": [
+        "the URL argument's dual purpose (fetching from it or sending data to it) is unchanged"
+      ],
+      "unresolved": [
+        "rule cannot distinguish a purpose clause with alternative infinitives from two sequential instructions"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.75
+    },
+    {
+      "passageId": "curl-url-option-reference-p6",
+      "originalText": "matches DICT, FTP, IMAP, LDAP, POP3 or SMTP case insensitively",
+      "rewrittenText": "DICT\n- FTP\n- IMAP\n- LDAP\n- POP3\n- SMTP",
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 724,
+          "end": 728
+        },
+        {
+          "start": 730,
+          "end": 733
+        },
+        {
+          "start": 735,
+          "end": 739
+        },
+        {
+          "start": 741,
+          "end": 745
+        },
+        {
+          "start": 755,
+          "end": 759
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "DICT"
+        },
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "FTP"
+        },
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "IMAP"
+        },
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "LDAP"
+        },
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "SMTP"
+        }
+      ],
+      "reason": "DICT, FTP, IMAP, LDAP and SMTP are URL scheme identifiers curl matches literally against the subdomain string, not narrative abbreviations being introduced to the reader; spelling out all five (e.g. \"Lightweight Directory Access Protocol (LDAP)\") for a case-insensitive string-match list would bloat the sentence far more than it would help.",
+      "semanticInvariants": [
+        "the five scheme identifiers (DICT, FTP, IMAP, LDAP, SMTP) and POP3 are unchanged and unexpanded"
+      ],
+      "unresolved": [
+        "rule does not distinguish literal scheme/protocol identifiers from prose abbreviations"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "curl-url-option-reference-p7",
+      "originalText": "Starting in curl 8.13.0, curl can be told to download URLs",
+      "rewrittenText": "Starting in curl 8.13.0, curl can be told to download URLs",
+      "ruleIds": [
+        "number-unit-format"
+      ],
+      "originalSpans": [
+        {
+          "start": 1384,
+          "end": 1390
+        }
+      ],
+      "expectedDiagnostics": [
+        {
+          "ruleId": "number-unit-format",
+          "category": "deterministic-violation",
+          "quote": "8.13.0"
+        }
+      ],
+      "reason": "8.13.0 is a curl release version number, not a number-and-unit pair.",
+      "semanticInvariants": [
+        "the version number 8.13.0 is unchanged"
+      ],
+      "unresolved": [
+        "rule misreads a three-part version number's dots as missing unit spaces"
+      ],
+      "status": "disputed",
+      "reviewerConfidence": 0.9
+    }
+  ],
+  "protectedLiterals": [
+    "--url",
+    "`--url @filename`",
+    "`@-`",
+    "--proto-default",
+    "--output",
+    "--remote-name",
+    "--remote-name-all",
+    "`http://`",
+    "`ftp://`",
+    "`file://`"
+  ],
+  "reviewers": [
+    "reviewer-b",
+    "rewriter-a"
+  ],
+  "notes": "",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s1:203",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "c: Copyright (C) Daniel Stenberg",
+      "span": {
+        "start": 203,
+        "end": 235
+      },
+      "verdict": "non-violation",
+      "reason": "This is a YAML front-matter field, not prose: a key 'c:' followed by a conventional copyright notice naming a person. There is no grouping a reader must guess.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s2:262",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "SPDX-License-Identifier: curl\nLong: url\nArg: <url/file>\nHelp: URL(s",
+      "span": {
+        "start": 262,
+        "end": 329
+      },
+      "verdict": "non-violation",
+      "reason": "The span joins four separate key/value metadata lines across newlines; it is not a noun run at all. A reader of the front-matter block parses each line independently and unambiguously.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s12:691",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "outermost subdomain\nname matches DICT, FTP, IMAP, LDAP",
+      "span": {
+        "start": 691,
+        "end": 745
+      },
+      "verdict": "non-violation",
+      "reason": "The span straddles a verb ('matches') and a comma-separated list of established protocol names, so it is not a noun pile. 'Outermost subdomain name' is a clear three-word phrase and the protocol names are component identities.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s12:818",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 818,
+        "end": 820
+      },
+      "verdict": "non-violation",
+      "reason": "In 'otherwise it assumes HTTP' only an agent capable of inference can be the subject, which restricts the referent to curl; the other nearby nouns (URL, protocol, subdomain name) yield incoherent readings rather than competing meanings.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "passive-voice-candidate:s13:855",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be avoided by",
+      "span": {
+        "start": 855,
+        "end": 868
+      },
+      "verdict": "non-violation",
+      "reason": "This sits in a paragraph describing curl's scheme-guessing behaviour, and the 'by' phrase supplies a means ('providing a full URL'), not a hidden agent. It is a capability statement rather than an instruction, so no actor is concealed.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.65
+    },
+    {
+      "passageId": "passive-voice-candidate:s14:1038",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is written",
+      "span": {
+        "start": 1038,
+        "end": 1048
+      },
+      "verdict": "non-violation",
+      "reason": "The passive is in a subordinate clause describing where curl sends output; the main clause is already an active imperative ('use the --output or the --remote-name options'). The writing agent is curl and is irrelevant to the reader's action.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s15:1209",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "dedicated\ndestination option unless",
+      "span": {
+        "start": 1209,
+        "end": 1244
+      },
+      "verdict": "non-violation",
+      "reason": "The genuine noun phrase is 'dedicated destination option', which is transparent; the span only reaches four words by swallowing the conjunction 'unless' that begins the next clause.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s16:1308",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be converted",
+      "span": {
+        "start": 1308,
+        "end": 1320
+      },
+      "verdict": "non-violation",
+      "reason": "Descriptive prose about platform behaviour, and the agent is already named explicitly ('by the operating system'). The reader is not the actor and nothing is hidden.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s17:1401",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be told",
+      "span": {
+        "start": 1401,
+        "end": 1408
+      },
+      "verdict": "non-violation",
+      "reason": "'curl can be told to download URLs' is a version-scoped capability statement with curl as the topic, not an instruction; the implied teller is the reader and is obvious from the surrounding option reference.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.6
+    },
+    {
+      "passageId": "noun-cluster-candidate:s17:1440",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "text\nfile, one URL",
+      "span": {
+        "start": 1440,
+        "end": 1458
+      },
+      "verdict": "non-violation",
+      "reason": "The span crosses a comma between 'a text file' and the appositive 'one URL per line'. 'Text file' is a two-word everyday term and the phrase after the comma is a separate constituent.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s18:1469",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 1469,
+        "end": 1471
+      },
+      "verdict": "non-violation",
+      "reason": "'It is done with `--url @filename`' takes the whole just-described operation as its referent; the competing nouns (text file, URL, line) all give incoherent readings, so there is only one sustainable resolution.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "passive-voice-candidate:s18:1472",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is done",
+      "span": {
+        "start": 1472,
+        "end": 1479
+      },
+      "verdict": "non-violation",
+      "reason": "Agentless in form, but the same sentence supplies the active restatement immediately after the colon ('you specify a filename prefixed with the `@` symbol'), so the actor is explicit within the passage and nothing is concealed.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.65
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s19:1578",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 1578,
+        "end": 1580
+      },
+      "verdict": "non-violation",
+      "reason": "The referent is curl, echoing 'curl can be told' two sentences earlier; the carried-over reading from the preceding 'It is done' points at the `--url @filename` mechanism, but both readings send the reader to the same action, so the choice does not change the meaning. Marginal call.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.6
+    },
+    {
+      "passageId": "passive-voice-candidate:s19:1585",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be told",
+      "span": {
+        "start": 1585,
+        "end": 1592
+      },
+      "verdict": "non-violation",
+      "reason": "Same construction as the earlier 'curl can be told': a capability statement about the tool in descriptive reference prose, with the means stated ('by providing an argument like `@-`') and the implied teller obvious.",
+      "reviewer": "reviewer-b",
+      "reviewerConfidence": 0.6
+    }
+  ]
+}

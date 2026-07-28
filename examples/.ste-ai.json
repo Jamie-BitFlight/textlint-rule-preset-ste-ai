@@ -1,0 +1,48 @@
+{
+  "approvedTerms": ["Node.js", "PostgreSQL", "SQLite", "Kubernetes", "OpenSSL", "VACUUM", "PRAGMA"],
+  "extraProtectedPatterns": ["PN\\d{4,}", "DOC-[A-Z]{2}-\\d+"],
+  "extraImperativeVerbs": ["torque", "swage", "vent"],
+
+  "autofix": {
+    "enabled": true,
+    "allowSemanticFixes": false
+  },
+
+  "diagnostics": {
+    "reportReviewRequired": true,
+    "reportSuppressed": false,
+    "onSemanticServiceFailure": "notice",
+    "severity": {
+      "deterministic-violation": "error",
+      "probable-semantic-violation": "warning",
+      "review-required": "info",
+      "suppressed-low-confidence": "info",
+      "infrastructure-failure": "warning"
+    }
+  },
+
+  "semantic": {
+    "enabled": false,
+    "endpoint": "http://127.0.0.1:8080",
+    "model": "local-ste-adjudicator",
+    "promptVersion": "v1",
+    "maxConcurrency": 2,
+    "requestTimeoutMs": 20000,
+    "maxTransportRetries": 2,
+    "maxRepairAttempts": 1,
+    "cache": true,
+    "temperature": 0,
+    "trace": false,
+    "defaultConfidenceThreshold": 0.7,
+    "confidenceThresholds": {
+      "passive-voice-adjudication": 0.8,
+      "pronoun-antecedent-ambiguity": 0.75,
+      "noun-cluster-comprehension": 0.85
+    }
+  },
+
+  "rules": {
+    "unapproved-vocabulary": { "adjudicateSense": false },
+    "noun-cluster-candidate": { "maxClusterLength": 3 }
+  }
+}

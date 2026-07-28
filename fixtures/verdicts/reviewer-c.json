@@ -1,0 +1,313 @@
+{
+  "reviewer": "reviewer-c",
+  "verdicts": {
+    "k8s-audit-log-troubleshooting": [
+      {
+        "passageId": "noun-cluster-candidate:s3:516",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Auditing allows cluster administrators",
+        "span": { "start": 516, "end": 554 },
+        "verdict": "non-violation",
+        "reason": "This is not a noun run at all: the span straddles the finite verb 'allows', so the reader parses subject-verb-object with no grouping decision to make. The only real noun pair, 'cluster administrators', is entirely transparent.",
+        "reviewerConfidence": 0.92
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s5:621",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 621, "end": 623 },
+        "verdict": "non-violation",
+        "reason": "In the parallel list of audit questions, 'it' consistently denotes the audited event or action, and no competing referent is on offer; the heuristic's candidate antecedents are verbs ('happened', 'happen'), not nouns a reader could select.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s6:649",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 649, "end": 651 },
+        "verdict": "non-violation",
+        "reason": "Same parallel question list: 'when did it happen?' uses the same single implied referent (the audited event) as every sibling bullet, so there is nothing for a reader to choose between.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s7:668",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 668, "end": 670 },
+        "verdict": "non-violation",
+        "reason": "'who initiated it?' carries the same event referent as the rest of the list; the parallel structure fixes the reading and no alternative antecedent competes.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s8:692",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 692, "end": 694 },
+        "verdict": "non-violation",
+        "reason": "'on what did it happen?' repeats the same single implied referent used throughout the question list, so a reader cannot resolve it two ways.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s9:723",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 723, "end": 725 },
+        "verdict": "non-violation",
+        "reason": "'where was it observed?' is another member of the same parallel list with the same event referent; the flagged alternatives are past participles, not selectable antecedents.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s10:753",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 753, "end": 755 },
+        "verdict": "non-violation",
+        "reason": "'from where was it initiated?' shares the single implied event referent of the surrounding bullets, so the pronoun is not open to a meaning-changing second reading.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s14:1150",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "current backend implementations\ninclude logs files",
+        "span": { "start": 1150, "end": 1200 },
+        "verdict": "non-violation",
+        "reason": "The span crosses the main verb 'include', so it is not a single noun run; the genuine phrase 'current backend implementations' is three transparent words and 'log files' is a conventional term.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s15:1233",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be recorded",
+        "span": { "start": 1233, "end": 1244 },
+        "verdict": "non-violation",
+        "reason": "'Each request can be recorded with an associated stage' is descriptive prose about apiserver behaviour, not an instruction; the actor is the audit subsystem and naming it would add nothing for the reader.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s17:1415",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 1415, "end": 1417 },
+        "verdict": "non-violation",
+        "reason": "In 'before it is delegated down the handler chain', 'it' is the request just mentioned - the nearest noun and the only thing that traverses a handler chain. The audit event is a weak alternative but not a plausible one for a reader of this text.",
+        "reviewerConfidence": 0.65
+      },
+      {
+        "passageId": "passive-voice-candidate:s17:1418",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is delegated",
+        "span": { "start": 1418, "end": 1430 },
+        "verdict": "non-violation",
+        "reason": "Descriptive prose about internal request routing; the passage describes when a stage occurs rather than telling anyone to act, and the delegating component is an implementation detail the reader neither controls nor needs.",
+        "reviewerConfidence": 0.88
+      },
+      {
+        "passageId": "passive-voice-candidate:s18:1505",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are sent",
+        "span": { "start": 1505, "end": 1513 },
+        "verdict": "non-violation",
+        "reason": "'Once the response headers are sent' marks a point in the server's own lifecycle; there is no instruction and no reader-relevant actor to promote.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s18:1546",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is sent",
+        "span": { "start": 1546, "end": 1553 },
+        "verdict": "non-violation",
+        "reason": "'before the response body is sent' is the same kind of timing marker in descriptive prose about system behaviour, where the agent is genuinely irrelevant.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s19:1566",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is only generated",
+        "span": { "start": 1566, "end": 1583 },
+        "verdict": "non-violation",
+        "reason": "'This stage is only generated for long-running requests' states a property of the system, not an instruction; the generating component is the apiserver and naming it would not help the reader.",
+        "reviewerConfidence": 0.88
+      }
+    ],
+    "k8s-debug-pod-troubleshooting": [
+      {
+        "passageId": "ambiguous-pronoun-candidate:s4:338",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 338, "end": 340 },
+        "verdict": "non-violation",
+        "reason": "The immediately preceding sentence is 'What is the problem?' and 'Is it your Pods, your Replication Controller or your Service?' answers exactly that question; the nouns that follow are the options, not competing antecedents.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s9:636",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 636, "end": 638 },
+        "verdict": "non-violation",
+        "reason": "'The first step in debugging a Pod is taking a look at it' can only mean looking at the Pod; the other nouns in the sentence ('step', 'look') are not things one takes a look at.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s12:822",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "they",
+        "span": { "start": 822, "end": 826 },
+        "verdict": "non-violation",
+        "reason": "'Are they all Running?' follows 'Look at the state of the containers in the pod'; only 'containers' is plural and only containers have a Running state, so the plural pronoun is fixed.",
+        "reviewerConfidence": 0.88
+      },
+      {
+        "passageId": "passive-voice-candidate:s16:968",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is stuck",
+        "span": { "start": 968, "end": 976 },
+        "verdict": "non-violation",
+        "reason": "'is stuck in Pending' is an adjectival state describing the Pod's condition, not a passive verb with a suppressed actor, and the sentence is a diagnostic condition rather than an instruction.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s16:990",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 990, "end": 992 },
+        "verdict": "non-violation",
+        "reason": "This is the idiomatic situational 'it means that ...', referring to the whole preceding condition; reading it as the Pod would produce nonsense, so no meaning-changing second resolution is available.",
+        "reviewerConfidence": 0.78
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s16:1004",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 1004, "end": 1006 },
+        "verdict": "non-violation",
+        "reason": "'it can not be scheduled onto a node' can only be the Pod, since Pods are the thing scheduled onto nodes; the two 'it's in the sentence are mildly awkward but not genuinely ambiguous.",
+        "reviewerConfidence": 0.82
+      },
+      {
+        "passageId": "passive-voice-candidate:s16:1015",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be scheduled",
+        "span": { "start": 1015, "end": 1027 },
+        "verdict": "non-violation",
+        "reason": "Explanatory prose telling the reader what a Pending state means, not an instruction; the scheduler is named two sentences later anyway, so nothing is hidden from the reader.",
+        "reviewerConfidence": 0.82
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s19:1266",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 1266, "end": 1268 },
+        "verdict": "non-violation",
+        "reason": "'messages from the scheduler about why it can not schedule your pod' - only the scheduler schedules, and it is the nearest noun, so the pronoun resolves one way.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s22:1523",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "See [Compute Resources document",
+        "span": { "start": 1523, "end": 1554 },
+        "verdict": "non-violation",
+        "reason": "The span begins with the imperative 'See' and an opening markdown bracket; the actual content is the link text 'Compute Resources document', which is a document title and reads unambiguously.",
+        "reviewerConfidence": 0.9
+      }
+    ],
+    "sqlite-cli-dot-commands": [
+      {
+        "passageId": "noun-cluster-candidate:s1:175",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "new SQLite database named",
+        "span": { "start": 175, "end": 200 },
+        "verdict": "non-violation",
+        "reason": "'named' is a participle introducing the database name, not part of a noun pile; the real phrase 'new SQLite database' is an adjective plus a product name plus its head noun and needs no unpacking.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s3:380",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "one text, two int);\nsqlite",
+        "span": { "start": 380, "end": 406 },
+        "verdict": "non-violation",
+        "reason": "This is SQL column definitions and a shell prompt inside an unfenced terminal transcript, not English prose; there is no noun phrase for a reader to group, so the heuristic misfired on unmarked code.",
+        "reviewerConfidence": 0.88
+      },
+      {
+        "passageId": "noun-cluster-candidate:s5:663",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "system\nEnd-Of-File character (usually",
+        "span": { "start": 663, "end": 700 },
+        "verdict": "non-violation",
+        "reason": "'your system End-Of-File character' groups as [your system's] [End-Of-File character], a conventional CLI term of art, and the parenthetical '(usually a Control-D)' resolves any residual doubt on the spot.",
+        "reviewerConfidence": 0.75
+      }
+    ],
+    "osha-lockout-tagout-warning": [
+      {
+        "passageId": "passive-voice-candidate:s3:284",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be developed",
+        "span": { "start": 284, "end": 296 },
+        "verdict": "violation",
+        "reason": "'Procedures shall be developed' is a mandatory requirement with the duty-holder suppressed, and in safety content who is accountable for producing the procedure matters; the following note confirms the actor is the employer, so naming it would be neither wrong nor misleading.",
+        "reviewerConfidence": 0.65
+      },
+      {
+        "passageId": "passive-voice-candidate:s3:385",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are engaged",
+        "span": { "start": 385, "end": 396 },
+        "verdict": "non-violation",
+        "reason": "'when employees are engaged in the activities' is a scope condition describing a state that employees are in, with the actor already named as the subject; there is no suppressed agent and no instruction here.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s4:818",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be readily identified",
+        "span": { "start": 818, "end": 839 },
+        "verdict": "non-violation",
+        "reason": "'a single energy source which can be readily identified and isolated' states a property of the energy source that qualifies the exception, not an instruction; the point is the source's identifiability, and pinning an actor to it would narrow a deliberately general condition.",
+        "reviewerConfidence": 0.78
+      },
+      {
+        "passageId": "passive-voice-candidate:s4:1007",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is isolated",
+        "span": { "start": 1007, "end": 1018 },
+        "verdict": "non-violation",
+        "reason": "Element (4) sits in a list of elements that must 'exist', so 'is isolated ... and locked out' describes the required state of the machine rather than instructing anyone to isolate it; this is an adjectival state reading.",
+        "reviewerConfidence": 0.75
+      }
+    ]
+  }
+}

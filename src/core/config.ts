@@ -58,6 +58,21 @@ export const autofixPolicySchema = z.object({
 
 export type AutofixPolicy = z.output<typeof autofixPolicySchema>;
 
+export const suppressionPolicySchema = z.object({
+  /**
+   * Inline directives are honoured. When false the document is not scanned at all: no directive
+   * is parsed, no record is produced and no suppression notice is emitted.
+   */
+  enabled: z.boolean().default(true),
+  /**
+   * Permit an inline directive to withhold a finding inside a danger, warning or caution
+   * admonition. Off by default, and every such suppression is recorded either way.
+   */
+  allowInAdmonitions: z.boolean().default(false),
+});
+
+export type SuppressionPolicy = z.output<typeof suppressionPolicySchema>;
+
 export const semanticConfigSchema = z.object({
   enabled: z.boolean().default(false),
   /** llama.cpp server base URL. The OpenAI-compatible `/v1/chat/completions` route is used. */
@@ -125,6 +140,7 @@ export const steAiConfigSchema = z.object({
   autofix: autofixPolicySchema.prefault({}),
   semantic: semanticConfigSchema.prefault({}),
   diagnostics: diagnosticPolicySchema.prefault({}),
+  suppressions: suppressionPolicySchema.prefault({}),
   /** Per-rule options, keyed by bare rule id (for example `sentence-length-procedural`). */
   rules: z.record(z.string(), ruleUserConfigSchema).prefault({}),
 });

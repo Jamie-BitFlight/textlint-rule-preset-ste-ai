@@ -163,7 +163,7 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "passive-voice-candidate:s12:824",
+      "passageId": "passive-voice-candidate:s10:824",
       "ruleId": "passive-voice-candidate",
       "evaluatorId": "passive-voice-adjudication",
       "quote": "is strongly recommended",

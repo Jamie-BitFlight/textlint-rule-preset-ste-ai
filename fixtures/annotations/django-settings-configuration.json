@@ -117,7 +117,7 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "ambiguous-pronoun-candidate:s10:853",
+      "passageId": "ambiguous-pronoun-candidate:s8:853",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
       "quote": "It",
@@ -131,7 +131,7 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "ambiguous-pronoun-candidate:s11:898",
+      "passageId": "ambiguous-pronoun-candidate:s9:898",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
       "quote": "It",
@@ -145,7 +145,7 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "noun-cluster-candidate:s11:905",
+      "passageId": "noun-cluster-candidate:s9:905",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
       "quote": "assign settings dynamically using normal Python syntax",
@@ -159,7 +159,7 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "ambiguous-pronoun-candidate:s13:1028",
+      "passageId": "ambiguous-pronoun-candidate:s11:1028",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
       "quote": "It",
@@ -173,7 +173,7 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "ambiguous-pronoun-candidate:s19:1231",
+      "passageId": "ambiguous-pronoun-candidate:s17:1231",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
       "quote": "it",

@@ -18,6 +18,20 @@ if [ ! -d dist ]; then
   exit 2
 fi
 
+# The packet builder imports from dist/, so a stale build silently checks the wrong code. That is
+# not hypothetical: a stale dist/ passed this check locally against the previous segmentation while
+# CI, which always builds clean, failed on it. Refuse rather than report a result about old code.
+#
+# Compare the newest source against the newest build output. Comparing against the dist/ directory
+# itself does not work: an incremental tsc rewrites files inside it without touching the directory
+# mtime, so the guard would fire immediately after a successful build.
+newest_source="$(find src -name '*.ts' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
+newest_build="$(find dist -name '*.js' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
+if [ -z "$newest_build" ] || [ "$newest_source" -nt "$newest_build" ]; then
+  echo "dist/ is stale: $newest_source is newer than the build. Run 'npm run build' first." >&2
+  exit 2
+fi
+
 packets="$(mktemp -d "${RUNNER_TEMP:-/tmp}/ste-ai-packets.XXXXXX")"
 trap 'rm -rf "$packets"' EXIT
 

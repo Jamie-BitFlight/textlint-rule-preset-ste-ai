@@ -55,10 +55,19 @@ export const annotationChangeSchema = z.object({
  * the document.
  */
 export const candidateAdjudicationSchema = z.object({
+  /**
+   * Run-local label, not an identity.
+   *
+   * Candidate ids embed a sentence ordinal, and that ordinal moves whenever segmentation changes
+   * earlier in the document — fixing reStructuredText admonition detection renumbered every sentence
+   * after a `.. note::` and changed six of these while their spans did not move a byte. Nothing joins
+   * on this field: `goldLabelFor` binds by rule and span overlap, and the merge tool binds by rule,
+   * span and quote.
+   */
   passageId: z.string().min(1),
   ruleId: z.string().min(1),
   evaluatorId: z.string().min(1),
-  /** Exact substring of the original that the reviewer judged. */
+  /** Exact substring of the original that the reviewer judged. Half of the binding, with `span`. */
   quote: z.string().min(1),
   span: spanSchema,
   /**

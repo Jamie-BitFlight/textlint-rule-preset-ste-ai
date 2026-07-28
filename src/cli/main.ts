@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
-import type { Diagnostic, RunNotice } from '../core/types.js';
+import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
 import { packPermitsConformanceClaim, verifiedAuthority } from '../rule-pack/loader.js';
@@ -141,10 +141,15 @@ async function lint(args: Args): Promise<number> {
     file: string;
     diagnostics: Diagnostic[];
     notices: readonly RunNotice[];
+    suppressions: readonly SuppressionRecord[];
     packAuthority: string;
     declaredAuthority: string;
     conformanceClaim: string;
   }[] = [];
+
+  // Kept beside `results` rather than in it: the entries above are serialised verbatim by `--json`,
+  // and a document is neither serialisable nor anything a consumer of that output asked for.
+  const documents: AnalysedDocument[] = [];
 
   for (const file of args.files) {
     const text = readFileSync(file, 'utf8');
@@ -168,10 +173,12 @@ async function lint(args: Args): Promise<number> {
             },
           },
         });
+    documents.push(analysis.document);
     results.push({
       file,
       diagnostics: analysis.diagnostics.filter((d) => SEVERITY_ORDER[d.severity] >= threshold),
       notices: analysis.notices,
+      suppressions: analysis.suppressions,
       packAuthority: verifiedAuthority(analysis.pack, analysis.config.trustedRulePackIds),
       declaredAuthority: analysis.pack.metadata.authority,
       conformanceClaim: packPermitsConformanceClaim(
@@ -213,7 +220,7 @@ async function lint(args: Args): Promise<number> {
       )}\n`,
     );
   } else {
-    for (const result of results) {
+    for (const [index, result] of results.entries()) {
       process.stdout.write(`\n${result.file}\n`);
       if (result.diagnostics.length === 0) {
         process.stdout.write('  no diagnostics\n');
@@ -231,6 +238,16 @@ async function lint(args: Args): Promise<number> {
       for (const notice of result.notices) {
         process.stdout.write(
           `  notice  ${notice.level.padEnd(7)} ${notice.code}: ${notice.message}\n`,
+        );
+      }
+      // What a suppression withheld is printed even though it is not a diagnostic: a run that says
+      // nothing about the findings an author ruled out is a run that reports silence as compliance.
+      const document = documents[index];
+      for (const suppression of result.suppressions) {
+        const position = document?.positionAt(suppression.range.start);
+        process.stdout.write(
+          `  suppressed  ${suppression.ruleId} at ${position?.line ?? 0}:${position?.column ?? 0}` +
+            ` — ${suppression.reason}\n`,
         );
       }
     }

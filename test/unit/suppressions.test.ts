@@ -294,6 +294,31 @@ describe('applySuppressions', () => {
     expect(noticeWith(result, 'suppression-unused')?.detail?.['line']).toBe(1);
   });
 
+  it('treats a directive named in alreadyClaimed as used', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Reason recorded for the audit. -->',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const doc = analyseDocument({ id: 't', format: 'markdown', text });
+    const { directives } = scanSuppressions(doc);
+    const input = {
+      doc,
+      diagnostics: [] as readonly Diagnostic[],
+      directives,
+      allowInAdmonitions: false,
+      knownRuleIds: KNOWN_RULE_IDS,
+    };
+
+    // Positive control: with nothing claimed the directive really is dead.
+    expect(applySuppressions(input).notices.map((n) => n.code)).toEqual(['suppression-unused']);
+
+    // The caller filtered a candidate against this directive before the diagnostics were built, so
+    // the applier never sees the claim and would otherwise call a live directive dead.
+    const claimed = applySuppressions({ ...input, alreadyClaimed: directives });
+    expect(claimed.notices.map((n) => n.code)).toEqual([]);
+  });
+
   it('refuses a claim inside a warning admonition and keeps the diagnostic', () => {
     const result = run(WARNING_DOC, [diagnosticFor(WARNING_DOC, 'Utilise the bracket')]);
     expect(result.diagnostics).toHaveLength(1);

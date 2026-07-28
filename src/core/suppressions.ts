@@ -184,6 +184,15 @@ export interface ApplySuppressionsInput {
   readonly allowInAdmonitions: boolean;
   /** Every rule id the run knows about, for the unknown-id notice. */
   readonly knownRuleIds: readonly string[];
+  /**
+   * Directives an earlier stage already matched against something it withheld.
+   *
+   * Candidates are filtered out before the diagnostics exist, so a directive whose only target was
+   * a candidate has claimed nothing by the time this runs. Without this the caller's own successful
+   * suppression would come back as `suppression-unused`, telling an author to delete a directive
+   * that is doing exactly what it was written to do.
+   */
+  readonly alreadyClaimed?: readonly SuppressionDirective[];
 }
 
 export interface ApplySuppressionsResult {
@@ -200,7 +209,7 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
   const kept: Diagnostic[] = [];
   const suppressions: SuppressionRecord[] = [];
   const notices: RunNotice[] = [];
-  const claimed = new Set<SuppressionDirective>();
+  const claimed = new Set<SuppressionDirective>(input.alreadyClaimed ?? []);
 
   const reported = new Set<string>();
   for (const directive of directives) {

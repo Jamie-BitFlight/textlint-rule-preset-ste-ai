@@ -1,6 +1,7 @@
 import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
 import { analyseDocument } from '../core/document.js';
 import { runDeterministicRules } from '../core/runner.js';
+import { applySuppressions, directiveFor, scanSuppressions } from '../core/suppressions.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -9,6 +10,8 @@ import type {
   RulePack,
   RunNotice,
   SemanticTrace,
+  SuppressionDirective,
+  SuppressionRecord,
 } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { LlamaCppClient } from '../model-client/llama-client.js';
@@ -50,6 +53,14 @@ export interface AnalysisResult {
    * spans, and recomputing it from diagnostics would not recover the evaluator routing or payload.
    */
   readonly candidates: readonly CandidatePassage[];
+  /**
+   * Findings an inline directive withheld, with the reason the author gave.
+   *
+   * A suppression is an authored claim, not a deletion. `docs/diagnostic-policy.md` forbids silence
+   * from meaning compliance, so what was withheld leaves the diagnostic list and stays in the
+   * result.
+   */
+  readonly suppressions: readonly SuppressionRecord[];
   readonly notices: readonly RunNotice[];
   readonly traces: readonly SemanticTrace[];
   readonly pack: RulePack;
@@ -83,29 +94,159 @@ export function analyseTextDeterministic(
 
   const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
 
+  const pass = suppressCandidates(document, run.candidates, config);
+
   // Candidates are passages no deterministic rule could decide. Returning only `run.diagnostics`
   // discarded them, so a document whose only findings needed adjudication reported clean — the
   // exact "silence means compliant" failure the diagnostic policy exists to prevent.
   const undecided = undecidedCandidateDiagnostics(
-    run.candidates,
+    pass.candidates,
     config,
     verifiedAuthority(pack, config.trustedRulePackIds),
   );
 
+  const suppressed = suppressDiagnostics(
+    document,
+    [...run.diagnostics, ...undecided.diagnostics],
+    pass,
+    config,
+  );
+
   return {
     document,
-    candidates: run.candidates,
-    diagnostics: [...run.diagnostics, ...undecided.diagnostics].sort(
+    candidates: pass.candidates,
+    suppressions: suppressed.suppressions,
+    diagnostics: [...suppressed.diagnostics].sort(
       (a, b) =>
         a.range.start - b.range.start ||
         a.range.end - b.range.end ||
         a.ruleId.localeCompare(b.ruleId),
     ),
-    notices: [...run.notices, ...undecided.notices],
+    notices: [...run.notices, ...undecided.notices, ...suppressed.notices],
     traces: [],
     pack,
     config,
   };
+}
+
+/** What the candidate pass removed, and what the diagnostic pass needs to know about it. */
+interface CandidateSuppressionPass {
+  readonly directives: readonly SuppressionDirective[];
+  readonly notices: readonly RunNotice[];
+  /** The candidates that survived. */
+  readonly candidates: readonly CandidatePassage[];
+  readonly records: readonly SuppressionRecord[];
+  /** Directives that claimed a candidate, so the applier does not call them dead. */
+  readonly claimed: readonly SuppressionDirective[];
+}
+
+/**
+ * Scan for inline directives and drop every candidate one of them claims.
+ *
+ * Candidates are filtered here — before adjudication — rather than alongside the diagnostics.
+ * Filtering afterwards would withhold the diagnostic but still have sent the passage to the model:
+ * an operator who has already ruled on a passage would keep paying for it to be re-adjudicated, and
+ * text they had deliberately marked as settled would still leave the process.
+ */
+function suppressCandidates(
+  document: AnalysedDocument,
+  candidates: readonly CandidatePassage[],
+  config: SteAiConfig,
+): CandidateSuppressionPass {
+  // `enabled: false` means the document is not read for directives at all, not that the directives
+  // are parsed and ignored — an audit run must see the document as written.
+  if (!config.suppressions.enabled) {
+    return { directives: [], notices: [], candidates, records: [], claimed: [] };
+  }
+
+  const scan = scanSuppressions(document);
+  const kept: CandidatePassage[] = [];
+  const records: SuppressionRecord[] = [];
+  const claimed = new Set<SuppressionDirective>();
+
+  for (const candidate of candidates) {
+    const directive = directiveFor(scan.directives, candidate.ruleId, candidate.range.start);
+    if (directive === undefined) {
+      kept.push(candidate);
+      continue;
+    }
+    claimed.add(directive);
+    records.push({
+      ruleId: candidate.ruleId,
+      // A candidate would have become a `review-required` diagnostic had it survived, so that is
+      // what the record says was withheld.
+      category: 'review-required',
+      range: candidate.range,
+      message: candidate.reason,
+      reason: directive.reason,
+      directiveRange: directive.directiveRange,
+    });
+  }
+
+  return {
+    directives: scan.directives,
+    notices: scan.notices,
+    candidates: kept,
+    records,
+    claimed: [...claimed],
+  };
+}
+
+interface DiagnosticSuppressionResult {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly suppressions: readonly SuppressionRecord[];
+  readonly notices: readonly RunNotice[];
+}
+
+/** Apply the directives found by {@link suppressCandidates} to the final diagnostic list. */
+function suppressDiagnostics(
+  document: AnalysedDocument,
+  diagnostics: readonly Diagnostic[],
+  pass: CandidateSuppressionPass,
+  config: SteAiConfig,
+): DiagnosticSuppressionResult {
+  if (!config.suppressions.enabled) return { diagnostics, suppressions: [], notices: [] };
+
+  const applied = applySuppressions({
+    doc: document,
+    diagnostics,
+    directives: pass.directives,
+    allowInAdmonitions: config.suppressions.allowInAdmonitions,
+    knownRuleIds: deterministicRules.map((rule) => rule.meta.id),
+    alreadyClaimed: pass.claimed,
+  });
+
+  const suppressions = [...pass.records, ...applied.suppressions].sort(
+    (a, b) => a.range.start - b.range.start || a.ruleId.localeCompare(b.ruleId),
+  );
+
+  return {
+    diagnostics: applied.diagnostics,
+    suppressions,
+    notices: [...pass.notices, ...withRunTotal(applied.notices, suppressions.length)],
+  };
+}
+
+/**
+ * Restate `suppressions-applied` over the whole run.
+ *
+ * `applySuppressions` can only count the diagnostics it withheld; the candidates were filtered
+ * before it ran and never reach it. Left alone its count would disagree with the `suppressions`
+ * array it purports to describe, and a count that under-reports what was withheld is precisely the
+ * failure this feature's record keeping exists to prevent.
+ */
+function withRunTotal(notices: readonly RunNotice[], total: number): RunNotice[] {
+  const rest = notices.filter((notice) => notice.code !== 'suppressions-applied');
+  if (total === 0) return rest;
+  return [
+    ...rest,
+    {
+      code: 'suppressions-applied',
+      level: 'info',
+      message: `${total} finding(s) were withheld by an inline suppression directive.`,
+      detail: { count: total },
+    },
+  ];
 }
 
 /**
@@ -184,6 +325,8 @@ export async function analyseText(
 
   const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
 
+  const pass = suppressCandidates(document, run.candidates, config);
+
   const transport: ModelTransport =
     options.transport ??
     new LlamaCppClient({
@@ -196,7 +339,7 @@ export async function analyseText(
 
   const semantic = await analyseSemantically({
     doc: document,
-    candidates: run.candidates,
+    candidates: pass.candidates,
     broker,
     config: config.semantic,
     policy: config.diagnostics,
@@ -210,7 +353,8 @@ export async function analyseText(
   // Overlap resolution must see deterministic and semantic fixes together.
   const merged = resolveOverlappingFixes([...run.diagnostics, ...semantic.diagnostics]);
 
-  merged.diagnostics.sort(
+  const suppressed = suppressDiagnostics(document, merged.diagnostics, pass, config);
+  const diagnostics = [...suppressed.diagnostics].sort(
     (a, b) =>
       a.range.start - b.range.start ||
       a.range.end - b.range.end ||
@@ -220,9 +364,10 @@ export async function analyseText(
 
   return {
     document,
-    candidates: run.candidates,
-    diagnostics: merged.diagnostics,
-    notices: [...run.notices, ...semantic.notices, ...merged.notices],
+    candidates: pass.candidates,
+    suppressions: suppressed.suppressions,
+    diagnostics,
+    notices: [...run.notices, ...semantic.notices, ...merged.notices, ...suppressed.notices],
     traces: semantic.traces,
     pack,
     config,

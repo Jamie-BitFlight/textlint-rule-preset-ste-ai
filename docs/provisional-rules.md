@@ -158,6 +158,44 @@ where `filter` is a noun — is misread as two actions if `filter` is ever added
 These never assert a violation. They detect a shape that cannot be decided lexically and hand it to a
 named semantic evaluator; with semantic analysis disabled they degrade to `review-required`.
 
+### Measured precision of the candidate heuristics
+
+Four independent reviewers adjudicated **all 123 candidate passages** the rule set emits across the
+18 fixtures, judging each against the rule intent stated below and nothing else. The verdicts are in
+`fixtures/verdicts/` and are merged into `candidateAdjudications` in each annotation record.
+
+| Rule                           | Candidates | Confirmed defects | Non-defects |
+| ------------------------------ | ---------: | ----------------: | ----------: |
+| `passive-voice-candidate`      |         53 |                 2 |          51 |
+| `noun-cluster-candidate`       |         35 |                 0 |          35 |
+| `ambiguous-pronoun-candidate`  |         34 |                 2 |          32 |
+| `one-instruction-per-sentence` |          1 |                 1 |           0 |
+| **Total**                      |    **123** |             **5** |     **118** |
+
+**Read this before quoting any figure from the semantic evaluation.** Five confirmed defects in 123
+flagged passages is the headline result of this corpus, and it has three consequences:
+
+1. **These heuristics have a very high false-positive rate on well-edited technical documentation.**
+   That is why they are candidate-only, why they default to `info` severity, and why they must never
+   be promoted to hard violations on this evidence.
+2. **`noun-cluster-candidate` has no observed true positive at all.** It fired 35 times and every
+   verdict was a non-defect. Reviewers reported that most of its spans are not noun runs: they
+   straddle a finite verb, a parenthetical, a table cell or a title line, or they name a real
+   product (`SSL/TLS Protocol Engine`, `Graphical User Interface (GUI)`). This is a segmentation
+   defect as much as a comprehension one, and the rule should be treated as unvalidated.
+3. **Recall is not measurable on this corpus.** With five positives, any recall or F1 number is
+   noise. `formatEvaluationReport` therefore withholds recall and F1 below ten gold positives and
+   prints the positive count instead. Precision over 118 negatives is informative; recall is not.
+
+The counts are asserted in `test/fixtures/corpus.test.ts` so that a rule change which moves them
+cannot pass unnoticed, and `scripts/ci/check-candidate-ground-truth.sh` fails the build if a change
+orphans a verdict from the passage it was written about.
+
+Reviewers judged against the intent documented here, not against ASD-STE100 — no authorised copy was
+available, and they were instructed to mark a passage `undecidable` rather than reason from recalled
+standard text. None did. **These figures are agreement with reviewers on provisional criteria. They
+are not a conformance measurement.**
+
 ### passive-voice-candidate
 
 **Detects** a `be`/`get` form followed by a past participle, optionally with a `by` agent.
@@ -176,6 +214,12 @@ conventional pair; `engine oil pressure warning lamp test procedure` is genuinel
 are identical. `noun-cluster-comprehension` decides, and is instructed that component identity
 outranks simplification.
 
+**Known failure modes — this rule is unvalidated.** Measured: **0 confirmed defects in 35
+candidates.** Reviewers found that most spans are not noun runs at all — they cross a finite verb
+(`allows`, `include`, `named`), a parenthetical, a table cell, a `See [` link, or a title line
+immediately below a directive name — and that the remainder name real components. Treat any finding
+from this rule as unsubstantiated until the span detection is corrected and the corpus re-reviewed.
+
 ### ambiguous-pronoun-candidate
 
 **Detects** two shapes: a bare demonstrative used as a subject (`This prevents…`), and `it`/`they`/
@@ -187,7 +231,11 @@ antecedents.
 
 **Known failure modes** The antecedent count is a crude content-word count over the current and
 previous sentence. It over-triggers in dense technical prose; the default threshold of 2 is a
-compromise, and `info` severity reflects the uncertainty.
+compromise, and `info` severity reflects the uncertainty. Measured: 2 confirmed defects in 34
+candidates. Reviewers noted a specific failure — a list whose every item begins `it`, sharing one
+implied referent, produces one candidate per item, and "no explicit antecedent" is not the same
+defect as "more than one plausible antecedent". The proposed antecedents were also sometimes past
+participles rather than selectable nouns.
 
 ---
 

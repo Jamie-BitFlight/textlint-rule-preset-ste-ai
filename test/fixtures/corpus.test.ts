@@ -51,6 +51,54 @@ describe('fixture provenance', () => {
       expect(devShas.has(fixture.originalSha256), `${fixture.id} leaks into dev`).toBe(false);
     }
   });
+
+  it('no source page contributes to both splits', () => {
+    // Byte-level disjointness is not enough. Two excerpts of one page share an author, a house
+    // style, a vocabulary and a sentence rhythm, so tuning on one and quoting a number from the
+    // other measures memorisation of that page. The split unit is therefore the source page, not
+    // the excerpt: `mod_ssl.xml` and `sqlite.org/cli.html` each used to appear on both sides.
+    const splitsByUrl = new Map<string, Set<string>>();
+    for (const fixture of manifest.fixtures) {
+      const seen = splitsByUrl.get(fixture.sourceUrl) ?? new Set<string>();
+      seen.add(fixture.split);
+      splitsByUrl.set(fixture.sourceUrl, seen);
+    }
+    const straddling = [...splitsByUrl.entries()]
+      .filter(([, splits]) => splits.size > 1)
+      .map(([url]) => url);
+    expect(straddling).toEqual([]);
+  });
+
+  it('documents exactly which organisations still contribute to both splits', () => {
+    // Organisation-level separation is stricter than page-level and this corpus cannot reach it
+    // without losing a category from one side: OSHA supplies both safety-warning fixtures, and
+    // moving both to one split would leave the other with no safety content — the highest-stakes
+    // category. The overlap is therefore accepted and pinned here, so it stays a deliberate,
+    // visible decision rather than an accident, and so adding a new source cannot widen it.
+    const splitsByOrg = new Map<string, Set<string>>();
+    for (const fixture of manifest.fixtures) {
+      const seen = splitsByOrg.get(fixture.sourceOrganisation) ?? new Set<string>();
+      seen.add(fixture.split);
+      splitsByOrg.set(fixture.sourceOrganisation, seen);
+    }
+    const straddling = [...splitsByOrg.entries()]
+      .filter(([, splits]) => splits.size > 1)
+      .map(([org]) => org)
+      .sort();
+    expect(straddling).toEqual([
+      'Occupational Safety and Health Administration (U.S. Department of Labor)',
+    ]);
+  });
+
+  it('both splits cover a range of document categories', () => {
+    for (const split of ['dev', 'heldout'] as const) {
+      const categories = new Set(
+        manifest.fixtures.filter((f) => f.split === split).map((f) => f.category),
+      );
+      expect(categories.size, `${split} covers too few categories`).toBeGreaterThanOrEqual(5);
+      expect(categories, `${split} has no hard negative`).toContain('hard-negative');
+    }
+  });
 });
 
 describe('original fixtures produce diagnostics', () => {
@@ -255,5 +303,82 @@ describe('literal extraction', () => {
   it('ignores structural markup, which a rewrite may change', () => {
     const literals = extractProtectedLiterals('- item one\n- item two\n');
     expect(literals).toEqual([]);
+  });
+});
+
+describe('candidate ground truth', () => {
+  /**
+   * The semantic evaluators are measured against reviewer verdicts on candidate passages, and
+   * nothing else. Before those verdicts existed the harness produced a confusion matrix of all
+   * zeroes on every run — it looked like a working measurement and was incapable of measuring
+   * anything. These tests keep that state from returning silently.
+   */
+  const runs = pairs.map((pair) => ({
+    ...pair,
+    candidates: analyseTextDeterministic(pair.original, { format: 'markdown' }).candidates,
+  }));
+
+  it('every candidate the linter emits has a reviewer verdict bound to its span', () => {
+    const unlabelled: string[] = [];
+    for (const { fixture, annotation, candidates } of runs) {
+      for (const candidate of candidates) {
+        const bound = (annotation?.candidateAdjudications ?? []).some(
+          (record) =>
+            record.ruleId === candidate.ruleId &&
+            record.span.start < candidate.range.end &&
+            candidate.range.start < record.span.end,
+        );
+        if (!bound) unlabelled.push(`${fixture.id}/${candidate.id} (${candidate.ruleId})`);
+      }
+    }
+    expect(unlabelled).toEqual([]);
+  });
+
+  it('every verdict quotes the exact text at the span it claims', () => {
+    for (const { fixture, original, annotation } of runs) {
+      for (const record of annotation?.candidateAdjudications ?? []) {
+        expect(
+          original.slice(record.span.start, record.span.end),
+          `${fixture.id}/${record.passageId}`,
+        ).toBe(record.quote);
+      }
+    }
+  });
+
+  it('both splits carry labelled candidates, so neither is measurable only by accident', () => {
+    for (const split of ['dev', 'heldout'] as const) {
+      const labelled = runs
+        .filter((r) => r.fixture.split === split)
+        .reduce((sum, r) => sum + (r.annotation?.candidateAdjudications.length ?? 0), 0);
+      expect(labelled, `${split} has no candidate ground truth`).toBeGreaterThan(0);
+    }
+  });
+
+  it('records the measured class balance, which is what the metrics are worth', () => {
+    const counts = { violation: 0, 'non-violation': 0, undecidable: 0 };
+    for (const { annotation } of runs) {
+      for (const record of annotation?.candidateAdjudications ?? []) counts[record.verdict] += 1;
+    }
+    // Four independent reviewers judged all 123 candidates and found 5 real defects. That is the
+    // headline result of this corpus: the three heuristic candidate rules have a very high false
+    // positive rate on well-edited technical documentation, and `noun-cluster-candidate` has no
+    // observed true positive at all. The numbers are asserted so that a rule change which alters
+    // them cannot pass unnoticed — and so that nobody quotes a recall figure built on five cases.
+    expect(counts).toEqual({ violation: 5, 'non-violation': 118, undecidable: 0 });
+  });
+
+  it('no candidate rule is silently reclassified as reliable', () => {
+    const perRule = new Map<string, { violation: number; total: number }>();
+    for (const { annotation } of runs) {
+      for (const record of annotation?.candidateAdjudications ?? []) {
+        const entry = perRule.get(record.ruleId) ?? { violation: 0, total: 0 };
+        entry.total += 1;
+        if (record.verdict === 'violation') entry.violation += 1;
+        perRule.set(record.ruleId, entry);
+      }
+    }
+    // `noun-cluster-candidate` fired 35 times with zero confirmed defects. Documented in
+    // docs/provisional-rules.md as an observed limit, not hidden.
+    expect(perRule.get('noun-cluster-candidate')).toEqual({ violation: 0, total: 35 });
   });
 });

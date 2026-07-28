@@ -8,10 +8,21 @@
       "passageId": "llvm-standalone-build-table-p1",
       "originalText": "LLVM",
       "rewrittenText": "LLVM",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 334, "end": 338 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 334,
+          "end": 338
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "LLVM" }
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "LLVM"
+        }
       ],
       "reason": "LLVM is the proper name of the project/product this document is about, not an abbreviation being introduced for a general term. There is no full expansion to write out on first use (analogous to 'SQLite' or 'Zephyr' elsewhere in this corpus); spelling out 'Low Level Virtual Machine (LLVM)' would be both historically inaccurate (the project disavows that expansion) and would not aid comprehension.",
       "semanticInvariants": [
@@ -27,10 +38,21 @@
       "passageId": "llvm-standalone-build-table-p2",
       "originalText": "`LLVM_ROOT` should point to the prefix of your llvm installation,\n  so for example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, then you should pass `-DLLVM_ROOT=/usr/`.",
       "rewrittenText": "`LLVM_ROOT` should point to the prefix of your llvm installation.\n  For example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, you should pass `-DLLVM_ROOT=/usr/`.",
-      "ruleIds": ["sentence-length-descriptive"],
-      "originalSpans": [{ "start": 387, "end": 569 }],
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 387,
+          "end": 569
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "`LLVM_ROOT` should point to the prefix of your llvm installation,\n  so for example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, then you should pass `-DLLVM_ROOT=/usr/`." }
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "`LLVM_ROOT` should point to the prefix of your llvm installation,\n  so for example, if llvm is installed into `/usr/bin` and\n  `/usr/lib64`, then you should pass `-DLLVM_ROOT=/usr/`."
+        }
       ],
       "reason": "Original is one 26-word sentence, one word over the 25-word descriptive limit. Splitting at the existing 'so for example' clause boundary into two sentences reduces both to well under the limit without touching any code identifier or path.",
       "semanticInvariants": [
@@ -45,10 +67,21 @@
       "passageId": "llvm-standalone-build-table-p3",
       "originalText": "Additional",
       "rewrittenText": "More",
-      "ruleIds": ["unapproved-vocabulary"],
-      "originalSpans": [{ "start": 688, "end": 698 }],
+      "ruleIds": [
+        "unapproved-vocabulary"
+      ],
+      "originalSpans": [
+        {
+          "start": 688,
+          "end": 698
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "unapproved-vocabulary", "category": "deterministic-violation", "quote": "Additional" }
+        {
+          "ruleId": "unapproved-vocabulary",
+          "category": "deterministic-violation",
+          "quote": "Additional"
+        }
       ],
       "reason": "Simple, meaning-preserving vocabulary substitution the rule pack itself suggests: 'Additional' is a Latinate synonym for the plainer 'More' with no change in scope or meaning.",
       "semanticInvariants": [
@@ -62,10 +95,21 @@
       "passageId": "llvm-standalone-build-table-p4",
       "originalText": "ON",
       "rewrittenText": "ON",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 1030, "end": 1032 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 1030,
+          "end": 1032
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "ON" }
+        {
+          "ruleId": "abbreviation-introduction",
+          "category": "deterministic-violation",
+          "quote": "ON"
+        }
       ],
       "reason": "'ON' here is the literal CMake boolean value in the pipe-table cell 'LLVM_INSTALL_UTILS=ON', a build-option identifier, not an abbreviation of a general term being introduced in prose. It is also table-cell content and per this corpus's table rule must not be edited at all.",
       "semanticInvariants": [
@@ -88,6 +132,81 @@
     "check-$subproj",
     "$builddir!=$builddir_subproj"
   ],
-  "reviewers": ["rewriter-b"],
-  "notes": "Two of four diagnostics are false positives against a product proper noun (LLVM) and a table-cell CMake boolean literal (ON); the other two are safe, minimal, meaning-preserving edits (a sentence split and a vocabulary swap) that leave every code identifier and the pipe table untouched."
+  "reviewers": [
+    "reviewer-a",
+    "rewriter-b"
+  ],
+  "notes": "Two of four diagnostics are false positives against a product proper noun (LLVM) and a table-cell CMake boolean literal (ON); the other two are safe, minimal, meaning-preserving edits (a sentence split and a vocabulary swap) that leave every code identifier and the pipe table untouched.",
+  "candidateAdjudications": [
+    {
+      "passageId": "passive-voice-candidate:s2:339",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "was built",
+      "span": {
+        "start": 339,
+        "end": 348
+      },
+      "verdict": "non-violation",
+      "reason": "'the original folder where LLVM was built' is a descriptive relative clause identifying a folder; the builder is the reader and is already obvious, and the sentence is about location, not about who acted.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s3:479",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is installed",
+      "span": {
+        "start": 479,
+        "end": 491
+      },
+      "verdict": "non-violation",
+      "reason": "'if llvm is installed into /usr/bin' is a conditional describing an existing installation state; how it got there and who installed it are irrelevant to the condition.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s4:625",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are\n  required",
+      "span": {
+        "start": 625,
+        "end": 639
+      },
+      "verdict": "non-violation",
+      "reason": "'options are required' is an adjectival predicate stating a requirement, not a passive verb with a suppressed actor.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s5:743",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be found",
+      "span": {
+        "start": 743,
+        "end": 751
+      },
+      "verdict": "non-violation",
+      "reason": "'can be found in the table below' is a descriptive cross-reference, not an instruction; the sentence points at a table rather than assigning an action to anyone.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.7
+    },
+    {
+      "passageId": "passive-voice-candidate:s6:824",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "are supported",
+      "span": {
+        "start": 824,
+        "end": 837
+      },
+      "verdict": "non-violation",
+      "reason": "'build targets are supported for the sub-projects listed' describes a capability of the build system; there is no actor a reader needs to know.",
+      "reviewer": "reviewer-a",
+      "reviewerConfidence": 0.85
+    }
+  ]
 }

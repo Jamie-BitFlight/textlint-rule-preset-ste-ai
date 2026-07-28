@@ -37,11 +37,28 @@ function annotation(overrides: Partial<Annotation> = {}): Annotation {
     compliant: 'compliant/f.md',
     split: 'dev',
     changes: [],
+    candidateAdjudications: [],
     protectedLiterals: [],
     reviewers: ['t'],
     ...overrides,
   };
 }
+
+const adjudication = (
+  verdict: 'violation' | 'non-violation' | 'undecidable',
+  start = 100,
+  end = 120,
+) => ({
+  passageId: 'p1',
+  ruleId: 'passive-voice-candidate',
+  evaluatorId: 'passive-voice-adjudication',
+  quote: 'The filter must be replaced.',
+  span: { start, end },
+  verdict,
+  reason: 'a reviewer looked at it',
+  reviewer: 't',
+  reviewerConfidence: 0.9,
+});
 
 const change = (status: 'accepted' | 'disputed' | 'deferred', start = 100, end = 120) => ({
   passageId: 'p1',
@@ -90,7 +107,9 @@ describe('gold labelling', () => {
     expect(goldLabelFor(candidate(), annotation({ changes: [elsewhere] }))).toBe('unlabelled');
   });
 
-  it('an expected diagnostic for the same rule labels the candidate even without span overlap', () => {
+  it('an expected diagnostic for the same rule does not label a candidate elsewhere', () => {
+    // A reviewer's verdict is about a passage, not about a rule id. Labelling by rule id alone made
+    // one accepted change turn every candidate of that rule in the document into a gold violation.
     const byRule = {
       ...change('accepted', 500, 520),
       expectedDiagnostics: [
@@ -101,7 +120,66 @@ describe('gold labelling', () => {
         },
       ],
     };
-    expect(goldLabelFor(candidate(), annotation({ changes: [byRule] }))).toBe('violation');
+    expect(goldLabelFor(candidate(), annotation({ changes: [byRule] }))).toBe('unlabelled');
+  });
+
+  it('an expected diagnostic still labels a candidate that the change span covers', () => {
+    const here = {
+      ...change('accepted'),
+      ruleIds: ['no-contractions'],
+      expectedDiagnostics: [
+        {
+          ruleId: 'passive-voice-candidate',
+          category: 'deterministic-violation' as const,
+          quote: 'q',
+        },
+      ],
+    };
+    expect(goldLabelFor(candidate(), annotation({ changes: [here] }))).toBe('violation');
+  });
+
+  it('records that disagree about the same span leave it unlabelled, whatever their order', () => {
+    const both = [change('accepted'), change('disputed')];
+    expect(goldLabelFor(candidate(), annotation({ changes: both }))).toBe('unlabelled');
+    expect(goldLabelFor(candidate(), annotation({ changes: [...both].reverse() }))).toBe(
+      'unlabelled',
+    );
+  });
+
+  it('a direct candidate verdict labels the candidate', () => {
+    expect(
+      goldLabelFor(
+        candidate(),
+        annotation({ candidateAdjudications: [adjudication('violation')] }),
+      ),
+    ).toBe('violation');
+    expect(
+      goldLabelFor(
+        candidate(),
+        annotation({ candidateAdjudications: [adjudication('non-violation')] }),
+      ),
+    ).toBe('non-violation');
+  });
+
+  it('an undecidable verdict leaves the candidate unlabelled even if a change disagrees', () => {
+    expect(
+      goldLabelFor(
+        candidate(),
+        annotation({
+          candidateAdjudications: [adjudication('undecidable')],
+          changes: [change('accepted')],
+        }),
+      ),
+    ).toBe('unlabelled');
+  });
+
+  it('a candidate verdict about another span does not label this candidate', () => {
+    expect(
+      goldLabelFor(
+        candidate(),
+        annotation({ candidateAdjudications: [adjudication('violation', 500, 520)] }),
+      ),
+    ).toBe('unlabelled');
   });
 });
 

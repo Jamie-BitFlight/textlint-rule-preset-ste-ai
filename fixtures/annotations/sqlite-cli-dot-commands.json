@@ -250,7 +250,52 @@
     "Control-C"
   ],
   "reviewers": [
+    "reviewer-c",
     "rewriter-a"
   ],
-  "notes": "Wrapping the terminal transcript in a fenced code block would resolve every disputed finding at once, but the corpus test 'keeps the code fences of the original byte-identical' requires the compliant file to have exactly the same set of fenced-code regions as the original, which has none; adding a fence here would fail that test, so the transcript's literal-syntax false positives are disputed individually instead."
+  "notes": "Wrapping the terminal transcript in a fenced code block would resolve every disputed finding at once, but the corpus test 'keeps the code fences of the original byte-identical' requires the compliant file to have exactly the same set of fenced-code regions as the original, which has none; adding a fence here would fail that test, so the transcript's literal-syntax false positives are disputed individually instead.",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s1:175",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "new SQLite database named",
+      "span": {
+        "start": 175,
+        "end": 200
+      },
+      "verdict": "non-violation",
+      "reason": "'named' is a participle introducing the database name, not part of a noun pile; the real phrase 'new SQLite database' is an adjective plus a product name plus its head noun and needs no unpacking.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "noun-cluster-candidate:s3:380",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "one text, two int);\nsqlite",
+      "span": {
+        "start": 380,
+        "end": 406
+      },
+      "verdict": "non-violation",
+      "reason": "This is SQL column definitions and a shell prompt inside an unfenced terminal transcript, not English prose; there is no noun phrase for a reader to group, so the heuristic misfired on unmarked code.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.88
+    },
+    {
+      "passageId": "noun-cluster-candidate:s5:663",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "system\nEnd-Of-File character (usually",
+      "span": {
+        "start": 663,
+        "end": 700
+      },
+      "verdict": "non-violation",
+      "reason": "'your system End-Of-File character' groups as [your system's] [End-Of-File character], a conventional CLI term of art, and the parenthetical '(usually a Control-D)' resolves any residual doubt on the spot.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.75
+    }
+  ]
 }

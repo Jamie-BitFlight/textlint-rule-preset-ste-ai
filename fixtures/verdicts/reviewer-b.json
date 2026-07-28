@@ -1,0 +1,303 @@
+{
+  "reviewer": "reviewer-b",
+  "verdicts": {
+    "curl-url-option-reference": [
+      {
+        "passageId": "noun-cluster-candidate:s1:203",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "c: Copyright (C) Daniel Stenberg",
+        "span": { "start": 203, "end": 235 },
+        "verdict": "non-violation",
+        "reason": "This is a YAML front-matter field, not prose: a key 'c:' followed by a conventional copyright notice naming a person. There is no grouping a reader must guess.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s2:262",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "SPDX-License-Identifier: curl\nLong: url\nArg: <url/file>\nHelp: URL(s",
+        "span": { "start": 262, "end": 329 },
+        "verdict": "non-violation",
+        "reason": "The span joins four separate key/value metadata lines across newlines; it is not a noun run at all. A reader of the front-matter block parses each line independently and unambiguously.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s12:691",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "outermost subdomain\nname matches DICT, FTP, IMAP, LDAP",
+        "span": { "start": 691, "end": 745 },
+        "verdict": "non-violation",
+        "reason": "The span straddles a verb ('matches') and a comma-separated list of established protocol names, so it is not a noun pile. 'Outermost subdomain name' is a clear three-word phrase and the protocol names are component identities.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s12:818",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 818, "end": 820 },
+        "verdict": "non-violation",
+        "reason": "In 'otherwise it assumes HTTP' only an agent capable of inference can be the subject, which restricts the referent to curl; the other nearby nouns (URL, protocol, subdomain name) yield incoherent readings rather than competing meanings.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "passive-voice-candidate:s13:855",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be avoided by",
+        "span": { "start": 855, "end": 868 },
+        "verdict": "non-violation",
+        "reason": "This sits in a paragraph describing curl's scheme-guessing behaviour, and the 'by' phrase supplies a means ('providing a full URL'), not a hidden agent. It is a capability statement rather than an instruction, so no actor is concealed.",
+        "reviewerConfidence": 0.65
+      },
+      {
+        "passageId": "passive-voice-candidate:s14:1038",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is written",
+        "span": { "start": 1038, "end": 1048 },
+        "verdict": "non-violation",
+        "reason": "The passive is in a subordinate clause describing where curl sends output; the main clause is already an active imperative ('use the --output or the --remote-name options'). The writing agent is curl and is irrelevant to the reader's action.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s15:1209",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "dedicated\ndestination option unless",
+        "span": { "start": 1209, "end": 1244 },
+        "verdict": "non-violation",
+        "reason": "The genuine noun phrase is 'dedicated destination option', which is transparent; the span only reaches four words by swallowing the conjunction 'unless' that begins the next clause.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s16:1308",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be converted",
+        "span": { "start": 1308, "end": 1320 },
+        "verdict": "non-violation",
+        "reason": "Descriptive prose about platform behaviour, and the agent is already named explicitly ('by the operating system'). The reader is not the actor and nothing is hidden.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s17:1401",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be told",
+        "span": { "start": 1401, "end": 1408 },
+        "verdict": "non-violation",
+        "reason": "'curl can be told to download URLs' is a version-scoped capability statement with curl as the topic, not an instruction; the implied teller is the reader and is obvious from the surrounding option reference.",
+        "reviewerConfidence": 0.6
+      },
+      {
+        "passageId": "noun-cluster-candidate:s17:1440",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "text\nfile, one URL",
+        "span": { "start": 1440, "end": 1458 },
+        "verdict": "non-violation",
+        "reason": "The span crosses a comma between 'a text file' and the appositive 'one URL per line'. 'Text file' is a two-word everyday term and the phrase after the comma is a separate constituent.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s18:1469",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 1469, "end": 1471 },
+        "verdict": "non-violation",
+        "reason": "'It is done with `--url @filename`' takes the whole just-described operation as its referent; the competing nouns (text file, URL, line) all give incoherent readings, so there is only one sustainable resolution.",
+        "reviewerConfidence": 0.7
+      },
+      {
+        "passageId": "passive-voice-candidate:s18:1472",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is done",
+        "span": { "start": 1472, "end": 1479 },
+        "verdict": "non-violation",
+        "reason": "Agentless in form, but the same sentence supplies the active restatement immediately after the colon ('you specify a filename prefixed with the `@` symbol'), so the actor is explicit within the passage and nothing is concealed.",
+        "reviewerConfidence": 0.65
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s19:1578",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 1578, "end": 1580 },
+        "verdict": "non-violation",
+        "reason": "The referent is curl, echoing 'curl can be told' two sentences earlier; the carried-over reading from the preceding 'It is done' points at the `--url @filename` mechanism, but both readings send the reader to the same action, so the choice does not change the meaning. Marginal call.",
+        "reviewerConfidence": 0.6
+      },
+      {
+        "passageId": "passive-voice-candidate:s19:1585",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be told",
+        "span": { "start": 1585, "end": 1592 },
+        "verdict": "non-violation",
+        "reason": "Same construction as the earlier 'curl can be told': a capability statement about the tool in descriptive reference prose, with the means stated ('by providing an argument like `@-`') and the implied teller obvious.",
+        "reviewerConfidence": 0.6
+      }
+    ],
+    "postgres-vacuum-overview": [
+      {
+        "passageId": "noun-cluster-candidate:s1:216",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "VACUUM reclaims storage occupied",
+        "span": { "start": 216, "end": 248 },
+        "verdict": "non-violation",
+        "reason": "This is a full clause (subject VACUUM, verb reclaims, object storage, participle occupied), not a noun run; the heuristic misfires because the command name and the verbs are not recognised as such.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "noun-cluster-candidate:s2:268",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "normal PostgreSQL operation, tuples",
+        "span": { "start": 268, "end": 303 },
+        "verdict": "non-violation",
+        "reason": "The span crosses a comma: 'normal PostgreSQL operation' is a transparent three-word phrase containing a product name, and 'tuples' begins the following clause.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s2:309",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are deleted",
+        "span": { "start": 309, "end": 320 },
+        "verdict": "non-violation",
+        "reason": "Descriptive prose about storage internals; 'tuples that are deleted or obsoleted by an update' characterises the state of a row version, and the deleting agent (any client transaction) is genuinely irrelevant here.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s2:392",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "they",
+        "span": { "start": 392, "end": 396 },
+        "verdict": "non-violation",
+        "reason": "'They remain present' can only be the tuples: it is the subject of the immediately preceding clause and the only plural candidate, since 'table' and 'an update' are singular.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s2:427",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is done",
+        "span": { "start": 427, "end": 434 },
+        "verdict": "non-violation",
+        "reason": "'until a VACUUM is done' deliberately leaves the actor open, because the vacuum may be run manually or by autovacuum. Naming a single actor would be misleading.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s4:530",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Plain VACUUM (without FULL) simply reclaims space",
+        "span": { "start": 530, "end": 579 },
+        "verdict": "non-violation",
+        "reason": "A complete sentence opening with a parenthetical qualifier, not a noun run; 'Plain VACUUM (without FULL)' names the command variant and the rest is verb plus object.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s4:590",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": { "start": 590, "end": 592 },
+        "verdict": "non-violation",
+        "reason": "'reclaims space and makes it available for re-use' binds 'it' to 'space' by the immediate coordination; no other candidate produces a coherent reading.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s7:885",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "It",
+        "span": { "start": 885, "end": 887 },
+        "verdict": "violation",
+        "reason": "'It also allows us to leverage multiple CPUs' must mean plain VACUUM, but the intervening sentence uses 'it's' for 'extra space', so the same pronoun shape has just been bound to a different referent and the intended antecedent is three clauses back. A reader can plausibly attach the capability to the space-retention behaviour rather than to the command, which changes what the sentence claims.",
+        "reviewerConfidence": 0.75
+      }
+    ],
+    "httpd-mod-ssl-overview": [
+      {
+        "passageId": "passive-voice-candidate:s4:418",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are provided",
+        "span": { "start": 418, "end": 430 },
+        "verdict": "non-violation",
+        "reason": "'Further details, discussion, and examples are provided in the SSL documentation' is a document cross-reference; the provider is the documentation itself and naming an actor would add nothing.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s5:474",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be configured",
+        "span": { "start": 474, "end": 487 },
+        "verdict": "non-violation",
+        "reason": "A capability statement about the module in descriptive overview prose, not an instruction; the module is correctly the topic and the configuring administrator is obvious from the document's audience.",
+        "reviewerConfidence": 0.8
+      },
+      {
+        "passageId": "passive-voice-candidate:s7:785",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "are listed",
+        "span": { "start": 785, "end": 795 },
+        "verdict": "non-violation",
+        "reason": "'The generated variables are listed in the table below' is a pointer to document structure; the agent is the document and is genuinely irrelevant.",
+        "reviewerConfidence": 0.9
+      },
+      {
+        "passageId": "passive-voice-candidate:s8:863",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be made",
+        "span": { "start": 863, "end": 870 },
+        "verdict": "non-violation",
+        "reason": "'the information can be made available under different names' states an available compatibility behaviour and immediately refers the reader to the Compatibility chapter for the how; it is descriptive, not an instruction with a suppressed actor.",
+        "reviewerConfidence": 0.75
+      }
+    ],
+    "zephyr-dependency-table": [
+      {
+        "passageId": "noun-cluster-candidate:s2:283",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "host tools Zephyr needs",
+        "span": { "start": 283, "end": 306 },
+        "verdict": "non-violation",
+        "reason": "This is 'the host tools [that] Zephyr needs' - a two-word head noun plus a reduced relative clause, not a stacked noun pile. The grouping is fixed by the verb 'needs'.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "noun-cluster-candidate:s4:481",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "current minimum required versions",
+        "span": { "start": 481, "end": 514 },
+        "verdict": "non-violation",
+        "reason": "All three pre-modifiers are adjectival and scope left to right over the single head 'versions'; 'minimum required version' is a conventional term in software dependency documentation.",
+        "reviewerConfidence": 0.85
+      },
+      {
+        "passageId": "passive-voice-candidate:s12:824",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is strongly recommended",
+        "span": { "start": 824, "end": 847 },
+        "verdict": "non-violation",
+        "reason": "Inside a note, 'Python 3.12 is strongly recommended' states a status of the release rather than directing an action, and the recommender is self-evidently the document; the following sentence supplies the reason.",
+        "reviewerConfidence": 0.7
+      }
+    ]
+  }
+}

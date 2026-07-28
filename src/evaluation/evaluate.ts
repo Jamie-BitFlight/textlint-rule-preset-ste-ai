@@ -60,8 +60,23 @@ export interface EvaluatorMetrics {
   readonly failureRate: number;
   readonly unlabelled: number;
   readonly labelled: number;
+  /**
+   * Gold class balance. Reported because it governs how much any of the figures above are worth:
+   * recall computed over three positives is a ratio, not a measurement, and quoting it without the
+   * denominator invites exactly the over-reading this harness exists to prevent.
+   */
+  readonly goldPositives: number;
+  readonly goldNegatives: number;
   readonly latencyMs: { p50: number; p90: number; p99: number; mean: number };
 }
+
+/**
+ * Fewest gold positives at which recall is reported as a number rather than as a count.
+ *
+ * There is no principled threshold; this one is deliberately conservative and its only job is to
+ * stop a figure derived from a handful of cases being quoted as a performance claim.
+ */
+export const MIN_POSITIVES_FOR_RECALL = 10;
 
 export interface EvaluationReport {
   readonly split: 'dev' | 'heldout' | 'all';
@@ -79,23 +94,52 @@ function overlaps(a: SourceRange, b: SourceRange): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
-/** Gold label for one candidate, from the reviewer's adjudication record. */
+/**
+ * Gold label for one candidate, from the reviewer's adjudication records.
+ *
+ * Two properties this function must have, both of which it previously lacked:
+ *
+ * **Location binding.** A verdict applies to the span a reviewer wrote it about. The old
+ * implementation accepted a change as covering the candidate if the change merely *listed* the same
+ * rule id in `expectedDiagnostics`, with no position test at all — so one accepted change made every
+ * candidate of that rule anywhere in the document a gold violation, including the ones the reviewer
+ * had never looked at. Coverage now always requires a span overlap.
+ *
+ * **Order independence.** The old loop returned on the first covering change, so when two records
+ * disagreed about the same span the label depended on the order of an array in a JSON file. All
+ * covering records are now collected: unanimity produces a label, disagreement produces
+ * `unlabelled`, because a contested passage is not ground truth.
+ */
 export function goldLabelFor(
   candidate: CandidatePassage,
   annotation: Annotation | undefined,
 ): GoldLabel {
   if (annotation === undefined) return 'unlabelled';
-  for (const change of annotation.changes) {
-    if (!change.ruleIds.includes(candidate.ruleId)) continue;
-    const covers =
-      change.originalSpans.some((span) => overlaps(span, candidate.range)) ||
-      change.expectedDiagnostics.some((e) => e.ruleId === candidate.ruleId);
-    if (!covers) continue;
-    if (change.status === 'accepted') return 'violation';
-    if (change.status === 'disputed') return 'non-violation';
-    return 'unlabelled';
+  const labels = new Set<GoldLabel>();
+
+  // Direct verdicts on candidate passages take part on equal terms with rewrite records; both are
+  // reviewer statements about the same span.
+  for (const record of annotation.candidateAdjudications) {
+    if (record.ruleId !== candidate.ruleId) continue;
+    if (!overlaps(record.span, candidate.range)) continue;
+    if (record.verdict === 'undecidable') return 'unlabelled';
+    labels.add(record.verdict);
   }
-  return 'unlabelled';
+
+  for (const change of annotation.changes) {
+    const mentionsRule =
+      change.ruleIds.includes(candidate.ruleId) ||
+      change.expectedDiagnostics.some((e) => e.ruleId === candidate.ruleId);
+    if (!mentionsRule) continue;
+    if (!change.originalSpans.some((span) => overlaps(span, candidate.range))) continue;
+    if (change.status === 'accepted') labels.add('violation');
+    else if (change.status === 'disputed') labels.add('non-violation');
+    // `deferred` is a reviewer declining to decide, which is not evidence either way.
+    else return 'unlabelled';
+  }
+
+  if (labels.size !== 1) return 'unlabelled';
+  return [...labels][0] ?? 'unlabelled';
 }
 
 function percentile(values: readonly number[], p: number): number {
@@ -146,6 +190,8 @@ function metricsFor(evaluatorId: string, cases: readonly EvaluationCase[]): Eval
       cases.length === 0 ? 0 : cases.filter((c) => c.prediction === 'failed').length / cases.length,
     unlabelled: cases.length - labelled.length,
     labelled: labelled.length,
+    goldPositives: labelled.filter((c) => c.gold === 'violation').length,
+    goldNegatives: labelled.filter((c) => c.gold === 'non-violation').length,
     latencyMs: {
       p50: percentile(latencies, 50),
       p90: percentile(latencies, 90),
@@ -279,14 +325,15 @@ export function formatEvaluationReport(report: EvaluationReport): string {
   );
   lines.push('');
   lines.push(
-    'evaluator                         TP  FP  TN  FN  precision  recall     F1  uncertain  failed  labelled  p50ms  p90ms',
+    'evaluator                         TP  FP  TN  FN  precision  recall     F1  uncertain  failed  gold+  gold-  p50ms  p90ms',
   );
   const row = (m: EvaluatorMetrics): string =>
     `${m.evaluatorId.padEnd(32)} ${String(m.truePositives).padStart(3)} ${String(m.falsePositives).padStart(3)} ` +
     `${String(m.trueNegatives).padStart(3)} ${String(m.falseNegatives).padStart(3)}  ` +
-    `${fmt(m.precision).padStart(9)}  ${fmt(m.recall).padStart(6)} ${fmt(m.f1).padStart(6)}  ` +
+    `${fmt(m.precision).padStart(9)}  ${recallCell(m).padStart(6)} ${f1Cell(m).padStart(6)}  ` +
     `${m.uncertainRate.toFixed(3).padStart(9)}  ${m.failureRate.toFixed(3).padStart(6)}  ` +
-    `${String(m.labelled).padStart(8)}  ${String(Math.round(m.latencyMs.p50)).padStart(5)}  ` +
+    `${String(m.goldPositives).padStart(5)}  ${String(m.goldNegatives).padStart(5)}  ` +
+    `${String(Math.round(m.latencyMs.p50)).padStart(5)}  ` +
     `${String(Math.round(m.latencyMs.p90)).padStart(5)}`;
   for (const m of report.perEvaluator) lines.push(row(m));
   lines.push('');
@@ -296,8 +343,27 @@ export function formatEvaluationReport(report: EvaluationReport): string {
     `Unlabelled candidates excluded from the matrix: ${report.overall.unlabelled}. ` +
       'These are passages no reviewer adjudicated; counting them would invent ground truth.',
   );
+  for (const m of [report.overall, ...report.perEvaluator]) {
+    if (m.labelled > 0 && m.goldPositives < MIN_POSITIVES_FOR_RECALL) {
+      lines.push(
+        `recall withheld for ${m.evaluatorId}: ${m.goldPositives} gold positive(s), ` +
+          `fewer than the ${MIN_POSITIVES_FOR_RECALL} needed for the figure to mean anything. ` +
+          'Precision over the negatives is still informative; recall is not.',
+      );
+    }
+  }
   lines.push(
     'Model-reported confidence is not a calibrated probability. Thresholds are operator-owned.',
   );
   return lines.join('\n');
+}
+
+/** Recall, or the positive count when there are too few positives for a ratio to inform. */
+function recallCell(m: EvaluatorMetrics): string {
+  return m.goldPositives < MIN_POSITIVES_FOR_RECALL ? `n=${m.goldPositives}` : fmt(m.recall);
+}
+
+/** F1 depends on recall, so it is withheld on the same condition. */
+function f1Cell(m: EvaluatorMetrics): string {
+  return m.goldPositives < MIN_POSITIVES_FOR_RECALL ? '   —' : fmt(m.f1);
 }

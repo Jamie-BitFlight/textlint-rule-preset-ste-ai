@@ -8,13 +8,26 @@
       "passageId": "django-settings-configuration-p1",
       "originalText": "It doesn't allow for Python syntax errors.",
       "rewrittenText": "It does not allow for Python syntax errors.",
-      "ruleIds": ["no-contractions"],
-      "originalSpans": [{ "start": 856, "end": 863 }],
+      "ruleIds": [
+        "no-contractions"
+      ],
+      "originalSpans": [
+        {
+          "start": 856,
+          "end": 863
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "doesn't" }
+        {
+          "ruleId": "no-contractions",
+          "category": "deterministic-violation",
+          "quote": "doesn't"
+        }
       ],
       "reason": "Contraction \"doesn't\" expanded to \"does not\".",
-      "semanticInvariants": ["the negation (a settings module cannot contain Python syntax errors) is unchanged"],
+      "semanticInvariants": [
+        "the negation (a settings module cannot contain Python syntax errors) is unchanged"
+      ],
       "unresolved": [],
       "status": "accepted",
       "reviewerConfidence": 0.95
@@ -23,10 +36,21 @@
       "passageId": "django-settings-configuration-p2",
       "originalText": "It can assign settings dynamically using normal Python syntax.\n  For example::",
       "rewrittenText": "It can assign settings dynamically using normal Python syntax.\n  For example.",
-      "ruleIds": ["list-instruction-structure"],
-      "originalSpans": [{ "start": 898, "end": 976 }],
+      "ruleIds": [
+        "list-instruction-structure"
+      ],
+      "originalSpans": [
+        {
+          "start": 898,
+          "end": 976
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "list-instruction-structure", "category": "deterministic-violation", "quote": "It can assign settings dynamically using normal Python syntax.\n  For example::" }
+        {
+          "ruleId": "list-instruction-structure",
+          "category": "deterministic-violation",
+          "quote": "It can assign settings dynamically using normal Python syntax.\n  For example::"
+        }
       ],
       "reason": "This list item ended with the RST literal-block marker \"::\" instead of a full stop, while its sibling bullets end with periods; changed to a period so every item in the list ends the same way. The indented code sample that follows is unaffected.",
       "semanticInvariants": [
@@ -41,13 +65,26 @@
       "passageId": "django-settings-configuration-p3",
       "originalText": "you have to tell it which settings you're using.",
       "rewrittenText": "you have to tell it which settings you are using.",
-      "ruleIds": ["no-contractions"],
-      "originalSpans": [{ "start": 1249, "end": 1255 }],
+      "ruleIds": [
+        "no-contractions"
+      ],
+      "originalSpans": [
+        {
+          "start": 1249,
+          "end": 1255
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "you're" }
+        {
+          "ruleId": "no-contractions",
+          "category": "deterministic-violation",
+          "quote": "you're"
+        }
       ],
       "reason": "Contraction \"you're\" expanded to \"you are\".",
-      "semanticInvariants": ["the obligation ('you have to tell it') is unchanged"],
+      "semanticInvariants": [
+        "the obligation ('you have to tell it') is unchanged"
+      ],
       "unresolved": [],
       "status": "accepted",
       "reviewerConfidence": 0.95
@@ -59,6 +96,95 @@
     "ALLOWED_HOSTS",
     "DEBUG"
   ],
-  "reviewers": ["rewriter-a"],
-  "notes": ""
+  "reviewers": [
+    "reviewer-d",
+    "rewriter-a"
+  ],
+  "notes": "",
+  "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s2:256",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Django settings file contains",
+      "span": {
+        "start": 256,
+        "end": 285
+      },
+      "verdict": "non-violation",
+      "reason": "The run swallows the main verb \"contains\"; the actual noun group is \"Django settings file\", a product-specific term used throughout the Django documentation. Component identity outranks simplification.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s10:853",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 853,
+        "end": 855
+      },
+      "verdict": "non-violation",
+      "reason": "The lead-in \"Because a settings file is a Python module, the following apply:\" establishes the settings file as the subject of every bullet, so \"It doesn't allow for Python syntax errors\" has one referent. No competing candidate is grammatically available.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s11:898",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 898,
+        "end": 900
+      },
+      "verdict": "non-violation",
+      "reason": "Second bullet in a parallel list sharing the same lead-in; \"It\" is the settings file, exactly as in the bullet above. The parallel structure removes any ambiguity the local word count suggests.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s11:905",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "assign settings dynamically using normal Python syntax",
+      "span": {
+        "start": 905,
+        "end": 959
+      },
+      "verdict": "non-violation",
+      "reason": "A verb, object, adverb and a gerund phrase — normal clause structure, not a stack of nouns. \"normal Python syntax\" is the only noun group and it is transparent.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s13:1028",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "It",
+      "span": {
+        "start": 1028,
+        "end": 1030
+      },
+      "verdict": "non-violation",
+      "reason": "Third bullet of the same parallel list; the intervening code block makes the heuristic see \"For example::\" as the previous sentence, but a reader tracks the list structure and resolves \"It\" to the settings file. Referent is unambiguous.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s19:1231",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 1231,
+        "end": 1233
+      },
+      "verdict": "non-violation",
+      "reason": "\"When you use Django, you have to tell it which settings you're using\" — only Django can be told something, and it is the immediately preceding subject of the clause. The settings are the content of the telling, not the addressee.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.9
+    }
+  ]
 }

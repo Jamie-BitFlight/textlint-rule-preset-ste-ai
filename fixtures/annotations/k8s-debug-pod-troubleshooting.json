@@ -8,10 +8,19 @@
       "passageId": "k8s-debug-pod-troubleshooting-p1",
       "originalText": "**You don't have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster, in this case you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster.",
       "rewrittenText": "**You do not have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster. In this case, you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster.",
-      "ruleIds": ["sentence-length-descriptive", "no-contractions"],
+      "ruleIds": [
+        "sentence-length-descriptive",
+        "no-contractions"
+      ],
       "originalSpans": [
-        { "start": 1316, "end": 1522 },
-        { "start": 1322, "end": 1327 }
+        {
+          "start": 1316,
+          "end": 1522
+        },
+        {
+          "start": 1322,
+          "end": 1327
+        }
       ],
       "expectedDiagnostics": [
         {
@@ -19,7 +28,11 @@
           "category": "deterministic-violation",
           "quote": "**You don't have enough resources**: You may have exhausted the supply of CPU\n  or Memory in your cluster, in this case you need to delete Pods, adjust resource\n  requests, or add new nodes to your cluster."
         },
-        { "ruleId": "no-contractions", "category": "deterministic-violation", "quote": "don't" }
+        {
+          "ruleId": "no-contractions",
+          "category": "deterministic-violation",
+          "quote": "don't"
+        }
       ],
       "reason": "36-word sentence combining a contraction, a resource-exhaustion description, and a 'need to' instruction; expanded the contraction and split at the existing comma into a description sentence and an instruction sentence.",
       "semanticInvariants": [
@@ -38,6 +51,137 @@
     "Memory",
     "[Compute Resources document](/docs/concepts/configuration/manage-resources-containers/)"
   ],
-  "reviewers": ["rewriter-a"],
-  "notes": ""
+  "reviewers": [
+    "reviewer-c",
+    "rewriter-a"
+  ],
+  "notes": "",
+  "candidateAdjudications": [
+    {
+      "passageId": "ambiguous-pronoun-candidate:s4:338",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 338,
+        "end": 340
+      },
+      "verdict": "non-violation",
+      "reason": "The immediately preceding sentence is 'What is the problem?' and 'Is it your Pods, your Replication Controller or your Service?' answers exactly that question; the nouns that follow are the options, not competing antecedents.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s9:636",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 636,
+        "end": 638
+      },
+      "verdict": "non-violation",
+      "reason": "'The first step in debugging a Pod is taking a look at it' can only mean looking at the Pod; the other nouns in the sentence ('step', 'look') are not things one takes a look at.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s12:822",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "they",
+      "span": {
+        "start": 822,
+        "end": 826
+      },
+      "verdict": "non-violation",
+      "reason": "'Are they all Running?' follows 'Look at the state of the containers in the pod'; only 'containers' is plural and only containers have a Running state, so the plural pronoun is fixed.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.88
+    },
+    {
+      "passageId": "passive-voice-candidate:s16:968",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is stuck",
+      "span": {
+        "start": 968,
+        "end": 976
+      },
+      "verdict": "non-violation",
+      "reason": "'is stuck in Pending' is an adjectival state describing the Pod's condition, not a passive verb with a suppressed actor, and the sentence is a diagnostic condition rather than an instruction.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s16:990",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 990,
+        "end": 992
+      },
+      "verdict": "non-violation",
+      "reason": "This is the idiomatic situational 'it means that ...', referring to the whole preceding condition; reading it as the Pod would produce nonsense, so no meaning-changing second resolution is available.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.78
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s16:1004",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 1004,
+        "end": 1006
+      },
+      "verdict": "non-violation",
+      "reason": "'it can not be scheduled onto a node' can only be the Pod, since Pods are the thing scheduled onto nodes; the two 'it's in the sentence are mildly awkward but not genuinely ambiguous.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.82
+    },
+    {
+      "passageId": "passive-voice-candidate:s16:1015",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be scheduled",
+      "span": {
+        "start": 1015,
+        "end": 1027
+      },
+      "verdict": "non-violation",
+      "reason": "Explanatory prose telling the reader what a Pending state means, not an instruction; the scheduler is named two sentences later anyway, so nothing is hidden from the reader.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.82
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s19:1266",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 1266,
+        "end": 1268
+      },
+      "verdict": "non-violation",
+      "reason": "'messages from the scheduler about why it can not schedule your pod' - only the scheduler schedules, and it is the nearest noun, so the pronoun resolves one way.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "noun-cluster-candidate:s22:1523",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "See [Compute Resources document",
+      "span": {
+        "start": 1523,
+        "end": 1554
+      },
+      "verdict": "non-violation",
+      "reason": "The span begins with the imperative 'See' and an opening markdown bracket; the actual content is the link text 'Compute Resources document', which is a document title and reads unambiguously.",
+      "reviewer": "reviewer-c",
+      "reviewerConfidence": 0.9
+    }
+  ]
 }

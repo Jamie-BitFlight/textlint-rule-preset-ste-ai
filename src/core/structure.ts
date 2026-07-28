@@ -64,23 +64,49 @@ const ADMONITION_WORDS: readonly [RegExp, AdmonitionKind][] = [
   [/\btip\b/i, 'note'],
 ];
 
+/** `.. warning::`, `.. admonition:: Danger` — reStructuredText and MyST directives. */
+const RST_DIRECTIVE_RE = /^\s*\.\.\s+([A-Za-z][A-Za-z-]*)::[ \t]*(.*)$/;
+/** `[WARNING]` on a line of its own — AsciiDoc's block admonition label. */
+const ASCIIDOC_LABEL_RE = /^\s*\[([A-Za-z]+)\][ \t]*$/;
+/** `WARNING` alone on a line, with no colon. Bold and underline variants included. */
+const BARE_LABEL_RE = /^\s*(?:\*{1,2}|_{1,2})?([A-Z][A-Z]{2,11})(?:\*{1,2}|_{1,2})?[ \t]*$/;
+
 /**
  * Recognise the admonition register of a line.
  *
- * Covers the four shapes that occur across the fixture corpus: GitHub alerts (`> [!WARNING]`),
- * MkDocs/Material admonitions (`!!! warning`), directive fences (`:::caution`), and the plain
- * leading-label form (`WARNING:` / `**Caution**` / `Danger!`). Returns `'none'` when the line
- * carries no safety register.
+ * Covers the shapes that occur across the fixture corpus and the ecosystems it is drawn from:
+ * GitHub alerts (`> [!WARNING]`), MkDocs/Material admonitions (`!!! warning`), directive fences
+ * (`:::caution`), reStructuredText and MyST directives (`.. warning::`, `.. admonition:: Danger`),
+ * AsciiDoc block labels (`[WARNING]`), and the plain leading-label form (`WARNING:` / `**Caution**`
+ * / `Danger!` / a bare `WARNING` line). Returns `'none'` when the line carries no safety register.
+ *
+ * The reStructuredText forms are not decoration: three fixtures in this corpus are RST, and while
+ * they were unrecognised every paragraph inside a `.. warning::` was treated as ordinary prose —
+ * which meant the autofix gate, whose entire job is to never rewrite inside a safety admonition,
+ * would have rewritten inside one.
  */
 export function detectAdmonition(line: string): AdmonitionKind {
   const gfm = /^\s*>?\s*\[!([A-Za-z]+)\]/.exec(line);
   const mkdocs = /^\s*(?:!!!|\?\?\?)\+?\s+([A-Za-z]+)/.exec(line);
-  const directive = /^\s*:{3,}\s*([A-Za-z]+)/.exec(line);
+  const directive = /^\s*:{3,}\s*\{?([A-Za-z]+)\}?/.exec(line);
+  const rst = RST_DIRECTIVE_RE.exec(line);
+  // `.. admonition:: Danger` names the register in its argument; every other directive names it in
+  // the directive itself, and its argument is a title that must not be read as a register.
+  const rstWord = rst === null ? undefined : rst[1] === 'admonition' ? rst[2] : rst[1];
+  const asciidoc = ASCIIDOC_LABEL_RE.exec(line);
   const label = /^\s*>?\s*(?:\*{1,2}|_{1,2})?([A-Z][A-Za-z]{2,11})(?:\*{1,2}|_{1,2})?\s*[:!]/.exec(
     line,
   );
-  const candidate = gfm?.[1] ?? mkdocs?.[1] ?? directive?.[1] ?? label?.[1];
-  if (candidate === undefined) return 'none';
+  const bare = BARE_LABEL_RE.exec(line);
+  const candidate =
+    gfm?.[1] ??
+    mkdocs?.[1] ??
+    directive?.[1] ??
+    rstWord ??
+    asciidoc?.[1] ??
+    label?.[1] ??
+    bare?.[1];
+  if (candidate === undefined || candidate.length === 0) return 'none';
   for (const [re, kind] of ADMONITION_WORDS) {
     if (re.test(candidate)) return kind;
   }
@@ -145,6 +171,15 @@ export function scanBlocks(
   /** Admonition register inherited by following indented/quoted content. */
   let containerAdmonition: AdmonitionKind = 'none';
   let containerIndent = -1;
+  /**
+   * Register that applies to the next block only.
+   *
+   * AsciiDoc writes the label on its own line and the content at the *same* indent, so the
+   * indent-scoped container above can never carry it: the very next line already satisfies
+   * `indent <= containerIndent` and clears it. A one-shot register is the correct scope for that
+   * shape, and consuming it on the next block keeps it from bleeding into the rest of the document.
+   */
+  let pendingAdmonition: AdmonitionKind = 'none';
 
   const push = (
     kind: BlockKind,
@@ -160,8 +195,10 @@ export function scanBlocks(
     const maskedSlice = masked.slice(trimmed.start, trimmed.end);
     // A block made only of protected content and structural markers carries no prose.
     if (maskedSlice.replace(/[\s�#>*_~|+-]/g, '').length === 0) return;
+    const pending = pendingAdmonition;
+    pendingAdmonition = 'none';
     const own = detectAdmonition(rawSlice);
-    const admonition = own !== 'none' ? own : admonitionHint;
+    const admonition = own !== 'none' ? own : pending !== 'none' ? pending : admonitionHint;
     const block: TextBlock = {
       id: nextId(),
       kind,
@@ -209,16 +246,26 @@ export function scanBlocks(
       continue;
     }
 
-    // Container-only admonition openers (`!!! warning`, `:::caution`, `> [!WARNING]` alone).
+    // Container-only admonition openers: the line names a register and carries no prose of its
+    // own, so the register belongs to what follows.
     const opener = detectAdmonition(line.raw);
     const isBareOpener =
       opener !== 'none' &&
       (/^\s*(?:!!!|\?\?\?)\+?\s+[A-Za-z]+\s*(?:"[^"]*")?\s*$/.test(line.raw) ||
-        /^\s*:{3,}\s*[A-Za-z]+\s*$/.test(line.raw) ||
-        /^\s*>\s*\[![A-Za-z]+\]\s*$/.test(line.raw));
+        /^\s*:{3,}\s*\{?[A-Za-z]+\}?\s*$/.test(line.raw) ||
+        /^\s*>\s*\[![A-Za-z]+\]\s*$/.test(line.raw) ||
+        // reStructuredText/MyST: `.. warning::`, optionally with a title on the same line. The
+        // body is indented under it, which is exactly the scope the indent container models.
+        RST_DIRECTIVE_RE.test(line.raw));
     if (isBareOpener) {
       containerAdmonition = opener;
       containerIndent = /^\s*/.exec(line.raw)?.[0].length ?? 0;
+      i += 1;
+      continue;
+    }
+    // AsciiDoc: `[WARNING]` labels the block that follows it at the same indent.
+    if (opener !== 'none' && ASCIIDOC_LABEL_RE.test(line.raw)) {
+      pendingAdmonition = opener;
       i += 1;
       continue;
     }

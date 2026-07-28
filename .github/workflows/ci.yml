@@ -44,3 +44,6 @@ jobs:
 
       - name: Confirm the rule set reports itself as provisional
         run: scripts/ci/check-rules-provisional.sh
+
+      - name: Confirm every candidate passage still has reviewer ground truth
+        run: scripts/ci/check-candidate-ground-truth.sh

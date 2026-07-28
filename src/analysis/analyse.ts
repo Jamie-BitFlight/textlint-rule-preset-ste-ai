@@ -42,6 +42,14 @@ export interface AnalyseTextOptions {
 export interface AnalysisResult {
   readonly document: AnalysedDocument;
   readonly diagnostics: readonly Diagnostic[];
+  /**
+   * Passages the deterministic rules handed to a semantic evaluator.
+   *
+   * Exposed because these, and only these, are what the semantic evaluators are measured on: the
+   * evaluation harness and the fixture-adjudication tooling both need the exact passage list, with
+   * spans, and recomputing it from diagnostics would not recover the evaluator routing or payload.
+   */
+  readonly candidates: readonly CandidatePassage[];
   readonly notices: readonly RunNotice[];
   readonly traces: readonly SemanticTrace[];
   readonly pack: RulePack;
@@ -86,6 +94,7 @@ export function analyseTextDeterministic(
 
   return {
     document,
+    candidates: run.candidates,
     diagnostics: [...run.diagnostics, ...undecided.diagnostics].sort(
       (a, b) =>
         a.range.start - b.range.start ||
@@ -211,6 +220,7 @@ export async function analyseText(
 
   return {
     document,
+    candidates: run.candidates,
     diagnostics: merged.diagnostics,
     notices: [...run.notices, ...semantic.notices, ...merged.notices],
     traces: semantic.traces,

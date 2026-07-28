@@ -18,7 +18,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "maintenance",
       "expectedClassification": "mixed",
-      "difficultFeatures": ["passive-voice", "long-sentences", "lists", "identifiers"],
+      "difficultFeatures": [
+        "passive-voice",
+        "long-sentences",
+        "lists",
+        "identifiers"
+      ],
       "originalPath": "original/sqlite-vacuum-space-reclaim.md",
       "compliantPath": "compliant/sqlite-vacuum-space-reclaim.md",
       "annotationPath": "annotations/sqlite-vacuum-space-reclaim.json",
@@ -43,7 +48,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "maintenance",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["contractions", "passive-voice", "long-sentences", "identifiers"],
+      "difficultFeatures": [
+        "contractions",
+        "passive-voice",
+        "long-sentences",
+        "identifiers"
+      ],
       "originalPath": "original/postgres-vacuum-overview.md",
       "compliantPath": "compliant/postgres-vacuum-overview.md",
       "annotationPath": "annotations/postgres-vacuum-overview.json",
@@ -67,7 +77,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "installation",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["lists", "code-blocks", "admonitions", "identifiers"],
+      "difficultFeatures": [
+        "lists",
+        "code-blocks",
+        "admonitions",
+        "identifiers"
+      ],
       "originalPath": "original/zephyr-dependency-setup.md",
       "compliantPath": "compliant/zephyr-dependency-setup.md",
       "annotationPath": "annotations/zephyr-dependency-setup.json",
@@ -91,7 +106,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "installation",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["lists", "code-blocks", "identifiers", "multiple-instructions"],
+      "difficultFeatures": [
+        "lists",
+        "code-blocks",
+        "identifiers",
+        "multiple-instructions"
+      ],
       "originalPath": "original/llvm-getting-started-build.md",
       "compliantPath": "compliant/llvm-getting-started-build.md",
       "annotationPath": "annotations/llvm-getting-started-build.json",
@@ -115,7 +135,11 @@
       "derivativeLicence": "CC-BY-4.0",
       "category": "troubleshooting",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["code-blocks", "lists", "identifiers"],
+      "difficultFeatures": [
+        "code-blocks",
+        "lists",
+        "identifiers"
+      ],
       "originalPath": "original/k8s-debug-pod-troubleshooting.md",
       "compliantPath": "compliant/k8s-debug-pod-troubleshooting.md",
       "annotationPath": "annotations/k8s-debug-pod-troubleshooting.json",
@@ -139,11 +163,16 @@
       "derivativeLicence": "CC-BY-4.0",
       "category": "troubleshooting",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["lists", "contractions", "passive-voice", "identifiers"],
+      "difficultFeatures": [
+        "lists",
+        "contractions",
+        "passive-voice",
+        "identifiers"
+      ],
       "originalPath": "original/k8s-audit-log-troubleshooting.md",
       "compliantPath": "compliant/k8s-audit-log-troubleshooting.md",
       "annotationPath": "annotations/k8s-audit-log-troubleshooting.json",
-      "split": "heldout",
+      "split": "dev",
       "originalSha256": "bd66cb8afc476965d2e9cbf1aa5e16353b8be7f49931057ddfcbeb024796dea9",
       "provenanceKey": "k8s-audit-raw"
     },
@@ -223,11 +252,15 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "descriptive",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["abbreviations", "identifiers", "passive-voice"],
+      "difficultFeatures": [
+        "abbreviations",
+        "identifiers",
+        "passive-voice"
+      ],
       "originalPath": "original/httpd-mod-ssl-overview.md",
       "compliantPath": "compliant/httpd-mod-ssl-overview.md",
       "annotationPath": "annotations/httpd-mod-ssl-overview.json",
-      "split": "dev",
+      "split": "heldout",
       "originalSha256": "04581dcc27f7fd3109a01afdcc44334607e63ed6e1df444833612202c62a5dd8",
       "provenanceKey": "httpd-mod-ssl-xml-raw"
     },
@@ -247,11 +280,14 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "descriptive",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["ambiguous-pronoun", "long-sentences"],
+      "difficultFeatures": [
+        "ambiguous-pronoun",
+        "long-sentences"
+      ],
       "originalPath": "original/sqlite-cli-description.md",
       "compliantPath": "compliant/sqlite-cli-description.md",
       "annotationPath": "annotations/sqlite-cli-description.json",
-      "split": "heldout",
+      "split": "dev",
       "originalSha256": "5eba83a15ce0fd4242fdd303144430185e01e94723211dce9b6ecf2ab9d626c0",
       "provenanceKey": "sqlite-cli"
     },
@@ -271,7 +307,13 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "api-configuration",
       "expectedClassification": "mixed",
-      "difficultFeatures": ["code-blocks", "lists", "contractions", "identifiers", "admonitions"],
+      "difficultFeatures": [
+        "code-blocks",
+        "lists",
+        "contractions",
+        "identifiers",
+        "admonitions"
+      ],
       "originalPath": "original/django-settings-configuration.md",
       "compliantPath": "compliant/django-settings-configuration.md",
       "annotationPath": "annotations/django-settings-configuration.json",
@@ -295,7 +337,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "api-configuration",
       "expectedClassification": "mixed",
-      "difficultFeatures": ["identifiers", "abbreviations", "code-blocks", "long-sentences"],
+      "difficultFeatures": [
+        "identifiers",
+        "abbreviations",
+        "code-blocks",
+        "long-sentences"
+      ],
       "originalPath": "original/httpd-mod-ssl-directive-config.md",
       "compliantPath": "compliant/httpd-mod-ssl-directive-config.md",
       "annotationPath": "annotations/httpd-mod-ssl-directive-config.json",
@@ -320,11 +367,16 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "cli-reference",
       "expectedClassification": "mixed",
-      "difficultFeatures": ["front-matter", "abbreviations", "identifiers", "long-sentences"],
+      "difficultFeatures": [
+        "front-matter",
+        "abbreviations",
+        "identifiers",
+        "long-sentences"
+      ],
       "originalPath": "original/curl-url-option-reference.md",
       "compliantPath": "compliant/curl-url-option-reference.md",
       "annotationPath": "annotations/curl-url-option-reference.json",
-      "split": "dev",
+      "split": "heldout",
       "originalSha256": "f8f7c6e9f0cd99dc823630bff69deb24b043e4daffc4f4451e395fd724bac3a7",
       "provenanceKey": "curl-cmdline-url-raw"
     },
@@ -344,7 +396,11 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "cli-reference",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["code-blocks", "identifiers", "multiple-instructions"],
+      "difficultFeatures": [
+        "code-blocks",
+        "identifiers",
+        "multiple-instructions"
+      ],
       "originalPath": "original/sqlite-cli-dot-commands.md",
       "compliantPath": "compliant/sqlite-cli-dot-commands.md",
       "annotationPath": "annotations/sqlite-cli-dot-commands.json",
@@ -368,7 +424,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "structured-content",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["tables", "lists", "code-blocks", "admonitions"],
+      "difficultFeatures": [
+        "tables",
+        "lists",
+        "code-blocks",
+        "admonitions"
+      ],
       "originalPath": "original/zephyr-dependency-table.md",
       "compliantPath": "compliant/zephyr-dependency-table.md",
       "annotationPath": "annotations/zephyr-dependency-table.json",
@@ -393,7 +454,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "structured-content",
       "expectedClassification": "procedural",
-      "difficultFeatures": ["tables", "lists", "code-blocks", "identifiers"],
+      "difficultFeatures": [
+        "tables",
+        "lists",
+        "code-blocks",
+        "identifiers"
+      ],
       "originalPath": "original/llvm-standalone-build-table.md",
       "compliantPath": "compliant/llvm-standalone-build-table.md",
       "annotationPath": "annotations/llvm-standalone-build-table.json",
@@ -418,7 +484,10 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "hard-negative",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["long-sentences", "identifiers"],
+      "difficultFeatures": [
+        "long-sentences",
+        "identifiers"
+      ],
       "originalPath": "original/sqlite-pragma-hard-negative.md",
       "compliantPath": "compliant/sqlite-pragma-hard-negative.md",
       "annotationPath": "annotations/sqlite-pragma-hard-negative.json",
@@ -443,7 +512,12 @@
       "derivativeLicence": "MIT (this repository)",
       "category": "hard-negative",
       "expectedClassification": "descriptive",
-      "difficultFeatures": ["passive-voice", "nested-conditions", "contractions", "identifiers"],
+      "difficultFeatures": [
+        "passive-voice",
+        "nested-conditions",
+        "contractions",
+        "identifiers"
+      ],
       "originalPath": "original/node-cli-hard-negative.md",
       "compliantPath": "compliant/node-cli-hard-negative.md",
       "annotationPath": "annotations/node-cli-hard-negative.json",

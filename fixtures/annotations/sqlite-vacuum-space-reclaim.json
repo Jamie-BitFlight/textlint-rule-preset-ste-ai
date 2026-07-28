@@ -8,8 +8,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p1",
       "originalText": "Unless SQLite is running in \"auto_vacuum=FULL\" mode, when a large amount of data is deleted from the database file it leaves behind empty space, or \"free\" database pages.",
       "rewrittenText": "Unless SQLite is running in \"auto_vacuum=FULL\" mode, deleting a large amount of data from the database file leaves behind empty space. This empty space is also called \"free\" database pages.",
-      "ruleIds": ["sentence-length-descriptive"],
-      "originalSpans": [{ "start": 318, "end": 488 }],
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 318,
+          "end": 488
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "sentence-length-descriptive",
@@ -30,8 +37,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p2",
       "originalText": "Frequent inserts, updates, and deletes can cause the database file to become fragmented - where data for a single table or index is scattered around the database file.",
       "rewrittenText": "Frequent inserts, updates, and deletes can cause the database file to become fragmented. Fragmentation means that data for a single table or index is scattered around the database file.",
-      "ruleIds": ["sentence-length-descriptive"],
-      "originalSpans": [{ "start": 663, "end": 830 }],
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 663,
+          "end": 830
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "sentence-length-descriptive",
@@ -51,8 +65,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p3",
       "originalText": "When content is deleted from an SQLite database, the content is not usually erased but rather the space used to hold the content is marked as being available for reuse.",
       "rewrittenText": "When content is deleted from an SQLite database, the content is not usually erased. Instead, the space used to hold the content is marked as available for reuse.",
-      "ruleIds": ["sentence-length-descriptive"],
-      "originalSpans": [{ "start": 1079, "end": 1247 }],
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 1079,
+          "end": 1247
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "sentence-length-descriptive",
@@ -73,8 +94,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p4",
       "originalText": "Running VACUUM will clean the database of all traces of deleted content, thus preventing an adversary from recovering deleted content.",
       "rewrittenText": "Running VACUUM will clean the database of all traces of deleted content, so it prevents an adversary from recovering deleted content.",
-      "ruleIds": ["unapproved-vocabulary"],
-      "originalSpans": [{ "start": 1405, "end": 1409 }],
+      "ruleIds": [
+        "unapproved-vocabulary"
+      ],
+      "originalSpans": [
+        {
+          "start": 1405,
+          "end": 1409
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "unapproved-vocabulary",
@@ -94,8 +122,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p5",
       "originalText": "VACUUM",
       "rewrittenText": "VACUUM",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 166, "end": 172 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 166,
+          "end": 172
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "abbreviation-introduction",
@@ -104,8 +139,12 @@
         }
       ],
       "reason": "VACUUM is the SQL command name being documented, not an abbreviation that requires spelling out on first use.",
-      "semanticInvariants": ["the command name VACUUM is unchanged"],
-      "unresolved": ["rule does not distinguish command names from true abbreviations"],
+      "semanticInvariants": [
+        "the command name VACUUM is unchanged"
+      ],
+      "unresolved": [
+        "rule does not distinguish command names from true abbreviations"
+      ],
       "status": "disputed",
       "reviewerConfidence": 0.95
     },
@@ -113,8 +152,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p6",
       "originalText": "auto_vacuum=FULL",
       "rewrittenText": "auto_vacuum=FULL",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 359, "end": 363 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 359,
+          "end": 363
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "abbreviation-introduction",
@@ -123,8 +169,12 @@
         }
       ],
       "reason": "FULL is a literal PRAGMA value inside the config fragment auto_vacuum=FULL, not a prose abbreviation.",
-      "semanticInvariants": ["the literal auto_vacuum=FULL config value is unchanged"],
-      "unresolved": ["rule tokenizes inside a config literal instead of skipping it"],
+      "semanticInvariants": [
+        "the literal auto_vacuum=FULL config value is unchanged"
+      ],
+      "unresolved": [
+        "rule tokenizes inside a config literal instead of skipping it"
+      ],
       "status": "disputed",
       "reviewerConfidence": 0.95
     },
@@ -132,8 +182,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p7",
       "originalText": "PRAGMA",
       "rewrittenText": "PRAGMA",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 1521, "end": 1527 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 1521,
+          "end": 1527
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "abbreviation-introduction",
@@ -142,8 +199,12 @@
         }
       ],
       "reason": "PRAGMA is a SQLite SQL keyword, not an abbreviation that needs to be introduced.",
-      "semanticInvariants": ["the keyword PRAGMA is unchanged"],
-      "unresolved": ["rule does not distinguish SQL keywords from true abbreviations"],
+      "semanticInvariants": [
+        "the keyword PRAGMA is unchanged"
+      ],
+      "unresolved": [
+        "rule does not distinguish SQL keywords from true abbreviations"
+      ],
       "status": "disputed",
       "reviewerConfidence": 0.95
     },
@@ -151,8 +212,15 @@
       "passageId": "sqlite-vacuum-space-reclaim-p8",
       "originalText": "secure_delete=ON",
       "rewrittenText": "secure_delete=ON",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 1542, "end": 1544 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 1542,
+          "end": 1544
+        }
+      ],
       "expectedDiagnostics": [
         {
           "ruleId": "abbreviation-introduction",
@@ -161,7 +229,9 @@
         }
       ],
       "reason": "\"ON\" is the literal boolean value of the secure_delete PRAGMA, not an abbreviation needing introduction.",
-      "semanticInvariants": ["the literal secure_delete=ON config value is unchanged"],
+      "semanticInvariants": [
+        "the literal secure_delete=ON config value is unchanged"
+      ],
       "unresolved": [
         "rule flags common short words like ON inside config literals as abbreviations"
       ],
@@ -169,7 +239,199 @@
       "reviewerConfidence": 0.9
     }
   ],
-  "protectedLiterals": ["auto_vacuum", "secure_delete", "VACUUM", "PRAGMA"],
-  "reviewers": ["rewriter-a"],
-  "notes": "auto_vacuum=FULL and secure_delete=ON are quoted/inline literal config expressions in the source prose (not fenced code); their SQL-keyword and value tokens falsely trigger abbreviation-introduction and are disputed rather than rewritten."
+  "protectedLiterals": [
+    "auto_vacuum",
+    "secure_delete",
+    "VACUUM",
+    "PRAGMA"
+  ],
+  "reviewers": [
+    "reviewer-d",
+    "rewriter-a"
+  ],
+  "notes": "auto_vacuum=FULL and secure_delete=ON are quoted/inline literal config expressions in the source prose (not fenced code); their SQL-keyword and value tokens falsely trigger abbreviation-introduction and are disputed rather than rewritten.",
+  "candidateAdjudications": [
+    {
+      "passageId": "ambiguous-pronoun-candidate:s1:219",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 219,
+        "end": 221
+      },
+      "verdict": "non-violation",
+      "reason": "In \"rebuilds the database file, repacking it into a minimal amount of disk space\", the only thing that can be repacked into disk space is the database file; the command itself is not a plausible object. The heuristic's antecedent list is a bag of content words, not competing referents.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s3:399",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is deleted",
+      "span": {
+        "start": 399,
+        "end": 409
+      },
+      "verdict": "non-violation",
+      "reason": "Descriptive prose about what happens to the file when data is removed, not an instruction; the deleting agent is any application and is genuinely irrelevant to the point being made. Naming an actor would narrow a general statement.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s3:433",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 433,
+        "end": 435
+      },
+      "verdict": "non-violation",
+      "reason": "The \"it\" in \"it leaves behind empty space\" is loose — it could be read as the deletion or as the database file — but both readings deliver the same fact to the reader, that free pages remain in the file, so the choice does not change the meaning. Weakest of the sqlite pronouns and I would not defend it as clean writing, only as non-defective.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.6
+    },
+    {
+      "passageId": "noun-cluster-candidate:s3:436",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "leaves behind empty space",
+      "span": {
+        "start": 436,
+        "end": 461
+      },
+      "verdict": "non-violation",
+      "reason": "This is a verb plus particle plus adjective plus noun, not a noun run at all; there is nothing for a reader to group wrongly. The heuristic's content-word counter has misfired on ordinary predicate structure.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s4:489",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "This",
+      "span": {
+        "start": 489,
+        "end": 493
+      },
+      "verdict": "non-violation",
+      "reason": "\"This means the database file might be larger than strictly necessary\" refers to the whole preceding proposition about leftover free pages, which is the only available reading and a standard discourse move. No competing referent is on offer.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.8
+    },
+    {
+      "passageId": "passive-voice-candidate:s6:792",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is scattered",
+      "span": {
+        "start": 792,
+        "end": 804
+      },
+      "verdict": "non-violation",
+      "reason": "\"where data for a single table or index is scattered around the database file\" describes a resulting state of fragmentation, closer to an adjectival property than to a verb with a suppressed actor, and it is descriptive prose rather than an instruction.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s7:880",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is largely stored",
+      "span": {
+        "start": 880,
+        "end": 897
+      },
+      "verdict": "non-violation",
+      "reason": "Descriptive statement of the guarantee VACUUM provides about on-disk layout; the storing agent is the database engine and is both obvious and beside the point. Not an instruction to the reader.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s7:883",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "largely stored contiguously within",
+      "span": {
+        "start": 883,
+        "end": 917
+      },
+      "verdict": "non-violation",
+      "reason": "Adverb, participle, adverb and preposition — a normal verb phrase, not a noun pile, and it ends on a preposition that binds to the following noun phrase. There is no grouping ambiguity for a reader to resolve.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.95
+    },
+    {
+      "passageId": "passive-voice-candidate:s9:1092",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is deleted",
+      "span": {
+        "start": 1092,
+        "end": 1102
+      },
+      "verdict": "non-violation",
+      "reason": "\"When content is deleted from an SQLite database\" is a general precondition in descriptive prose; the deleter is any application and naming one would wrongly narrow the scope of the statement.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "passive-voice-candidate:s9:1208",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "is marked",
+      "span": {
+        "start": 1208,
+        "end": 1217
+      },
+      "verdict": "non-violation",
+      "reason": "Describes internal engine behaviour — the space is flagged reusable by SQLite itself — in prose contrasted against \"is not usually erased\". The agent is the database engine and is irrelevant to the security point being made.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s10:1248",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "This",
+      "span": {
+        "start": 1248,
+        "end": 1252
+      },
+      "verdict": "non-violation",
+      "reason": "\"This can allow deleted content to be recovered\" points at the preceding whole fact that space is marked reusable rather than erased. That is the only reading that makes sense of \"can allow\", so there is no competing antecedent.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.8
+    },
+    {
+      "passageId": "passive-voice-candidate:s10:1282",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be recovered by",
+      "span": {
+        "start": 1282,
+        "end": 1297
+      },
+      "verdict": "non-violation",
+      "reason": "The agent is stated explicitly — \"by a hacker or by forensic analysis\" — so nothing is hidden, and the sentence is descriptive risk prose rather than an instruction. The passive is what keeps the deleted content in subject position where the reader's attention belongs.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s11:1388",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "deleted content, thus preventing",
+      "span": {
+        "start": 1388,
+        "end": 1420
+      },
+      "verdict": "non-violation",
+      "reason": "The run spans a comma and a clause boundary, joining the object of one clause to the participle opening the next; it is not a noun cluster anyone would try to parse as a unit.",
+      "reviewer": "reviewer-d",
+      "reviewerConfidence": 0.95
+    }
+  ]
 }

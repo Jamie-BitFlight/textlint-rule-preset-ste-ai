@@ -41,12 +41,45 @@ export const annotationChangeSchema = z.object({
   reviewerConfidence: z.number().min(0).max(1),
 });
 
+/**
+ * A reviewer's verdict on a heuristic candidate passage.
+ *
+ * `changes` records rewrites, and a rewrite is the wrong shape for this judgement: deciding that a
+ * passive sentence is acceptable produces no rewritten text, no invariants to preserve and nothing
+ * to diff. Without a place to record "reviewed, and it is fine", every candidate the deterministic
+ * pass could not decide stayed unlabelled — which left the semantic evaluation with no ground truth
+ * at all and made precision and recall permanently incomputable.
+ *
+ * These records are ground truth for the semantic evaluators, so they are bound to a location: a
+ * verdict applies to the span it was written about, never to every occurrence of the same rule in
+ * the document.
+ */
+export const candidateAdjudicationSchema = z.object({
+  passageId: z.string().min(1),
+  ruleId: z.string().min(1),
+  evaluatorId: z.string().min(1),
+  /** Exact substring of the original that the reviewer judged. */
+  quote: z.string().min(1),
+  span: spanSchema,
+  /**
+   * `violation` — the passage really is defective under the rule's stated intent.
+   * `non-violation` — the heuristic fired but the passage is acceptable.
+   * `undecidable` — the reviewer declined; excluded from the confusion matrix.
+   */
+  verdict: z.enum(['violation', 'non-violation', 'undecidable']),
+  reason: z.string().min(10),
+  reviewer: z.string().min(1),
+  reviewerConfidence: z.number().min(0).max(1),
+});
+
 export const annotationSchema = z.object({
   fixtureId: z.string().min(1),
   original: z.string().min(1),
   compliant: z.string().min(1),
   split: z.enum(['dev', 'heldout']),
   changes: z.array(annotationChangeSchema),
+  /** Verdicts on heuristic candidates that produced no rewrite. */
+  candidateAdjudications: z.array(candidateAdjudicationSchema).default([]),
   /** Literals a reviewer asserts must be byte-identical. Cross-checked against the extractor. */
   protectedLiterals: z.array(z.string()).default([]),
   reviewers: z.array(z.string().min(1)).min(1),
@@ -55,3 +88,4 @@ export const annotationSchema = z.object({
 
 export type Annotation = z.output<typeof annotationSchema>;
 export type AnnotationChange = z.output<typeof annotationChangeSchema>;
+export type CandidateAdjudication = z.output<typeof candidateAdjudicationSchema>;

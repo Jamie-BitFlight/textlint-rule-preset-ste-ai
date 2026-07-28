@@ -131,11 +131,12 @@ currently ask.
 
 ### 3.4 Things to take outright
 
-- **Inline suppression.** We have none. A textlint user can install
-  `textlint-filter-rule-comments` separately, but the framework-neutral core and the CLI
-  have no way to say "this usage is intentional". For a linter making provisional claims
-  this is close to a requirement — without it, a false positive can only be silenced by
-  disabling the rule globally. Their `copy-ignore` line marker is the minimum viable form.
+- **Inline suppression.** Taken, and now implemented in the core rather than left to
+  `textlint-filter-rule-comments`. For a linter making provisional claims this was close to a
+  requirement — without it, a false positive can only be silenced by disabling the rule
+  globally. Their `copy-ignore` line marker was the minimum viable form; what shipped adds a
+  required reason, a range form, and a record of every withheld finding. See
+  [suppression.md](suppression.md).
 - **Per-category document thresholds.** Their `--strict` fails only when a category reaches
   a count (2 hits, not 1), which is the right shape for a heuristic with known
   false positives. Our CLI has an exit-code contract but no "fail if more than N of X".
@@ -201,8 +202,10 @@ should route through that, not around it.
 Ordered so each step is independently useful and none depends on resolving the licence
 question.
 
-1. **Inline suppression in the core.** Highest value per line of code. Unblocks adoption of
-   every provisional rule, and needed regardless of anything else here.
+1. **Inline suppression in the core.** _Implemented._ Three `ste-ai-ignore-*` HTML-comment
+   directives, honoured in both `markdown` and `text` documents, with a required reason, a
+   refusal inside safety admonitions, and every withheld finding recorded in
+   `AnalysisResult.suppressions` rather than discarded. See [suppression.md](suppression.md).
 2. **Block position in `RuleInput`.** Small, enables position-sensitive rules of any kind.
 3. **The `observation` diagnostic category, plus the first document metrics** — sentence and
    paragraph length distribution, and reading-level-adjacent counts. Directly useful for

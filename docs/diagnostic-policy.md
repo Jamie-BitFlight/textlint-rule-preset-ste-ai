@@ -52,6 +52,30 @@ When semantic analysis is simply **disabled**, candidates become `review-require
 All of the above is testable and tested — the outage-policy block in the integration suite covers
 `notice`, `error`, `silent`, malformed replies, and the deterministic-set invariant.
 
+## A suppression is an authored claim
+
+An inline `ste-ai-ignore-*` directive does not delete a finding. It records that a person read the
+finding and decided it does not apply, and it carries their reason — a directive without a reason is
+inert and reported as `suppression-reason-missing`.
+
+The rule above governs this too. A withheld finding leaves `diagnostics` and does not leave the
+result: it appears in `AnalysisResult.suppressions`, in `ste-ai lint --json`, in the CLI's
+`suppressed` lines, and in a `suppressions-applied` notice carrying the count. A file that is clean
+because of six suppressions is not the same file as one that is clean, and the output says which it
+is.
+
+Inside a `danger`, `warning` or `caution` admonition a claim is **refused** by default: the
+diagnostic is kept and `suppression-refused-in-admonition` is emitted at `warning`. Setting
+`suppressions.allowInAdmonitions: true` permits it. That option exists at all — while
+`autofix.allowInAdmonitions` is typed `z.literal(false)` and cannot — because rewriting the source
+of a safety notice and withholding a report about one are different acts. The first changes what a
+reader in front of the equipment is told. The second is an operator's decision about the linter's
+output, permitted when taken explicitly and always recorded.
+
+Suppression is applied to candidates as well as to diagnostics, before adjudication: a suppressed
+passage is never sent to a semantic service. Full syntax and semantics are in
+[`suppression.md`](./suppression.md).
+
 ## Autofix policy
 
 A fix may exist only if one of two conditions holds:

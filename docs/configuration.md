@@ -95,6 +95,16 @@ They are read once from a shared file, resolved in this order (first hit wins):
     // "allowInAdmonitions" cannot be set to true.
   },
 
+  // Inline `ste-ai-ignore-*` directives. See docs/suppression.md.
+  "suppressions": {
+    // Honour inline directives. Set false to make every directive inert: nothing is
+    // scanned, nothing is withheld, and the file is reported as if it carried no directives.
+    "enabled": true,
+    // Permit a directive to withhold a finding inside a danger, warning or caution
+    // admonition. Off by default; every suppression is recorded either way.
+    "allowInAdmonitions": false,
+  },
+
   "diagnostics": {
     "reportReviewRequired": true,
     "reportSuppressed": false,
@@ -147,6 +157,16 @@ For a rule's options, lowest first:
 
 Layers are merged key by key, so a lower layer's `enabled: false` is not lost when a higher layer sets
 an unrelated key.
+
+### Inline suppression is not one of these layers
+
+`suppressions` is read only from the shared file; there is no per-rule or per-textlint-options form
+of it. Inline `ste-ai-ignore-*` directives are applied after every rule has run, to the diagnostics
+the run produced, so they cannot change a rule's options and a rule cannot see them.
+
+A suppressed finding is withheld from `diagnostics` but recorded in `AnalysisResult.suppressions`,
+in `--json`, and in a `suppressions-applied` notice. See
+[suppression.md](suppression.md).
 
 ## Offline, deterministic-only mode
 

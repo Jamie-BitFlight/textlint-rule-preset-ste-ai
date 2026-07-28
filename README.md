@@ -83,6 +83,13 @@ trigger, rationale and **observed failure modes** are in
 **A model outage is never converted into compliance.** Affected passages become `review-required` and
 a run notice records how many. See [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md).
 
+## Inline suppression
+
+`<!-- ste-ai-ignore-next-line rule-id -- reason -->` withholds one finding instead of disabling a
+provisional rule everywhere; the reason is required, the withheld finding is still recorded in
+`suppressions` and in `--json`, and a claim inside a danger, warning or caution admonition is
+refused by default. See [`docs/suppression.md`](docs/suppression.md).
+
 ## What is protected
 
 Code fences, inline code, shell commands, configuration fragments, URLs, email addresses, file paths,
@@ -194,6 +201,7 @@ npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # ne
 | [`docs/rule-authoring.md`](docs/rule-authoring.md)               | writing a rule                                  |
 | [`docs/semantic-evaluators.md`](docs/semantic-evaluators.md)     | evaluators, prompt contract, measurement        |
 | [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md)         | categories, outage policy, autofix policy       |
+| [`docs/suppression.md`](docs/suppression.md)                     | inline directives, and what they record         |
 | [`docs/configuration.md`](docs/configuration.md)                 | every option                                    |
 | [`docs/rule-pack-import.md`](docs/rule-pack-import.md)           | supplying licensed material                     |
 | [`docs/llama-cpp-setup.md`](docs/llama-cpp-setup.md)             | running the model service                       |

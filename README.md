@@ -199,6 +199,7 @@ npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # ne
 | [`docs/llama-cpp-setup.md`](docs/llama-cpp-setup.md)             | running the model service                       |
 | [`docs/fixtures.md`](docs/fixtures.md)                           | the corpus and its provenance                   |
 | [`docs/implementation-report.md`](docs/implementation-report.md) | what was built and verified                     |
+| [`docs/extension-roadmap.md`](docs/extension-roadmap.md)         | where this goes next, and what is blocked       |
 
 ## Licence
 

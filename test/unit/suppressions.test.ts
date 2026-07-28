@@ -77,8 +77,18 @@ function noticeWith(result: RunResult, code: string): RunNotice | undefined {
 const NEXT_LINE = [
   '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling fixed by contract. -->',
   'Utilise the bracket.',
+  '',
   'Utilise the filter.',
   '',
+].join('\n');
+
+/** The same sentence, written as one long line and as three soft-wrapped ones. */
+const UNWRAPPED =
+  'The technician must inspect the assembly and then utilise the bracket to hold the sensor.';
+const WRAPPED = [
+  'The technician must inspect the assembly and then',
+  'utilise the bracket to hold',
+  'the sensor.',
 ].join('\n');
 
 const SCOPED = [
@@ -157,10 +167,10 @@ describe('scanSuppressions', () => {
       start: 0,
       end: NEXT_LINE.indexOf('-->') + 3,
     });
-    // The span is the whole of the following line, terminator included.
+    // The span runs from the end of the directive to the end of the block beneath it.
     expect(directive?.range).toEqual({
-      start: NEXT_LINE.indexOf('Utilise the bracket.'),
-      end: NEXT_LINE.indexOf('Utilise the filter.'),
+      start: NEXT_LINE.indexOf('-->') + 3,
+      end: NEXT_LINE.indexOf('Utilise the bracket.') + 'Utilise the bracket.'.length,
     });
   });
 
@@ -216,7 +226,62 @@ describe('directiveFor', () => {
 });
 
 describe('applySuppressions', () => {
-  it('claims a finding on the following line and not on the line after that', () => {
+  it('claims the same findings whether the paragraph is soft-wrapped or not', () => {
+    // The property that motivates claiming a block rather than a line. Rewrapping a paragraph is
+    // not an edit to its wording, so it must not change what a suppression covers — under
+    // line-claiming, moving the offending word to the second line silently revoked the suppression.
+    for (const [shape, prose] of [
+      ['unwrapped', UNWRAPPED],
+      ['wrapped', WRAPPED],
+    ] as const) {
+      const text = [
+        '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+        prose,
+        '',
+      ].join('\n');
+      const result = run(text, [diagnosticFor(text, 'utilise')]);
+      expect(result.diagnostics, shape).toEqual([]);
+      expect(
+        result.suppressions.map((s) => s.reason),
+        shape,
+      ).toEqual(['Vendor spelling by contract.']);
+      expect(result.codes, shape).not.toContain('suppression-unused');
+    }
+  });
+
+  it('claims every sentence of the block it names, and not the block after it', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      'Utilise the bracket. Utilise the filter to remove the particles.',
+      '',
+      'Utilise the cover.',
+      '',
+    ].join('\n');
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the filter'),
+      diagnosticFor(text, 'Utilise the cover'),
+    ]);
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      '"Utilise the cover" is not an approved term.',
+    ]);
+    expect(result.suppressions).toHaveLength(2);
+  });
+
+  it('does not treat a directive comment line as the block it claims in a text document', () => {
+    // In `format: 'text'` the comment is not masked, so the directive line is a block of its own.
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')], { format: 'text' });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions.map((s) => s.reason)).toEqual(['Vendor spelling by contract.']);
+  });
+
+  it('claims the block below it and not the one after that', () => {
     const result = run(NEXT_LINE, [
       diagnosticFor(NEXT_LINE, 'Utilise the bracket'),
       diagnosticFor(NEXT_LINE, 'Utilise the filter'),
@@ -328,6 +393,7 @@ describe('applySuppressions', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Reason recorded for the audit. -->',
       'The cover is in place.',
+      '',
       'Utilise the bracket.',
       '',
     ].join('\n');
@@ -456,7 +522,7 @@ describe('applySuppressions', () => {
     ]);
   });
 
-  it('lets stacked directives inside a blockquote claim the same prose line', () => {
+  it('lets stacked directives inside a blockquote each claim the paragraph', () => {
     const result = run(QUOTED_STACK, [
       diagnosticFor(QUOTED_STACK, 'Terminate'),
       diagnosticFor(
@@ -478,11 +544,12 @@ describe('applySuppressions', () => {
     expect(result.diagnostics).toHaveLength(1);
   });
 
-  it('claims a multi-line diagnostic by the line it starts on', () => {
+  it('claims a multi-line diagnostic by the block it starts in', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line sentence-length-procedural -- Step retained verbatim. -->',
       'Utilise the bracket to hold the sensor and then',
       'tighten the screw to the specified torque value.',
+      '',
       'Utilise the filter to remove the particles and then',
       'close the cover.',
       '',

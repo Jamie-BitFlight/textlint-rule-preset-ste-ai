@@ -32,15 +32,6 @@ const REASON_SEPARATOR = ' -- ';
 
 const COMMENT_RE = /<!--([\s\S]*?)-->/g;
 
-/**
- * Blockquote markers, stripped before a line is tested for being nothing but a directive.
- *
- * `> <!-- ... -->` is a directive line in every sense that matters: the marker is structural markup,
- * not content. Without this, stacked directives inside a blockquote each claimed the next one's
- * line instead of the prose beneath them.
- */
-const BLOCKQUOTE_PREFIX = /^[ \t]*(?:>[ \t]*)+/;
-
 /** Safety registers where a suppression is refused unless the operator has opted in. */
 const GUARDED_ADMONITIONS: ReadonlySet<AdmonitionKind> = new Set<AdmonitionKind>([
   'danger',
@@ -85,7 +76,7 @@ interface OpenRange {
 export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
   const text = doc.text;
   const lineStarts = computeLineStarts(text);
-  const directiveLines = directiveOnlyLines(text, lineStarts);
+  const commentRanges = directiveCommentRanges(doc);
   const directives: SuppressionDirective[] = [];
   const notices: RunNotice[] = [];
   let open: OpenRange | undefined;
@@ -145,7 +136,7 @@ export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
       directives.push({
         kind: 'next-line',
         directiveRange: comment.directiveRange,
-        range: nextEligibleLineRange(text, lineStarts, directiveLines, comment.directiveRange.end),
+        range: nextBlockRange(doc, commentRanges, comment.directiveRange),
         ruleIds: parsed.ruleIds,
         reason: parsed.reason,
       });
@@ -176,7 +167,7 @@ export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
   directives.sort(
     (a, b) => a.directiveRange.start - b.directiveRange.start || a.range.start - b.range.start,
   );
-  return { directives, notices, commentRanges: directiveCommentRanges(doc) };
+  return { directives, notices, commentRanges };
 }
 
 /**
@@ -415,43 +406,50 @@ function parseRuleIdsAndReason(
 // ---------------------------------------------------------------------------
 
 /**
- * The whole of the next eligible line after the line holding `offset`, terminator included.
+ * The span a `next-line` directive claims: the remainder of the first block that ends after it.
  *
- * Blank lines are skipped because a blank line between an HTML comment and the paragraph it
- * annotates is ordinary Markdown formatting, and directive-only lines are skipped so that
- * directives stack — one line of prose, one directive per rule id and reason.
+ * A **block**, not a line. This linter judges wording, and rewrapping a paragraph is not an edit to
+ * its wording — but under line-claiming, reflowing a paragraph so that the offending word moved to
+ * the second line silently revoked the suppression and reported the finding. Block boundaries come
+ * from blank lines and structure, so they survive a rewrap.
+ *
+ * The chosen block is the first one *ending* after the directive rather than the first one starting
+ * after it. A directive written immediately above its paragraph, with no blank line — the idiom
+ * every user brings from eslint — is absorbed into that paragraph's own block, which therefore
+ * starts at the comment rather than after it. Clamping the span to begin at the end of the comment
+ * is what stops such a directive from also claiming prose written above it.
+ *
+ * Blocks lying wholly inside a directive comment are skipped: in `format: 'text'` a comment is not
+ * masked, so a directive followed by a blank line is a paragraph in its own right.
+ *
+ * The keyword is still `ste-ai-ignore-next-line`; the idiom is what users expect to type, and the
+ * precision belongs in the documentation rather than in a name nobody would guess.
  */
-function nextEligibleLineRange(
-  text: string,
-  lineStarts: readonly number[],
-  directiveLines: ReadonlySet<number>,
-  offset: number,
+function nextBlockRange(
+  doc: AnalysedDocument,
+  commentRanges: readonly SourceRange[],
+  directiveRange: SourceRange,
 ): SourceRange {
-  const line = positionAt(lineStarts, offset).line;
-  for (let index = line; index < lineStarts.length; index += 1) {
-    const start = lineStarts[index];
-    if (start === undefined) break;
-    if (directiveLines.has(index + 1)) continue;
-    const end = lineStarts[index + 1] ?? text.length;
-    if (text.slice(start, end).trim().length === 0) continue;
-    return { start, end };
+  let chosen: SourceRange | undefined;
+  for (const block of doc.blocks) {
+    if (block.range.end <= directiveRange.end) continue;
+    const inComment = commentRanges.some(
+      (comment) => block.range.start >= comment.start && block.range.end <= comment.end,
+    );
+    if (inComment) continue;
+    // Earliest block wins; where two share a start the narrower one does, so a nested block is
+    // never widened into its container.
+    if (
+      chosen === undefined ||
+      block.range.start < chosen.start ||
+      (block.range.start === chosen.start && block.range.end < chosen.end)
+    ) {
+      chosen = block.range;
+    }
   }
   // Nothing left to claim. An empty span claims nothing and surfaces as `suppression-unused`.
-  return { start: text.length, end: text.length };
-}
-
-/** 1-based numbers of the lines whose entire content is one directive comment. */
-function directiveOnlyLines(text: string, lineStarts: readonly number[]): Set<number> {
-  const out = new Set<number>();
-  for (let index = 0; index < lineStarts.length; index += 1) {
-    const start = lineStarts[index];
-    if (start === undefined) continue;
-    const end = lineStarts[index + 1] ?? text.length;
-    const trimmed = text.slice(start, end).replace(BLOCKQUOTE_PREFIX, '').trim();
-    const inner = /^<!--([\s\S]*?)-->$/.exec(trimmed)?.[1];
-    if (inner !== undefined && inner.trim().startsWith(KEYWORD_PREFIX)) out.add(index + 1);
-  }
-  return out;
+  if (chosen === undefined) return { start: doc.text.length, end: doc.text.length };
+  return { start: Math.max(chosen.start, directiveRange.end), end: chosen.end };
 }
 
 /** The safety register of the block holding `offset`; `'none'` when no block does. */

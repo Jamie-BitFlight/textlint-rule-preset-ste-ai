@@ -39,17 +39,27 @@ but not the argument for it has replaced one unverified claim with another.
 
 ## What a directive claims
 
-| Form                      | Span claimed                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `ste-ai-ignore-next-line` | the whole of the next eligible line after the line containing the directive, including its terminator |
-| `ste-ai-ignore-start`     | from the end of the `ignore-start` comment to the start of the matching `ignore-end`                  |
-| `ste-ai-ignore-end`       | nothing; it closes the open `ignore-start`                                                            |
+| Form                      | Span claimed                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `ste-ai-ignore-next-line` | the next block of prose                                                              |
+| `ste-ai-ignore-start`     | from the end of the `ignore-start` comment to the start of the matching `ignore-end` |
+| `ste-ai-ignore-end`       | nothing; it closes the open `ignore-start`                                           |
 
-A line is **eligible** for `ste-ai-ignore-next-line` when it contains at least one non-whitespace
-character and is not itself entirely a suppression directive. Blank lines are skipped because a
-blank line between an HTML comment and the paragraph beneath it is ordinary Markdown formatting,
-and a directive that claimed the blank line would claim nothing. Directive-only lines are skipped
-so that directives stack, each claiming the same prose line for its own rule id and its own reason:
+**A block, not a line.** `ste-ai-ignore-next-line` claims the first block whose end lies after the
+directive, with the span clamped to begin at the directive's own end. A block is a paragraph, a
+heading, a list item, a table cell, a block quote or a caption — the same unit every rule works in.
+
+The keyword keeps the name every other linter uses, because that is the name a reader reaches for.
+What it claims is a block, and the distinction matters in three places:
+
+- **A soft-wrapped paragraph is one block**, so the claim does not move when the prose is rewrapped.
+  See [Reformatting the prose](#reformatting-the-prose).
+- **A directive written directly above its paragraph, with no blank line, is absorbed into that
+  paragraph's block** — the block therefore starts before the directive. The clamp is what keeps
+  such a directive claiming the rest of its own paragraph rather than the prose above it.
+- **Blank lines and blockquote markers need no special handling.** A directive separated from its
+  paragraph by a blank line produces no block of its own in markdown, and a directive inside a
+  blockquote is not prose either, so stacking works in both without a rule for either:
 
 ```markdown
 <!-- ste-ai-ignore-next-line unapproved-vocabulary -- "terminate" is the vendor's API verb -->
@@ -57,6 +67,12 @@ so that directives stack, each claiming the same prose line for its own rule id 
 
 Terminate the session before you remove the module.
 ```
+
+Both directives above claim the same paragraph, each for its own rule id and its own reason.
+
+Claiming a block is wider than claiming a line: a directive above a paragraph of five sentences
+covers all five for the rule ids it names. Name the rule ids to keep the claim narrow, and prefer a
+directive per paragraph over a range covering several.
 
 A finding is claimed when its **start offset** falls in `[span.start, span.end)` and the
 directive's rule-id list is empty or contains the finding's rule id. Where two directives both
@@ -79,26 +95,31 @@ for a reader.
 
 ### Reformatting the prose
 
-Because `ste-ai-ignore-next-line` claims exactly one line, a formatter that rewraps prose can move
-the offending text off the claimed line and the suppression stops applying. Measured on a
-paragraph reflowed so the offending word moved to the second line:
+Rewrapping a paragraph does not change what a directive claims. This linter reads wording, not
+whitespace: a soft wrap is not a boundary any part of the analysis recognises, so the same prose
+wrapped and unwrapped is the same prose.
 
-| Document                                          | Finding reported | Withheld | `suppression-unused` |
-| ------------------------------------------------- | ---------------: | -------: | -------------------: |
-| directive, offending word on the next line        |                0 |        1 |                    0 |
-| directive, word reflowed onto the second line     |                1 |        0 |                    1 |
-| `ignore-start` / `ignore-end` over the same prose |                0 |        1 |                    0 |
-| no directive, for comparison                      |                1 |        0 |                    0 |
+Measured over the same three sentences written as one long line and as six soft-wrapped ones:
 
-Prettier does not rewrap prose unless it is configured to. Its `proseWrap` option defaults to
-`preserve`, and this repository sets no value for it, so running Prettier over a document does not
-move a claimed line. A formatter run with `proseWrap: always`, or an author rewrapping a paragraph
-by hand, does.
+| Property           | Unwrapped | Wrapped   |
+| ------------------ | --------- | --------- |
+| lines              | 1         | 6         |
+| blocks             | 1         | 1         |
+| sentences          | 3         | 3         |
+| words per sentence | 12, 24, 8 | 12, 24, 8 |
+| diagnostics        | —         | identical |
+| candidates         | —         | identical |
 
-Note the second row: the finding comes back **and** `suppression-unused` is emitted. Drift of this
-kind fails towards reporting, never towards false silence, and the notice names the line so the
-directive can be moved. Where prose is expected to be reflowed, prefer the range form, which is not
-sensitive to where a line ends.
+Suppressions inherit that property from the block unit, and a test asserts it directly: the same
+paragraph, wrapped and unwrapped, withholds the same findings and emits no `suppression-unused`.
+
+An earlier revision of this feature claimed a physical line, and a paragraph rewrapped so the
+offending word moved to a later line stopped being covered. That is fixed. It is recorded here
+because the failure was instructive: the line was the only unit in this package that whitespace
+could move, and it was borrowed from linters that read code, where a line is structural.
+
+Line breaks that _are_ structural — a table row, a list item, a heading — are block boundaries and
+continue to be honoured as such.
 
 ## Configuration
 

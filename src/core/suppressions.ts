@@ -1,3 +1,4 @@
+import { STRUCTURAL_MARKER_KINDS } from './document.js';
 import { computeLineStarts, positionAt } from './text.js';
 import type {
   AdmonitionKind,
@@ -448,8 +449,49 @@ function nextBlockRange(
     }
   }
   // Nothing left to claim. An empty span claims nothing and surfaces as `suppression-unused`.
-  if (chosen === undefined) return { start: doc.text.length, end: doc.text.length };
-  return { start: Math.max(chosen.start, directiveRange.end), end: chosen.end };
+  const nothing = { start: doc.text.length, end: doc.text.length };
+  if (chosen === undefined) return nothing;
+  const start = Math.max(chosen.start, directiveRange.end);
+  if (!gapIsClear(doc, commentRanges, directiveRange.end, start)) return nothing;
+  return { start, end: chosen.end };
+}
+
+/**
+ * Whether nothing but skippable material lies between a directive and the block it would claim.
+ *
+ * A claim must not travel. Content that yields no block of its own — a fenced or indented sample,
+ * an HTML block, a paragraph made entirely of protected content — was stepped over in silence, and
+ * the directive then withheld a finding in a paragraph the author had never pointed at.
+ *
+ * Three things are skippable, and only three. Whitespace, so that the reflow invariance of block
+ * claiming survives. Live directive comments, so that stacked directives keep claiming the same
+ * block. Structural markers — a list bullet, a heading's hashes, a blockquote's arrow — because a
+ * block's range begins after its own marker, so the marker is the introduction to the claimed block
+ * rather than content standing between the author and it.
+ */
+function gapIsClear(
+  doc: AnalysedDocument,
+  commentRanges: readonly SourceRange[],
+  from: number,
+  to: number,
+): boolean {
+  if (to <= from) return true;
+
+  const skippable = [
+    ...commentRanges,
+    ...doc.protectedRegions
+      .filter((region) => STRUCTURAL_MARKER_KINDS.has(region.kind))
+      .map((region) => region.range),
+  ].sort((a, b) => a.start - b.start || a.end - b.end);
+
+  let cursor = from;
+  for (const span of skippable) {
+    if (span.end <= cursor || span.start >= to) continue;
+    if (doc.text.slice(cursor, Math.min(span.start, to)).trim().length > 0) return false;
+    cursor = Math.max(cursor, span.end);
+    if (cursor >= to) return true;
+  }
+  return doc.text.slice(cursor, to).trim().length === 0;
 }
 
 /** The safety register of the block holding `offset`; `'none'` when no block does. */

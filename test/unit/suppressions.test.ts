@@ -268,6 +268,71 @@ describe('applySuppressions', () => {
     expect(result.suppressions).toHaveLength(2);
   });
 
+  it('claims nothing when unclaimable content lies between it and the next block', () => {
+    // An indented sample is entirely protected, so it produces no block of its own. Stepping over
+    // it silently would withhold a finding in a paragraph the author never pointed at.
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '    <!-- ste-ai-ignore-next-line unapproved-vocabulary -- Sample only. -->',
+      '',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.suppressions).toEqual([]);
+    expect(result.codes).toContain('suppression-unused');
+  });
+
+  it('claims nothing across a fenced code block', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '```sh',
+      'utilise --now',
+      '```',
+      '',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.suppressions).toEqual([]);
+    expect(result.codes).toContain('suppression-unused');
+  });
+
+  it('still claims the first item of the list beneath it', () => {
+    // A list bullet is markup introducing the claimed block, not content standing between.
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '1. Utilise the bracket.',
+      '2. Utilise the filter.',
+      '',
+    ].join('\n');
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the filter'),
+    ]);
+    expect(result.suppressions.map((s) => s.message)).toEqual([
+      '"Utilise the bracket" is not an approved term.',
+    ]);
+    expect(result.diagnostics).toHaveLength(1);
+  });
+
+  it('still claims the heading beneath it', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '# Utilise the bracket',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions).toHaveLength(1);
+  });
+
   it('does not treat a directive comment line as the block it claims in a text document', () => {
     // In `format: 'text'` the comment is not masked, so the directive line is a block of its own.
     const text = [

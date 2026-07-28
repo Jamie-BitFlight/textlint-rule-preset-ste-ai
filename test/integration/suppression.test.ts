@@ -111,6 +111,73 @@ describe('inline suppression in a deterministic run', () => {
   });
 });
 
+describe('overlapping fixes are resolved after suppression', () => {
+  const CONFLICT = 'Utilise utilise the bracket.';
+  const SUPPRESSED = [
+    '<!-- ste-ai-ignore-next-line no-repeated-words -- Repetition quoted verbatim. -->',
+    CONFLICT,
+    '',
+  ].join('\n');
+
+  it('leaves a surviving diagnostic its fix when the conflicting one was withheld', () => {
+    const result = analyseTextDeterministic(SUPPRESSED);
+
+    expect(result.suppressions.map((s) => s.ruleId)).toEqual(['no-repeated-words']);
+    expect(result.diagnostics.map((d) => d.ruleId)).toEqual([
+      'unapproved-vocabulary',
+      'unapproved-vocabulary',
+    ]);
+    // A withheld finding is not a party to a fix conflict. Before this the survivor was left
+    // permanently unfixable by a diagnostic that is not in the output.
+    expect(result.diagnostics.filter((d) => d.fix === undefined)).toEqual([]);
+    expect(result.notices.map((n) => n.code)).not.toContain('overlapping-fixes-refused');
+    for (const diagnostic of result.diagnostics) {
+      expect(diagnostic.message).not.toContain('No automatic fix');
+    }
+  });
+
+  it('still refuses both fixes when the conflict is real', () => {
+    const result = analyseTextDeterministic(`${CONFLICT}\n`);
+
+    const refused = result.notices.find((n) => n.code === 'overlapping-fixes-refused');
+    expect(refused?.detail?.['count']).toBe(2);
+    expect(result.diagnostics.find((d) => d.ruleId === 'no-repeated-words')?.fix).toBeUndefined();
+    expect(result.diagnostics.filter((d) => d.fix === undefined)).toHaveLength(2);
+  });
+
+  it('resolves a genuine conflict through the semantic entry point', async () => {
+    service = await startFakeSemanticService({
+      handler: () => ({
+        content: verdictJson({
+          ruleId: CANDIDATE_RULE,
+          status: 'compliant',
+          confidence: 0.9,
+          explanation: 'ok',
+          suggestedReplacements: [],
+        }),
+      }),
+    });
+
+    const result = await analyseText(`${CONFLICT} The cover is opened by the operator.\n`, {
+      config: {
+        semantic: {
+          enabled: true,
+          endpoint: service.url,
+          model: 'fake',
+          cache: false,
+          maxRepairAttempts: 0,
+        },
+      },
+    });
+
+    // Positive control: semantic diagnostics really were merged in before resolution ran.
+    expect(service.requestCount()).toBe(1);
+    const refused = result.notices.find((n) => n.code === 'overlapping-fixes-refused');
+    expect(refused?.detail?.['count']).toBe(2);
+    expect(result.diagnostics.find((d) => d.ruleId === 'no-repeated-words')?.fix).toBeUndefined();
+  });
+});
+
 describe('a claim on a candidate inside a safety admonition', () => {
   it('is refused, and the candidate survives to be adjudicated', () => {
     const text = admonitionDoc('WARNING');

@@ -31,7 +31,7 @@ import type {
  * Protected kinds that are pure markup. They must stay visible while blocks are being scanned
  * (the scanner needs the markers to find blocks) and they contribute no words.
  */
-const STRUCTURAL_MARKER_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
+export const STRUCTURAL_MARKER_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
   'list-marker',
   'heading-marker',
   'blockquote-marker',

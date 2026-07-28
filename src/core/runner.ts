@@ -24,6 +24,15 @@ export interface RunOptions {
   readonly pack: RulePack;
   /** Restrict the run to a single rule id. Used by the per-rule textlint adapters. */
   readonly onlyRuleId?: string;
+  /**
+   * Resolve overlapping fixes before returning. Default true.
+   *
+   * The analysis layer sets it false and resolves after inline suppression has run instead. A
+   * withheld diagnostic must not count as a party to a fix conflict: resolving first left the
+   * survivor of a suppressed pair permanently unfixable, and emitted an `overlapping-fixes-refused`
+   * notice describing a disagreement with a diagnostic that is not in the output.
+   */
+  readonly resolveFixes?: boolean;
 }
 
 /**
@@ -104,7 +113,10 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
     candidates.push(...output.candidates);
   }
 
-  const { diagnostics: resolved, notices: fixNotices } = resolveOverlappingFixes(diagnostics);
+  const { diagnostics: resolved, notices: fixNotices } =
+    (options.resolveFixes ?? true)
+      ? resolveOverlappingFixes(diagnostics)
+      : { diagnostics, notices: [] };
   notices.push(...fixNotices);
 
   resolved.sort(

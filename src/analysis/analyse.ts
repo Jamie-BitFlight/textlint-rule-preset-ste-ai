@@ -99,7 +99,15 @@ export function analyseTextDeterministic(
     },
   );
 
-  const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
+  // Fix conflicts are resolved below instead, once the suppressed findings are out of the list: a
+  // finding nobody will be shown must not be able to veto another finding's fix.
+  const run = runDeterministicRules({
+    doc: document,
+    rules: deterministicRules,
+    config,
+    pack,
+    resolveFixes: false,
+  });
 
   const pass = suppressCandidates(document, run.candidates, config);
 
@@ -119,17 +127,19 @@ export function analyseTextDeterministic(
     config,
   );
 
+  const resolved = resolveOverlappingFixes(suppressed.diagnostics);
+
   return {
     document,
     candidates: pass.candidates,
     suppressions: suppressed.suppressions,
-    diagnostics: [...suppressed.diagnostics].sort(
+    diagnostics: [...resolved.diagnostics].sort(
       (a, b) =>
         a.range.start - b.range.start ||
         a.range.end - b.range.end ||
         a.ruleId.localeCompare(b.ruleId),
     ),
-    notices: [...run.notices, ...undecided.notices, ...suppressed.notices],
+    notices: [...run.notices, ...undecided.notices, ...suppressed.notices, ...resolved.notices],
     traces: [],
     pack,
     config,
@@ -367,7 +377,15 @@ export async function analyseText(
     },
   );
 
-  const run = runDeterministicRules({ doc: document, rules: deterministicRules, config, pack });
+  // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the
+  // semantic fixes anyway, and a withheld finding must not veto a surviving finding's fix.
+  const run = runDeterministicRules({
+    doc: document,
+    rules: deterministicRules,
+    config,
+    pack,
+    resolveFixes: false,
+  });
 
   const pass = suppressCandidates(document, run.candidates, config);
 
@@ -394,11 +412,17 @@ export async function analyseText(
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 
-  // Overlap resolution must see deterministic and semantic fixes together.
-  const merged = resolveOverlappingFixes([...run.diagnostics, ...semantic.diagnostics]);
+  const suppressed = suppressDiagnostics(
+    document,
+    [...run.diagnostics, ...semantic.diagnostics],
+    pass,
+    config,
+  );
 
-  const suppressed = suppressDiagnostics(document, merged.diagnostics, pass, config);
-  const diagnostics = [...suppressed.diagnostics].sort(
+  // Overlap resolution must see deterministic and semantic fixes together, and must see only the
+  // findings that survived suppression.
+  const merged = resolveOverlappingFixes(suppressed.diagnostics);
+  const diagnostics = [...merged.diagnostics].sort(
     (a, b) =>
       a.range.start - b.range.start ||
       a.range.end - b.range.end ||
@@ -411,7 +435,7 @@ export async function analyseText(
     candidates: pass.candidates,
     suppressions: suppressed.suppressions,
     diagnostics,
-    notices: [...run.notices, ...semantic.notices, ...merged.notices, ...suppressed.notices],
+    notices: [...run.notices, ...semantic.notices, ...suppressed.notices, ...merged.notices],
     traces: semantic.traces,
     pack,
     config,

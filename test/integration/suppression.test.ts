@@ -314,6 +314,56 @@ describe('a suppressed candidate is never sent to the model', () => {
     expect(record?.message).toBe('Auxiliary plus past participle.');
   });
 
+  it('redacts a directive comment from a surviving candidate that merely shares its sentence', async () => {
+    // No blank line between the comment and the prose, so sentence-splitter does not treat the
+    // directive as its own sentence: the candidate for "is opened by" is anchored in the prose,
+    // outside the comment's own span, and is NOT claimed — the directive names a different rule
+    // entirely. It survives to be dispatched. Its `passage`, built from the whole sentence, would
+    // carry the comment's raw text without the redaction this test is for.
+    const text =
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- vendor spelling fixed by contract -->' +
+      ' The cover is opened by the operator.\n';
+    const bodies: string[] = [];
+    service = await startFakeSemanticService({
+      handler: (body) => {
+        bodies.push(JSON.stringify(body));
+        return {
+          content: verdictJson({
+            ruleId: CANDIDATE_RULE,
+            status: 'compliant',
+            confidence: 0.9,
+            explanation: 'ok',
+            suggestedReplacements: [],
+          }),
+        };
+      },
+    });
+
+    await analyseText(text, {
+      format: 'text',
+      config: {
+        semantic: {
+          enabled: true,
+          endpoint: service.url,
+          model: 'fake',
+          cache: false,
+          maxRepairAttempts: 0,
+        },
+      },
+    });
+
+    // Positive control: the candidate this test is about really was dispatched.
+    expect(service.requestCount()).toBe(1);
+    const sent = bodies.join('\n');
+    expect(sent).toContain('is opened by the operator');
+
+    // The leak this test guards against: an unrelated directive's syntax, rule id and reason must
+    // not travel to the model just because it shares a sentence with a genuine candidate.
+    expect(sent).not.toContain('ste-ai-ignore-next-line');
+    expect(sent).not.toContain('unapproved-vocabulary');
+    expect(sent).not.toContain('vendor spelling fixed by contract');
+  });
+
   it('dispatches a candidate whose claim was refused inside a safety admonition', async () => {
     const bodies: string[] = [];
     service = await startFakeSemanticService({

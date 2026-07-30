@@ -8,6 +8,7 @@ import {
   refuseInAdmonition,
   scanSuppressions,
 } from '../core/suppressions.js';
+import { maskRanges } from '../core/text.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -197,7 +198,7 @@ function suppressCandidates(
 
     const directive = directiveFor(scan.directives, candidate.ruleId, candidate.range.start);
     if (directive === undefined) {
-      kept.push(candidate);
+      kept.push(redactDirectiveComments(candidate, scan.commentRanges));
       continue;
     }
     // Counted as used even when the claim is refused below: the directive did point at a real
@@ -214,7 +215,7 @@ function suppressCandidates(
     );
     if (refusal !== undefined) {
       notices.push(refusal);
-      kept.push(candidate);
+      kept.push(redactDirectiveComments(candidate, scan.commentRanges));
       continue;
     }
 
@@ -222,6 +223,36 @@ function suppressCandidates(
   }
 
   return { directives: scan.directives, notices, candidates: kept, records, claimed: [...claimed] };
+}
+
+/**
+ * Mask any directive-comment text caught inside a surviving candidate's passage.
+ *
+ * `passage` is built from the whole sentence a candidate's match falls in
+ * (`pushCandidate` in `src/deterministic/rules/candidate-rules.ts`), and a directive comment can
+ * share a sentence with the prose it annotates — in `format: 'text'` a comment is not masked out at
+ * all, and even in markdown a sentence can run from a comment straight into unpunctuated prose. A
+ * candidate anchored in the prose therefore is not itself suppressed, but without this its passage
+ * would still carry the comment's raw text — an unrelated rule id, another rule's reason, the
+ * directive's own reason — out to the semantic service. `docs/suppression.md` promises a suppressed
+ * passage never leaves the process; a passage that merely shares a sentence with one should not
+ * leak the directive's text either.
+ *
+ * Masked with {@link maskRanges} rather than deleted, so `passageOffset` stays a valid arithmetic
+ * base for every span in the passage, exactly as `doc.maskedText` never changes length.
+ */
+function redactDirectiveComments(
+  candidate: CandidatePassage,
+  commentRanges: readonly SourceRange[],
+): CandidatePassage {
+  const local = commentRanges
+    .map((range) => ({
+      start: range.start - candidate.passageOffset,
+      end: range.end - candidate.passageOffset,
+    }))
+    .filter((range) => range.end > 0 && range.start < candidate.passage.length);
+  if (local.length === 0) return candidate;
+  return { ...candidate, passage: maskRanges(candidate.passage, local) };
 }
 
 /**

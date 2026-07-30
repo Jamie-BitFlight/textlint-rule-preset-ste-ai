@@ -2,6 +2,7 @@ import { parse } from '@textlint/markdown-to-ast';
 import type {
   AnyTxtNode,
   TxtBlockQuoteNode,
+  TxtCodeBlockNode,
   TxtHeaderNode,
   TxtListItemNode,
   TxtListNode,
@@ -319,9 +320,50 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         break;
       }
 
+      case 'CodeBlock': {
+        // Standard MkDocs/Material syntax (`!!! warning`, blank line, four-space-indented body) is
+        // indistinguishable from an ordinary indented code block to a CommonMark parser — both
+        // parse as a `CodeBlock` node. Dropping it unconditionally (the historical default-branch
+        // behaviour, still correct for genuine code) silently ate every MkDocs admonition body: no
+        // unit, no diagnostics, and the still-pending register left free to attach to whatever
+        // unrelated prose happened to follow instead.
+        //
+        // Recognised as prose, not code, only when BOTH hold: (1) an admonition register — either
+        // register, one-shot or container-scoped — is still active from the immediately preceding
+        // sibling, meaning this block is standing exactly where a supported opener's body belongs;
+        // (2) the block is the *indented* form, not a fenced one (``` or ~~~) — a fenced block is a
+        // deliberate code sample the author chose to fence, even inside an admonition, and must stay
+        // code regardless of what precedes it. An indented code block with neither condition met
+        // (the ordinary case: no admonition opener before it at all) is left alone, exactly as
+        // before.
+        const codeBlock = child as TxtCodeBlockNode;
+        const pending = ctx.pending.value;
+        const active = pending !== 'none' ? pending : ctx.containerAdmonition.value;
+        const isFenced = /^[ \t]*(`{3,}|~{3,})/.test(codeBlock.raw);
+        if (active === 'none' || isFenced) break;
+        ctx.pending.value = 'none';
+        const leadingIndent = /^[ \t]+/.exec(codeBlock.raw)?.[0] ?? '';
+        const range: SourceRange = {
+          start: codeBlock.range[0] + leadingIndent.length,
+          end: codeBlock.range[1],
+        };
+        const depth =
+          ctx.containerKind === 'list-item'
+            ? ctx.listDepth
+            : ctx.containerKind === 'blockquote'
+              ? ctx.depth
+              : 0;
+        // `'paragraph'` — the body reads as ordinary prose once recognised, and every consumer of
+        // `TextUnit.kind` (`analyse.ts`'s `UNIT_KIND_TO_BLOCK_KIND`) already has a mapping for it;
+        // no new kind vocabulary is needed for what is, structurally, just an indented paragraph.
+        yield buildUnit(ctx, 'paragraph', range, depth, active);
+        break;
+      }
+
       default:
-        // Code blocks, raw HTML, front matter, reference definitions, thematic breaks, and any
-        // node this reader does not yet recognise: no prose, no unit, nothing to recurse into.
+        // Raw HTML, front matter, reference definitions, thematic breaks, a fenced or unrelated
+        // indented code block, and any node this reader does not yet recognise: no prose, no unit,
+        // nothing to recurse into.
         break;
     }
   }

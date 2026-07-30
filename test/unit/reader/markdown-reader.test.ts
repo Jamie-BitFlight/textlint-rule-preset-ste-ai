@@ -191,6 +191,35 @@ describe('MarkdownReader', () => {
     expect(second?.admonition).toBe('warning');
   });
 
+  it('reads an MkDocs indented admonition body as prose, not a dropped code block', async () => {
+    // Regression for the reviewer-found bug: CommonMark represents `!!! warning`'s four-space
+    // indented body as a CodeBlock node, which the reader's default branch used to drop entirely —
+    // producing zero units for it and leaving the pending warning to attach to unrelated prose
+    // that followed instead.
+    const text = '!!! warning\n\n    This is the body text.\n';
+    const units = await read(text);
+    assertRoundTrips(text, units);
+    const body = units.find((u) => u.text === 'This is the body text.');
+    expect(body).toBeDefined();
+    expect(body?.admonition).toBe('warning');
+  });
+
+  it('still drops a legitimate indented code block with no preceding admonition opener', async () => {
+    const text = 'Some prose.\n\n    var x = 1;\n';
+    const units = await read(text);
+    assertRoundTrips(text, units);
+    expect(units.map((u) => u.text)).toEqual(['Some prose.']);
+  });
+
+  it('does not hijack a fenced code block that follows a pending admonition opener', async () => {
+    // A fenced block is a deliberate code sample, even inside an admonition — only the ambiguous
+    // indented-code shape is MkDocs's own body convention.
+    const text = ['!!! note', '', '```python', 'x = 1', '```', ''].join('\n');
+    const units = await read(text);
+    assertRoundTrips(text, units);
+    expect(units).toHaveLength(0);
+  });
+
   it('excludes the table markup from a table-cell unit', async () => {
     const text = ['| Step | Action |', '| --- | --- |', '| 1 | Utilise the tool |', ''].join('\n');
     const units = await read(text);

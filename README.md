@@ -2,7 +2,9 @@
 
 An auditable Simplified Technical English linter for technical documentation: deterministic textlint
 rules, plus an **optional** semantic-adjudication subsystem that calls a small model served locally by
-llama.cpp.
+llama.cpp. It is meant to run inside a pre-commit hook — Husky, prek, or the Python `pre-commit`
+framework, invoked via `npx` — most often checking documentation an AI agent has just drafted, so the
+agent's vocabulary stays consistent with the project's before the commit lands.
 
 > **This package does not implement ASD-STE100 and makes no claim of conformance with it.** The
 > standard and its dictionary are proprietary and were not available to this repository. Every rule
@@ -22,6 +24,12 @@ schema-validated, threshold-gated, span-anchored and traced.
                     │ preserved throughout)          │   candidates → broker → evaluator → verdict
                     └────────────────────────────────┘        (optional, local, off by default)
 ```
+
+The "protected regions → blocks" step is implemented today by hand-written regex over masked text,
+selected by a `markdown`/`text` format flag. That is being replaced by a pluggable document reader —
+a real parser for Markdown first — feeding the same reader-agnostic rules below; see
+[issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25) and
+[`docs/architecture.md`](docs/architecture.md). It is in progress, not shipped.
 
 ## Install
 
@@ -45,6 +53,64 @@ npx textlint --fix docs/**/*.md     # applies only gated fixes
 
 No model is needed. Semantic analysis is off by default and the deterministic rules never touch the
 network.
+
+## Who this serves, and how
+
+The intended audience is an AI agent generating text, and the goal is keeping that agent's vocabulary
+consistent with the project's own approved/preferred/unapproved terms — plus any further list a
+specific repository wants layered on top of the bundled provisional pack. That serves three distinct
+consumer surfaces, at different stages of readiness. They are not the same shape and should not be
+conflated:
+
+**1. Pre-commit hooks — works today.** Husky, prek, or the Python `pre-commit` framework, invoked via
+`npx`, linting documentation files before a commit lands. Both pieces this needs are real today, not
+proposed:
+
+- `rulePack` (a path to a JSON file, or an inline object) and `approvedTerms` in the shared config let
+  a repository supply its own vocabulary on top of the bundled provisional pack — see
+  [`docs/configuration.md`](docs/configuration.md) and
+  [`docs/rule-pack-import.md`](docs/rule-pack-import.md).
+- The CLI's exit codes are the ones a hook needs: `0` clean, `1` errors present (or review-required
+  with `--fail-on-review`), `2` usage error, `3` semantic-service failure under the `error` policy.
+
+```yaml
+# .pre-commit-config.yaml — works with prek too, same config format
+repos:
+  - repo: local
+    hooks:
+      - id: ste-ai
+        name: Simplified Technical English check
+        entry: npx --yes ste-ai lint --fail-on-review
+        language: system
+        files: \.md$
+```
+
+```sh
+# .husky/pre-commit
+npx ste-ai lint docs/**/*.md --fail-on-review
+```
+
+**2. An authoring agent consulting the vocabulary in-loop — proposed, not built.** The agent checks
+its own draft voluntarily, mid-composition, rather than being checked after the fact: exporting the
+merged vocabulary as a machine-readable artefact to consult _before_ drafting
+([issue #2](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/2)), and an MCP server —
+`check_text`, `lookup_term`, `list_vocabulary` — so the agent can check text and look up terms in-loop
+instead of shelling out to the CLI per iteration
+([issue #5](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/5)). Resolving a rule pack from
+a package name or a URL with a required integrity digest, so an organisation shares one vocabulary
+across repositories instead of copying a JSON file into each, matters to this surface too
+([issue #3](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/3)).
+
+**3. A blocking Claude Code hook gating live agent/user communication — proposed, not built, and
+currently blocked.** Checking that outgoing messages — assistant to user, or between sub-agents and
+an orchestrator — stay on the same agreed vocabulary, before they are sent. This is a different
+integration shape from surface 2: a hook is invoked by the harness, not by the agent's own choice, and
+it conventionally receives text on stdin and reports pass/fail through its exit code, not through MCP.
+It cannot be wired up yet: `lint` only reads files, via `readFileSync`, and exits `2` with no file
+arguments — there is no stdin path. The programmatic API
+(`analyseTextDeterministic`/`analyseText`) already accepts an arbitrary string with no file
+dependency, so this is a gap in the CLI surface only, not in the underlying analysis. Tracked as
+[issue #26](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/26).
 
 ## The 14 rules
 
@@ -82,6 +148,13 @@ trigger, rationale and **observed failure modes** are in
 
 **A model outage is never converted into compliance.** Affected passages become `review-required` and
 a run notice records how many. See [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md).
+
+## Inline suppression
+
+`<!-- ste-ai-ignore-next-line rule-id -- reason -->` withholds one finding instead of disabling a
+provisional rule everywhere; the reason is required, the withheld finding is still recorded in
+`suppressions` and in `--json`, and a claim inside a danger, warning or caution admonition is
+refused by default. See [`docs/suppression.md`](docs/suppression.md).
 
 ## What is protected
 
@@ -194,6 +267,7 @@ npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # ne
 | [`docs/rule-authoring.md`](docs/rule-authoring.md)               | writing a rule                                  |
 | [`docs/semantic-evaluators.md`](docs/semantic-evaluators.md)     | evaluators, prompt contract, measurement        |
 | [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md)         | categories, outage policy, autofix policy       |
+| [`docs/suppression.md`](docs/suppression.md)                     | inline directives, and what they record         |
 | [`docs/configuration.md`](docs/configuration.md)                 | every option                                    |
 | [`docs/rule-pack-import.md`](docs/rule-pack-import.md)           | supplying licensed material                     |
 | [`docs/llama-cpp-setup.md`](docs/llama-cpp-setup.md)             | running the model service                       |

@@ -7,4 +7,5 @@ export * from './document.js';
 export * from './config.js';
 export * from './rule.js';
 export * from './runner.js';
+export * from './suppressions.js';
 export { IMPERATIVE_VERBS } from './imperative-verbs.js';

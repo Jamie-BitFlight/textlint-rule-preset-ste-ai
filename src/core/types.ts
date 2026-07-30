@@ -249,6 +249,38 @@ export interface RunNotice {
 }
 
 // ---------------------------------------------------------------------------
+// Inline suppression
+// ---------------------------------------------------------------------------
+
+/** A parsed inline suppression directive. */
+export interface SuppressionDirective {
+  readonly kind: 'next-line' | 'range';
+  /** Span of the directive comment itself. */
+  readonly directiveRange: SourceRange;
+  /** Span of source this directive suppresses. */
+  readonly range: SourceRange;
+  /** Rule ids named by the directive. Empty means every rule. */
+  readonly ruleIds: readonly string[];
+  readonly reason: string;
+}
+
+/**
+ * A finding that was withheld because an inline directive claimed it as intentional.
+ *
+ * Recorded rather than discarded: a suppression is a claim by the author, and the diagnostic
+ * policy does not allow a claim to become invisible.
+ */
+export interface SuppressionRecord {
+  readonly ruleId: string;
+  readonly category: DiagnosticCategory;
+  readonly range: SourceRange;
+  /** The message the withheld diagnostic would have carried. */
+  readonly message: string;
+  readonly reason: string;
+  readonly directiveRange: SourceRange;
+}
+
+// ---------------------------------------------------------------------------
 // Rules
 // ---------------------------------------------------------------------------
 

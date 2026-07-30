@@ -113,6 +113,40 @@ export function detectAdmonition(line: string): AdmonitionKind {
   return 'none';
 }
 
+/**
+ * Whether `line` is a "bare" admonition opener — mkdocs (`!!! warning`), a MyST fence
+ * (`:::warning` / `:::{warning}`), a GFM alert (`> [!WARNING]`), or an RST/MyST directive
+ * (`.. warning::`) — that names a register and carries no prose of its own.
+ *
+ * Exported so a caller outside block scanning can recognise the same "this line only opens a
+ * register" shape without re-deriving the patterns. `suppressions.ts`'s gap check is the reason:
+ * a `next-line` directive written above one of these lines is pointing at the block the line
+ * introduces, not stepping over content the author wrote, and it has to use exactly this test to
+ * agree with what `scanBlocks` itself already decided.
+ */
+export function isBareAdmonitionOpener(line: string): boolean {
+  return (
+    /^\s*(?:!!!|\?\?\?)\+?\s+[A-Za-z]+\s*(?:"[^"]*")?\s*$/.test(line) ||
+    /^\s*:{3,}\s*\{?[A-Za-z]+\}?\s*$/.test(line) ||
+    /^\s*>\s*\[![A-Za-z]+\]\s*$/.test(line) ||
+    // reStructuredText/MyST: `.. warning::`, optionally with a title on the same line. The body
+    // is indented under it, which is exactly the scope the indent container models.
+    RST_DIRECTIVE_RE.test(line)
+  );
+}
+
+/**
+ * Whether `line` is an AsciiDoc block label — `[WARNING]` alone on its own line — naming the
+ * register of the block that follows without itself carrying prose.
+ *
+ * Exported for the same reason as {@link isBareAdmonitionOpener}: `suppressions.ts` needs to
+ * recognise this shape too, even though `scanBlocks` scopes it differently (one block only,
+ * rather than by indent).
+ */
+export function isAdmonitionLabelLine(line: string): boolean {
+  return ASCIIDOC_LABEL_RE.test(line);
+}
+
 // ---------------------------------------------------------------------------
 // Mode detection
 // ---------------------------------------------------------------------------
@@ -249,22 +283,14 @@ export function scanBlocks(
     // Container-only admonition openers: the line names a register and carries no prose of its
     // own, so the register belongs to what follows.
     const opener = detectAdmonition(line.raw);
-    const isBareOpener =
-      opener !== 'none' &&
-      (/^\s*(?:!!!|\?\?\?)\+?\s+[A-Za-z]+\s*(?:"[^"]*")?\s*$/.test(line.raw) ||
-        /^\s*:{3,}\s*\{?[A-Za-z]+\}?\s*$/.test(line.raw) ||
-        /^\s*>\s*\[![A-Za-z]+\]\s*$/.test(line.raw) ||
-        // reStructuredText/MyST: `.. warning::`, optionally with a title on the same line. The
-        // body is indented under it, which is exactly the scope the indent container models.
-        RST_DIRECTIVE_RE.test(line.raw));
-    if (isBareOpener) {
+    if (opener !== 'none' && isBareAdmonitionOpener(line.raw)) {
       containerAdmonition = opener;
       containerIndent = /^\s*/.exec(line.raw)?.[0].length ?? 0;
       i += 1;
       continue;
     }
     // AsciiDoc: `[WARNING]` labels the block that follows it at the same indent.
-    if (opener !== 'none' && ASCIIDOC_LABEL_RE.test(line.raw)) {
+    if (opener !== 'none' && isAdmonitionLabelLine(line.raw)) {
       pendingAdmonition = opener;
       i += 1;
       continue;

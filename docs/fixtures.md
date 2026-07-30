@@ -142,6 +142,16 @@ alone. A reviewer is not obliged to satisfy a heuristic, and the tests are built
 not fail the build — a fixture with no accepted change must simply be a `hard-negative` or carry a
 `notes` explanation, and must record something as `disputed` or `deferred`.
 
+`originalSpans`, and the `candidateAdjudications` merged in from `fixtures/verdicts/` (see
+[`provisional-rules.md`](./provisional-rules.md#measured-precision-of-the-candidate-heuristics)),
+both bind a verdict to a specific `(ruleId, span, quote)`, on the assumption that spans are derived
+the way they are today, by the regex-based scanner.
+[Issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25) proposes deriving spans
+from a real parser instead; if that change moves a span, the verdict recorded against the old span
+no longer describes the new one and needs fresh review.
+`scripts/ci/check-candidate-ground-truth.sh` already enforces this for candidate verdicts; a parser
+adoption would need the same discipline applied to `originalSpans`.
+
 ## Corpus tests
 
 `test/fixtures/corpus.test.ts` asserts, over the real corpus:

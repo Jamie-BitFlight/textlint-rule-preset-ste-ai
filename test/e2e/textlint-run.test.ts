@@ -113,6 +113,36 @@ describe('textlint lint run', () => {
     expect(result.messages).toHaveLength(1);
   });
 
+  it('an inline suppression directive silences the finding it names', async () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling fixed by contract. -->',
+      'Prior to installation, remove the bracket.',
+      '',
+    ].join('\n');
+    const result = await kernel.lintText(text, options(['unapproved-vocabulary']));
+    expect(result.messages).toEqual([]);
+  });
+
+  it('reports the same document once the directive is removed', async () => {
+    const text = ['Prior to installation, remove the bracket.', ''].join('\n');
+    const result = await kernel.lintText(text, options(['unapproved-vocabulary']));
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]?.message).toContain('"Prior to" is not approved');
+  });
+
+  it('a rule-scoped directive leaves another rule on the same line reporting', async () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling fixed by contract. -->',
+      "Prior to installation, don't remove the bracket.",
+      '',
+    ].join('\n');
+    const result = await kernel.lintText(
+      text,
+      options(['unapproved-vocabulary', 'no-contractions']),
+    );
+    expect(result.messages.map((m) => m.ruleId)).toEqual(['no-contractions']);
+  });
+
   it('offers suggestions alongside the diagnostic', async () => {
     const result = await kernel.lintText(
       'Commence the test.\n',

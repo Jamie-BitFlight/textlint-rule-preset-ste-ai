@@ -24,7 +24,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   deterministic: ['core', 'rule-pack'],
   'model-client': ['core'],
   semantic: ['core', 'rule-pack', 'model-client'],
-  analysis: ['core', 'rule-pack', 'deterministic', 'semantic', 'model-client'],
+  analysis: ['core', 'rule-pack', 'deterministic', 'semantic', 'model-client', 'reader'],
   textlint: ['core', 'rule-pack', 'deterministic', 'semantic', 'analysis'],
   'fixture-tools': ['core', 'rule-pack'],
   // Measurement tooling composes every layer by design: it must run the real rule set and the real

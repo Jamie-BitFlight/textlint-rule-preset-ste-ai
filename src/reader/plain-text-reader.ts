@@ -12,9 +12,16 @@ import type { DocumentReader, TextUnit } from './types.js';
 export class PlainTextReader implements DocumentReader {
   readonly mediaType = 'text' as const;
 
+  /** `async` to satisfy {@link DocumentReader}; the blank-line scan underneath is synchronous. See
+   * `MarkdownReader.read()`'s doc for why a synchronous core is exported alongside this. */
   async *read(doc: SourceDocument): AsyncIterable<TextUnit> {
-    for (const unit of splitParagraphs(doc.text)) yield unit;
+    for (const unit of readPlainTextUnitsSync(doc)) yield unit;
   }
+}
+
+/** The synchronous core `PlainTextReader.read()` wraps. */
+export function readPlainTextUnitsSync(doc: SourceDocument): TextUnit[] {
+  return splitParagraphs(doc.text);
 }
 
 function splitParagraphs(text: string): TextUnit[] {
@@ -37,6 +44,9 @@ function splitParagraphs(text: string): TextUnit[] {
       kind: 'paragraph',
       range: trimmed,
       text: slice,
+      // Plain text has no per-line markup for a downstream checker to mistake for prose — no `>`,
+      // no list marker, nothing this reader introduces that needs masking.
+      masked: slice,
       mode: detectMode(slice, defaultStructureOptions),
       admonition: 'none',
       depth: 0,

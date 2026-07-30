@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PlainTextReader } from '../../../src/reader/plain-text-reader.js';
+import { PlainTextReader, readPlainTextUnitsSync } from '../../../src/reader/plain-text-reader.js';
 import type { TextUnit } from '../../../src/reader/types.js';
 
 /**
@@ -78,5 +78,18 @@ describe('PlainTextReader', () => {
   it('produces nothing for a blank document', async () => {
     const units = await read('\n\n\n');
     expect(units).toEqual([]);
+  });
+
+  it('has `masked` equal to `text`: plain text has no per-line markup to mask', async () => {
+    const text = 'Prose.\n';
+    const units = await read(text);
+    expect(units[0]?.masked).toBe(units[0]?.text);
+  });
+
+  it('exposes a synchronous core the async `read()` is a thin wrapper over', async () => {
+    const text = ['First paragraph.', '', 'Second paragraph.', ''].join('\n');
+    const sync = readPlainTextUnitsSync({ id: 't', format: 'text', text });
+    const asynchronous = await read(text);
+    expect(JSON.stringify(sync)).toBe(JSON.stringify(asynchronous));
   });
 });

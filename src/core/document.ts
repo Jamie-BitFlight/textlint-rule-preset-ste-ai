@@ -68,6 +68,18 @@ const CONTENT_BEARING_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
 export interface AnalyseOptions {
   readonly protectedRegions?: Partial<ProtectedRegionOptions>;
   readonly structure?: Partial<StructureOptions>;
+  /**
+   * Blocks to use instead of `scanBlocks()`'s own regex-driven scan.
+   *
+   * `core` may not import `src/reader/` — the module boundary that exists specifically so a real
+   * parser's dependency (`@textlint/markdown-to-ast`, which has "textlint" in its own package name)
+   * never lands where `core`'s "imports no textlint package" rule would reject it. Nothing here
+   * calls a reader; this option exists so `src/analysis/analyse.ts`, which is allowed to import
+   * `reader`, can supply blocks derived from one. Every other caller of `analyseDocument` — there
+   * are eight outside `analysis` today — omits this and gets exactly today's `scanBlocks()` output,
+   * unaffected.
+   */
+  readonly blocks?: readonly TextBlock[];
 }
 
 /**
@@ -144,7 +156,7 @@ export function analyseDocument(
   const opaqueRanges = opaqueRangesOf(regions);
   const structuralMask = buildStructuralMask(detectionText, regions);
   const fullMask = maskRanges(detectionText, opaqueRanges);
-  const blocks = scanBlocks(doc.text, structuralMask, structureOptions);
+  const blocks = options.blocks ?? scanBlocks(doc.text, structuralMask, structureOptions);
 
   const contentRegions = regions.filter((r) => r.opaque && CONTENT_BEARING_KINDS.has(r.kind));
 

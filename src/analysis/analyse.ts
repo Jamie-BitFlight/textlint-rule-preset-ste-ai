@@ -11,19 +11,25 @@ import {
 import { maskRanges } from '../core/text.js';
 import type {
   AnalysedDocument,
+  BlockKind,
   CandidatePassage,
   Diagnostic,
   DocumentFormat,
   RulePack,
   RunNotice,
   SemanticTrace,
+  SourceDocument,
   SourceRange,
   SuppressionDirective,
   SuppressionRecord,
+  TextBlock,
 } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { LlamaCppClient } from '../model-client/llama-client.js';
 import type { ModelTransport } from '../model-client/types.js';
+import { readMarkdownUnitsSync } from '../reader/markdown-reader.js';
+import { readPlainTextUnitsSync } from '../reader/plain-text-reader.js';
+import type { TextUnit } from '../reader/types.js';
 import { resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
 import { analyseSemantically } from '../semantic/analyse.js';
 import { SemanticBroker, type SemanticBrokerDeps } from '../semantic/broker.js';
@@ -36,6 +42,61 @@ import { resolveOverlappingFixes } from '../core/runner.js';
  * semantic adjudication — and contains no rule logic of its own. It is what both the textlint
  * adapter and the CLI call.
  */
+
+/**
+ * Blocks derived from a real reader (`src/reader/`), for the two production entry points below.
+ *
+ * `core` may not import `reader` (module boundary — `docs/architecture.md`, "Document reader", §3),
+ * so `analyseDocument()` cannot select a reader itself; it only accepts blocks from anywhere via its
+ * `blocks` option. This is the one place that both knows a reader exists and is allowed to import
+ * one. The eight other direct callers of `analyseDocument` outside this module (`fixture-tools`,
+ * `evaluation`, six unit-test files) do not go through this function and are unaffected —
+ * `scanBlocks()` still runs for them, exactly as before this stage.
+ */
+function readerBlocksFor(sourceDoc: SourceDocument): readonly TextBlock[] {
+  const units: readonly TextUnit[] =
+    sourceDoc.format === 'markdown'
+      ? readMarkdownUnitsSync(sourceDoc)
+      : readPlainTextUnitsSync(sourceDoc);
+  return units.map(unitToBlock);
+}
+
+/**
+ * `TextUnit.kind` the readers actually produce, mapped to `BlockKind`. The one naming mismatch is
+ * `'blockquote'` versus `BlockKind`'s `'block-quote'`; everything else is identical. `TextUnit.kind`
+ * is `string`, not a union — reader-owned, deliberately open for a future reader's own vocabulary —
+ * so this is an explicit, checked mapping rather than a blind cast: an unrecognised kind is a real
+ * mismatch between a reader and this bridge, and must fail loudly, not silently coerce.
+ */
+const UNIT_KIND_TO_BLOCK_KIND: Readonly<Record<string, BlockKind>> = {
+  paragraph: 'paragraph',
+  heading: 'heading',
+  'list-item': 'list-item',
+  'table-cell': 'table-cell',
+  blockquote: 'block-quote',
+};
+
+/**
+ * `TextUnit` was deliberately designed close to `TextBlock`, not as a rewrite of it — see
+ * `src/reader/types.ts`. This is a direct field-for-field carry-over once `kind` is translated.
+ */
+function unitToBlock(unit: TextUnit): TextBlock {
+  const kind = UNIT_KIND_TO_BLOCK_KIND[unit.kind];
+  if (kind === undefined) {
+    throw new Error(`No BlockKind mapping for reader unit kind "${unit.kind}" (unit ${unit.id}).`);
+  }
+  return {
+    id: unit.id,
+    kind,
+    range: unit.range,
+    text: unit.text,
+    mode: unit.mode,
+    admonition: unit.admonition,
+    depth: unit.depth,
+    inList: unit.kind === 'list-item',
+    ...(unit.listOrdinal === undefined ? {} : { listOrdinal: unit.listOrdinal }),
+  };
+}
 
 export interface AnalyseTextOptions {
   readonly id?: string;
@@ -84,21 +145,20 @@ export function analyseTextDeterministic(
   const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
   const format = options.format ?? 'markdown';
 
-  const document = analyseDocument(
-    {
-      id: options.id ?? options.path ?? 'document',
-      format,
-      text,
-      ...(options.path === undefined ? {} : { path: options.path }),
+  const sourceDoc: SourceDocument = {
+    id: options.id ?? options.path ?? 'document',
+    format,
+    text,
+    ...(options.path === undefined ? {} : { path: options.path }),
+  };
+  const document = analyseDocument(sourceDoc, {
+    protectedRegions: {
+      approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
+      extraPatterns: config.extraProtectedPatterns,
     },
-    {
-      protectedRegions: {
-        approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
-        extraPatterns: config.extraProtectedPatterns,
-      },
-      structure: { extraImperativeVerbs: config.extraImperativeVerbs },
-    },
-  );
+    structure: { extraImperativeVerbs: config.extraImperativeVerbs },
+    blocks: readerBlocksFor(sourceDoc),
+  });
 
   // Fix conflicts are resolved below instead, once the suppressed findings are out of the list: a
   // finding nobody will be shown must not be able to veto another finding's fix.
@@ -410,21 +470,20 @@ export async function analyseText(
   const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
   const format = options.format ?? 'markdown';
 
-  const document = analyseDocument(
-    {
-      id: options.id ?? options.path ?? 'document',
-      format,
-      text,
-      ...(options.path === undefined ? {} : { path: options.path }),
+  const sourceDoc: SourceDocument = {
+    id: options.id ?? options.path ?? 'document',
+    format,
+    text,
+    ...(options.path === undefined ? {} : { path: options.path }),
+  };
+  const document = analyseDocument(sourceDoc, {
+    protectedRegions: {
+      approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
+      extraPatterns: config.extraProtectedPatterns,
     },
-    {
-      protectedRegions: {
-        approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
-        extraPatterns: config.extraProtectedPatterns,
-      },
-      structure: { extraImperativeVerbs: config.extraImperativeVerbs },
-    },
-  );
+    structure: { extraImperativeVerbs: config.extraImperativeVerbs },
+    blocks: readerBlocksFor(sourceDoc),
+  });
 
   // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the
   // semantic fixes anyway, and a withheld finding must not veto a surviving finding's fix.

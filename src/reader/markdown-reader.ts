@@ -11,13 +11,13 @@ import type {
   TxtTableRowNode,
 } from '@textlint/ast-node-types';
 import {
-  defaultStructureOptions,
   detectAdmonition,
   detectMode,
+  defaultStructureOptions,
   isAdmonitionLabelLine,
   isBareAdmonitionOpener,
 } from '../core/structure.js';
-import type { AdmonitionKind, SourceDocument, SourceRange } from '../core/types.js';
+import type { AdmonitionKind, SourceDocument, SourceRange, TextMode } from '../core/types.js';
 import type { DocumentReader, TextUnit } from './types.js';
 
 /**
@@ -35,14 +35,39 @@ import type { DocumentReader, TextUnit } from './types.js';
 export class MarkdownReader implements DocumentReader {
   readonly mediaType = 'markdown' as const;
 
+  /**
+   * `async` to satisfy {@link DocumentReader}, but a thin wrapper: every step underneath —
+   * `parse()`, the tree walk — is synchronous. `readMarkdownUnitsSync` is the real implementation,
+   * exported separately for callers (`src/core/document.ts` via `src/analysis/analyse.ts`) that
+   * cannot themselves become async: `core` must never import `reader` at all (module boundary), and
+   * `analyseTextDeterministic` documents itself as performing no I/O, a contract existing callers
+   * rely on. Nothing here actually needs an event-loop turn, so nothing is lost by also offering it
+   * synchronously.
+   */
   async *read(doc: SourceDocument): AsyncIterable<TextUnit> {
-    const ast = parse(doc.text);
-    const counter = new Counter();
-    const ctx: WalkContext = { sourceText: doc.text, depth: 0, containerKind: undefined, counter };
-    for (const unit of walkChildren(ast.children, ctx)) {
-      yield unit;
-    }
+    for (const unit of readMarkdownUnitsSync(doc)) yield unit;
   }
+}
+
+/** The synchronous core `MarkdownReader.read()` wraps. See the class doc for why this exists. */
+export function readMarkdownUnitsSync(doc: SourceDocument): TextUnit[] {
+  const ast = parse(doc.text);
+  const counter = new Counter();
+  const ctx: WalkContext = {
+    sourceText: doc.text,
+    depth: 0,
+    listDepth: 0,
+    containerKind: undefined,
+    listOrdinal: undefined,
+    // A one-shot admonition register, shared by reference across the whole walk — not a per-call
+    // local. `structure.ts`'s own `pendingAdmonition` is a single variable for the entire scan,
+    // consumed by whichever block is pushed next regardless of nesting; a `let` re-declared at the
+    // top of each recursive `walkChildren` call cannot reproduce that; a box threaded unchanged
+    // through every recursive call can.
+    pending: { value: 'none' },
+    counter,
+  };
+  return [...walkChildren(ast.children, ctx)];
 }
 
 /**
@@ -59,12 +84,21 @@ class Counter {
 
 interface WalkContext {
   readonly sourceText: string;
+  /** Blockquote nesting: `>` marker count, 1-based, matching `structure.ts`'s own convention. */
   readonly depth: number;
+  /** List nesting: 0 for a top-level list, incremented only for a list genuinely nested inside
+   * another list's item — matching `structure.ts`'s `Math.floor(markerIndent / 2)`, which is 0 for
+   * an unindented top-level list. Kept separate from `depth` because the two conventions disagree
+   * (blockquote depth is 1-based; list depth is 0-based) and a block is only ever one kind at a time. */
+  readonly listDepth: number;
   /**
    * Set while walking the children of a `ListItem` or `BlockQuote`, so a `Paragraph` found there is
    * reported as the container it actually is, not as a bare top-level paragraph.
    */
   readonly containerKind: 'list-item' | 'blockquote' | undefined;
+  /** The written ordinal of the enclosing list item, when it is one item of an ordered list. */
+  readonly listOrdinal: number | undefined;
+  readonly pending: { value: AdmonitionKind };
   readonly counter: Counter;
 }
 
@@ -72,46 +106,74 @@ interface WalkContext {
  * Walk one level of siblings, in source order, propagating an admonition register the way
  * `src/core/structure.ts`'s block scanner does: a paragraph that is *only* an admonition opener
  * (`!!! warning`, `.. warning::`, `[WARNING]`) carries no prose of its own, is not turned into a
- * unit, and its register applies to the sibling that follows — once, then it lapses. A combined
- * marker-and-body paragraph (a GFM alert's `> [!WARNING]` and its quoted line parse as one
- * `Paragraph` node) is not a bare opener by this test — `isBareAdmonitionOpener` requires the whole
- * line to be nothing else — so it falls through to the ordinary branch and reports its own
+ * unit, and its register applies to whichever unit is produced *next in traversal order* — once,
+ * then it lapses, even if that next unit is found after descending into a list or a blockquote.
+ * A combined marker-and-body paragraph (a GFM alert's `> [!WARNING]` and its quoted line parse as
+ * one `Paragraph` node) is not a bare opener by this test — `isBareAdmonitionOpener` requires the
+ * whole line to be nothing else — so it falls through to the ordinary branch and reports its own
  * admonition directly, with nothing left to propagate.
  */
 function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Generator<TextUnit> {
-  let pendingAdmonition: AdmonitionKind = 'none';
-
   for (const child of children) {
     switch (child.type) {
       case 'Header': {
-        // The library's own types do not discriminate `AnyTxtNode` per tag the way a proper
-        // discriminated union would — `child.type` is checked at runtime, and this cast narrows to
-        // match it. Scoped to one case at a time, not a blanket escape from the type system.
         const header = child as TxtHeaderNode;
-        pendingAdmonition = 'none';
-        yield buildUnit(ctx, 'heading', contentRange(header), header.depth, 'none');
+        const pending = ctx.pending.value;
+        ctx.pending.value = 'none';
+        const own = detectAdmonition(header.raw);
+        yield buildUnit(
+          ctx,
+          'heading',
+          contentRange(header),
+          header.depth,
+          own !== 'none' ? own : pending,
+          // scanBlocks forces every heading to `descriptive` unconditionally
+          // (`kind === 'heading' ? 'descriptive' : detectMode(...)`) — `detectMode` never runs on a
+          // heading's own text at all, so an imperative-sounding title is not misread as an
+          // instruction the way a paragraph's would be.
+          'descriptive',
+        );
         break;
       }
 
       case 'Paragraph': {
         const paragraph = child as TxtParagraphNode;
-        const pending = pendingAdmonition;
-        pendingAdmonition = 'none';
+        const pending = ctx.pending.value;
+        ctx.pending.value = 'none';
         const raw = paragraph.raw;
         const own = detectAdmonition(raw);
+        // `isBareAdmonitionOpener`'s GFM alternative is written against a raw source *line*, which
+        // always carries its blockquote's leading `>` — but an HTML comment on its own line (the
+        // shape a suppression directive takes) makes the parser split the blockquote into separate
+        // `Paragraph` nodes around it, and each node's own `.raw` no longer includes the `>` the AST
+        // has already attributed to the container. Reconstructed here, for this one check only —
+        // `detectAdmonition` already tolerates the marker with or without `>`, so `own` above needed
+        // no such reconstruction.
+        const openerCandidate = ctx.containerKind === 'blockquote' ? `> ${raw}` : raw;
         // An opener carries no prose: it names a register for what follows and produces no unit,
         // matching `scanBlocks`'s "a block made only of markup carries no prose" rule.
-        if (own !== 'none' && (isBareAdmonitionOpener(raw) || isAdmonitionLabelLine(raw))) {
-          pendingAdmonition = own;
+        if (
+          own !== 'none' &&
+          (isBareAdmonitionOpener(openerCandidate) || isAdmonitionLabelLine(raw))
+        ) {
+          ctx.pending.value = own;
           continue;
         }
         const kind = ctx.containerKind ?? 'paragraph';
+        const depth =
+          ctx.containerKind === 'list-item'
+            ? ctx.listDepth
+            : ctx.containerKind === 'blockquote'
+              ? ctx.depth
+              : 0;
         yield buildUnit(
           ctx,
           kind,
           contentRange(paragraph),
-          ctx.depth,
+          depth,
           own !== 'none' ? own : pending,
+          undefined,
+          ctx.containerKind === 'list-item' ? ctx.listOrdinal : undefined,
         );
         break;
       }
@@ -122,26 +184,37 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
           ...ctx,
           depth: ctx.depth + 1,
           containerKind: 'blockquote',
+          listOrdinal: undefined,
         });
         break;
       }
 
       case 'List': {
         const list = child as TxtListNode;
-        yield* walkChildren(list.children, {
-          ...ctx,
-          depth: ctx.depth + 1,
-          containerKind: undefined,
-        });
+        // Only a list nested inside another list's item is genuinely one level deeper; a list found
+        // directly under the document (or a blockquote) is the outermost list and stays at 0.
+        const nextListDepth = ctx.containerKind === 'list-item' ? ctx.listDepth + 1 : ctx.listDepth;
+        const ordered = list.ordered === true;
+        const start = list.start ?? 1;
+        let index = 0;
+        for (const listItem of list.children) {
+          yield* walkChildren(listItem.children, {
+            ...ctx,
+            listDepth: nextListDepth,
+            containerKind: 'list-item',
+            listOrdinal: ordered ? start + index : undefined,
+          });
+          index += 1;
+        }
         break;
       }
 
       case 'ListItem': {
+        // Reached only if a `ListItem` is ever encountered somewhere other than as a direct child of
+        // a `List` (the `List` case above handles the normal path itself, so it can assign each
+        // item's own ordinal) — defensive, not the primary path.
         const listItem = child as TxtListItemNode;
-        yield* walkChildren(listItem.children, {
-          ...ctx,
-          containerKind: 'list-item',
-        });
+        yield* walkChildren(listItem.children, { ...ctx, containerKind: 'list-item' });
         break;
       }
 
@@ -159,7 +232,10 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
 
       case 'TableCell': {
         const cell = child as TxtTableCellNode;
-        yield buildUnit(ctx, 'table-cell', contentRange(cell), ctx.depth, 'none');
+        const pending = ctx.pending.value;
+        ctx.pending.value = 'none';
+        const own = detectAdmonition(cell.raw);
+        yield buildUnit(ctx, 'table-cell', contentRange(cell), 0, own !== 'none' ? own : pending);
         break;
       }
 
@@ -199,16 +275,42 @@ function buildUnit(
   range: SourceRange,
   depth: number,
   admonition: AdmonitionKind,
+  modeOverride?: TextMode,
+  listOrdinal?: number,
 ): TextUnit {
   const text = ctx.sourceText.slice(range.start, range.end);
   const id = ctx.counter.next();
+  // Masking, never stripping, is what keeps `masked` the same length as `text`: a continuation
+  // line's own `>` is embedded mid-string (see `maskBlockquoteContinuationMarkers`), and deleting it
+  // would shift every offset after it out of correspondence with `range`.
+  const masked = kind === 'blockquote' ? maskBlockquoteContinuationMarkers(text) : text;
   return {
     id: `${kind}:${id}:${range.start}`,
     kind,
     range,
     text,
-    mode: detectMode(text, defaultStructureOptions),
+    masked,
+    mode: modeOverride ?? detectMode(text, defaultStructureOptions),
     admonition,
     depth,
+    ...(listOrdinal === undefined ? {} : { listOrdinal }),
   };
+}
+
+/**
+ * Replace an embedded continuation line's own `>` (and any nesting `>`s, and their leading indent)
+ * with an equal-length run of U+FFFD.
+ *
+ * Only a blockquote *paragraph*'s first line ever has its marker excluded by the parser
+ * (`contentRange` derives the unit's start from its first child, past the opening `>`); every line
+ * after the first keeps its own `>` sitting mid-string, verbatim, in `text`. Left alone, a checker
+ * reading `masked` would see that `>` as though the author had written it as prose — a
+ * sentence-initial word with no capital, immediately after a full stop. The space that follows the
+ * marker is left alone: it is ordinary word-separating whitespace, not markup.
+ */
+function maskBlockquoteContinuationMarkers(text: string): string {
+  return text.replace(
+    /\n([ \t]{0,3}>+)/g,
+    (_match, marker: string) => `\n${'�'.repeat(marker.length)}`,
+  );
 }

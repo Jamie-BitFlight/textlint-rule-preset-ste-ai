@@ -5,8 +5,8 @@
   },
   "rules": {
     "preset-ste-ai": {
-      "sentence-length-procedural": { "maxWords": 20 },
-      "sentence-length-descriptive": { "maxWords": 25 },
+      "sentence-length-procedural": { "maxGradeLevel": 7 },
+      "sentence-length-descriptive": { "maxGradeLevel": 8 },
       "unapproved-vocabulary": true,
       "preferred-terminology": { "severity": "warning" },
       "no-contractions": true,

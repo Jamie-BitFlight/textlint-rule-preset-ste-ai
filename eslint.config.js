@@ -3,7 +3,16 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', '.cache/**', 'fixtures/**'],
+    // `.claude/worktrees/**` holds nested git worktrees for other concurrent sessions/branches;
+    // this project's ESLint config must never lint another session's in-progress files.
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      '.cache/**',
+      'fixtures/**',
+      '.claude/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

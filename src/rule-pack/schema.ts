@@ -56,8 +56,22 @@ export const preferredTermSchema = z.object({
 });
 
 export const rulePackLimitsSchema = z.object({
-  proceduralSentenceMaxWords: z.number().int().min(1).max(200),
-  descriptiveSentenceMaxWords: z.number().int().min(1).max(200),
+  /**
+   * Flesch-Kincaid grade level above which a procedural (instruction) sentence is reported.
+   * Replaces the old `proceduralSentenceMaxWords` word-count limit — see
+   * `docs/provisional-rules.md#sentence-length-procedural` for why, and for the granularity
+   * caveat that motivates `sentenceReadabilityFloorWords` below.
+   */
+  proceduralMaxGradeLevel: z.number().min(1).max(20),
+  /** As above, applied to descriptive (non-instruction) sentences. */
+  descriptiveMaxGradeLevel: z.number().min(1).max(20),
+  /**
+   * Minimum word count a sentence must reach before the grade-level check applies at all.
+   * Readability formulas are normed on passages, not single short sentences; below this floor a
+   * sentence is presumed simple regardless of its vocabulary, and the grade-level score is not
+   * computed. See `docs/provisional-rules.md#sentence-length-procedural`.
+   */
+  sentenceReadabilityFloorWords: z.number().int().min(1).max(200),
   maxNounClusterLength: z.number().int().min(2).max(10),
   maxSentencesPerProceduralStep: z.number().int().min(1).max(10),
   maxParagraphSentences: z.number().int().min(1).max(50),

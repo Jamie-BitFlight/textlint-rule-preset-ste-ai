@@ -455,8 +455,9 @@ export interface ApprovedTermEntry {
 }
 
 export interface RulePackLimits {
-  readonly proceduralSentenceMaxWords: number;
-  readonly descriptiveSentenceMaxWords: number;
+  readonly proceduralMaxGradeLevel: number;
+  readonly descriptiveMaxGradeLevel: number;
+  readonly sentenceReadabilityFloorWords: number;
   readonly maxNounClusterLength: number;
   readonly maxSentencesPerProceduralStep: number;
   readonly maxParagraphSentences: number;

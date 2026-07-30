@@ -15,7 +15,7 @@ import { createSteTextlintRule } from './adapter.js';
  * or per rule:
  *
  * ```json
- * { "rules": { "preset-ste-ai/sentence-length-procedural": { "maxWords": 18 } } }
+ * { "rules": { "preset-ste-ai/sentence-length-procedural": { "maxGradeLevel": 6 } } }
  * ```
  */
 

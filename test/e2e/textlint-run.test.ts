@@ -213,12 +213,12 @@ describe('per-rule textlint options', () => {
         {
           ruleId: 'sentence-length-procedural',
           rule: preset.rules['sentence-length-procedural']!,
-          options: { maxWords: 3 },
+          options: { floorWords: 1, maxGradeLevel: 3 },
         },
       ],
     });
     expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]?.message).toContain('the configured limit is 3');
+    expect(result.messages[0]?.message).toContain('the configured limit is grade 3');
   });
 
   it('carries the configured severity through to the textlint message', async () => {

@@ -49,25 +49,60 @@ function run(
 describe('sentence-length-procedural', () => {
   const id = 'sentence-length-procedural';
 
-  it('flags an instruction over the limit', () => {
-    const long =
-      'Remove the upper access panel and the lower access panel from the front of the enclosure before you continue with the next part of this task.\n';
-    expect(run(long).forRule(id)).toHaveLength(1);
+  it('flags a genuinely complex instruction (long clauses, uncommon vocabulary)', () => {
+    // 23 words, Flesch-Kincaid grade ~25 on masked text: nested relative clauses and low-frequency
+    // vocabulary, not just length.
+    const complex =
+      'Verify that the subsystem, whose initialization sequence remains contingent upon a ' +
+      'successfully negotiated authentication handshake, is not exhibiting nondeterministic ' +
+      'behavior before you proceed.\n';
+    expect(run(complex).forRule(id)).toHaveLength(1);
   });
 
-  it('does not flag an instruction at the limit', () => {
-    // Exactly 20 words.
-    const at =
+  it('does not flag a short sentence regardless of vocabulary (below the readability floor)', () => {
+    // Below the bundled `sentenceReadabilityFloorWords` (20), the grade-level formula is never
+    // computed at all -- a sentence this short is presumed simple even though it is dense with
+    // low-frequency words that would score a high grade if it were evaluated.
+    const shortButJargonHeavy = 'Ascertain the aforementioned handshake prerequisite.\n';
+    expect(run(shortButJargonHeavy).forRule(id)).toHaveLength(0);
+  });
+
+  it('flags a plain-but-dense instruction the old word-count rule would have missed', () => {
+    // 20 words -- at the old bundled word limit, so the word-count rule never fired on it -- but
+    // its Flesch-Kincaid grade level (masked) is already ~8.7, above the bundled procedural
+    // threshold of 7. This is the flip side of the metric swap: some sentences that stayed under
+    // the radar on word count alone are hard to read for reasons word count cannot see.
+    const atOldWordLimit =
       'Remove the panel from the front of the enclosure before you continue with the next part of this task now.\n';
-    const doc = run(at);
-    const sentence = analyseDocument({ id: 't', format: 'markdown', text: at }).sentences[0];
-    expect(sentence?.words).toHaveLength(20);
-    expect(doc.forRule(id)).toHaveLength(0);
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: atOldWordLimit });
+    expect(doc.sentences[0]?.words).toHaveLength(20);
+    expect(run(atOldWordLimit).forRule(id)).toHaveLength(1);
   });
 
-  it('respects a configured limit', () => {
+  it(
+    'does not flag a long instruction made of enumerated identifiers (hard-negative concern), ' +
+      'though the old word-count rule would have flagged it',
+    () => {
+      // 21 words: over the *old* 20-word procedural limit, so the pure word-count rule would have
+      // flagged this. Scored on masked text, the identifiers contribute almost no syllables, so
+      // the measured Flesch-Kincaid grade is ~2 -- far below the bundled threshold.
+      const identifierHeavy =
+        'Set the cache_size, busy_timeout, journal_mode, synchronous, wal_autocheckpoint, ' +
+        'foreign_keys, secure_delete, temp_store, mmap_size, page_size, auto_vacuum, and ' +
+        'cache_spill values to their documented defaults now.\n';
+      const doc = analyseDocument({ id: 't', format: 'markdown', text: identifierHeavy });
+      expect(doc.sentences[0]?.words.length).toBeGreaterThan(20);
+      expect(run(identifierHeavy).forRule(id)).toHaveLength(0);
+    },
+  );
+
+  it('respects a configured grade-level limit and floor', () => {
+    // Aggressive overrides force the check onto a sentence the bundled defaults would ignore.
     const text = 'Remove the panel and then continue.\n';
-    expect(run(text, { rules: { [id]: { maxWords: 3 } } }).forRule(id)).toHaveLength(1);
+    expect(run(text).forRule(id)).toHaveLength(0);
+    expect(
+      run(text, { rules: { [id]: { floorWords: 1, maxGradeLevel: 5 } } }).forRule(id),
+    ).toHaveLength(1);
   });
 
   it('ignores headings by default and includes them when configured', () => {
@@ -75,7 +110,9 @@ describe('sentence-length-procedural', () => {
     expect(run(heading).forRule('sentence-length-descriptive')).toHaveLength(0);
     expect(
       run(heading, {
-        rules: { 'sentence-length-descriptive': { includeHeadings: true, maxWords: 5 } },
+        rules: {
+          'sentence-length-descriptive': { includeHeadings: true, floorWords: 5, maxGradeLevel: 5 },
+        },
       }).forRule('sentence-length-descriptive'),
     ).toHaveLength(1);
   });
@@ -83,7 +120,9 @@ describe('sentence-length-procedural', () => {
   it('still reports a long sentence that contains protected content', () => {
     // Regression: an earlier implementation dropped any diagnostic whose span merely overlapped a
     // protected region, which silently discarded every sentence-length finding for sentences
-    // containing a quantity, an identifier or an inline code span.
+    // containing a quantity, an identifier or an inline code span. This sentence mixes protected
+    // content with enough ordinary prose that its masked-text grade level still clears the bundled
+    // threshold.
     const text =
       'Torque each of the four M6 bolts to 25 Nm and then run `make verify` before you refit the ' +
       'upper access cover and the lower access cover.\n';
@@ -108,12 +147,41 @@ describe('sentence-length-procedural', () => {
 });
 
 describe('sentence-length-descriptive', () => {
-  it('applies the descriptive limit to descriptive prose', () => {
+  const id = 'sentence-length-descriptive';
+
+  it('applies the descriptive limit to genuinely complex descriptive prose', () => {
     const text =
       'The controller monitors the supply voltage and the ambient temperature and then reports both of these values to the host system over the diagnostic bus once every second.\n';
     const result = run(text);
-    expect(result.forRule('sentence-length-descriptive')).toHaveLength(1);
+    expect(result.forRule(id)).toHaveLength(1);
     expect(result.forRule('sentence-length-procedural')).toHaveLength(0);
+  });
+
+  it(
+    'does not flag a long descriptive sentence made of enumerated identifiers (hard-negative ' +
+      'concern), though the old word-count rule would have flagged it',
+    () => {
+      // 26 words: over the *old* 25-word descriptive limit. Masked-text Flesch-Kincaid grade is
+      // ~2.8, far below the bundled descriptive threshold of 8.
+      const identifierHeavy =
+        'The diagnostic log records cache_size, busy_timeout, journal_mode, synchronous, ' +
+        'wal_autocheckpoint, foreign_keys, secure_delete, temp_store, mmap_size, page_size, ' +
+        'auto_vacuum, cache_spill, recursive_triggers, legacy_alter_table, ' +
+        'reverse_unordered_selects, short_column_names, and read_uncommitted for every open ' +
+        'session.\n';
+      const doc = analyseDocument({ id: 't', format: 'markdown', text: identifierHeavy });
+      expect(doc.sentences[0]?.words.length).toBeGreaterThan(25);
+      expect(run(identifierHeavy).forRule(id)).toHaveLength(0);
+    },
+  );
+
+  it('flags a genuinely complex descriptive sentence regardless of identifiers present', () => {
+    const text =
+      'Notwithstanding the aforementioned configuration constraints, the subsystem, whose ' +
+      'initialization sequence is contingent upon prior successful negotiation of an ' +
+      'authenticated handshake protocol, may nevertheless exhibit nondeterministic behavior ' +
+      'under sustained concurrent load.\n';
+    expect(run(text).forRule(id)).toHaveLength(1);
   });
 });
 
@@ -461,7 +529,9 @@ describe('runner invariants', () => {
   });
 
   it('invalid rule options skip the rule and produce a notice instead of throwing', () => {
-    const resolved = resolveConfig({ rules: { 'sentence-length-procedural': { maxWords: -5 } } });
+    const resolved = resolveConfig({
+      rules: { 'sentence-length-procedural': { maxGradeLevel: -5 } },
+    });
     const doc = analyseDocument({ id: 't', format: 'markdown', text: 'Remove it.\n' });
     const result = runDeterministicRules({
       doc,

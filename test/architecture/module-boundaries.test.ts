@@ -15,6 +15,11 @@ const SRC = resolve(import.meta.dirname, '..', '..', 'src');
 
 const ALLOWED: Record<string, readonly string[]> = {
   core: [],
+  // A real Markdown parser (`@textlint/markdown-to-ast`) has "textlint" in its own package name,
+  // which the "core imports no textlint package" prohibition below exists specifically to catch —
+  // see docs/architecture.md, "Document reader", §3. Landing the reader here rather than loosening
+  // that prohibition is the point: `core` still imports nothing internal, unchanged.
+  reader: ['core'],
   'rule-pack': ['core'],
   deterministic: ['core', 'rule-pack'],
   'model-client': ['core'],

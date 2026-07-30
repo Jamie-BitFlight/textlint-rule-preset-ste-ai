@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { IMPERATIVE_VERBS } from '../../core/imperative-verbs.js';
+import {
+  buildSentencePosIndex,
+  isFunctionWord,
+  isImperativeVerbWord,
+  type SentencePosIndex,
+} from '../../core/pos-tags.js';
 import { buildDiagnostic, type DeterministicRule, type RuleOutput } from '../../core/rule.js';
 import type {
   CandidatePassage,
@@ -9,7 +14,7 @@ import type {
   Sentence,
   SourceRange,
 } from '../../core/types.js';
-import { excerpt, isFunctionWord } from '../helpers.js';
+import { excerpt } from '../helpers.js';
 
 /**
  * Rules in this file never assert a violation on their own.
@@ -254,6 +259,7 @@ export const nounClusterCandidateRule: DeterministicRule<
     const candidates: CandidatePassage[] = [];
 
     for (const sentence of doc.sentences) {
+      const posIndex = buildSentencePosIndex(sentence);
       let run: (typeof sentence.words)[number][] = [];
       const flush = (): void => {
         if (run.length <= limit) {
@@ -295,8 +301,8 @@ export const nounClusterCandidateRule: DeterministicRule<
       for (const word of sentence.words) {
         const breaksRun =
           word.protectedKind !== undefined ||
-          isFunctionWord(word) ||
-          IMPERATIVE_VERBS.has(word.lower) ||
+          isFunctionWord(word, posIndex) ||
+          isImperativeVerbWord(word, posIndex) ||
           !/^[\p{L}][\p{L}-]*$/u.test(word.text);
         if (breaksRun) flush();
         else run.push(word);
@@ -460,13 +466,14 @@ function countAntecedents(sentence: Sentence, previous: Sentence | undefined): s
   const seen = new Set<string>();
   const collect = (s: Sentence | undefined): void => {
     if (s === undefined) return;
+    const posIndex: SentencePosIndex = buildSentencePosIndex(s);
     for (const word of s.words) {
       if (word.protectedKind !== undefined) {
         seen.add(`«${word.protectedKind}»`);
         continue;
       }
-      if (isFunctionWord(word)) continue;
-      if (IMPERATIVE_VERBS.has(word.lower)) continue;
+      if (isFunctionWord(word, posIndex)) continue;
+      if (isImperativeVerbWord(word, posIndex)) continue;
       if (!/^[\p{L}][\p{L}-]{2,}$/u.test(word.text)) continue;
       seen.add(word.lower);
     }

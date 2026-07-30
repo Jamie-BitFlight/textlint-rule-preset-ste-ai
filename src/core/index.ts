@@ -9,3 +9,4 @@ export * from './rule.js';
 export * from './runner.js';
 export * from './suppressions.js';
 export { IMPERATIVE_VERBS } from './imperative-verbs.js';
+export * from './pos-tags.js';

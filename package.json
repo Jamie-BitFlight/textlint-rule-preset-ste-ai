@@ -102,8 +102,11 @@
   "dependencies": {
     "@textlint/ast-node-types": "^15.7.1",
     "@textlint/markdown-to-ast": "^15.7.1",
+    "compromise": "^14.16.0",
     "sentence-splitter": "^5.0.1",
     "text-readability": "^1.1.1",
+    "wink-eng-lite-web-model": "^1.8.1",
+    "wink-nlp": "^2.4.0",
     "zod": "^4.1.10"
   },
   "devDependencies": {

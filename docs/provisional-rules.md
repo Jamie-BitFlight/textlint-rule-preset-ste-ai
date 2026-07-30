@@ -353,20 +353,83 @@ containing a link. See the regression test in `test/unit/protected-regions.test.
 
 ## The procedural/descriptive classifier
 
-Several rules depend on `detectMode()`, which decides whether a passage is an instruction. It has no
-part-of-speech model. It compares the first content word against a closed list of base-form action
-verbs (`src/core/imperative-verbs.ts`) and treats a leading `Do not` / `Never` / `Always` as
-imperative.
-
-Verbs whose base form is a common noun (`file`, `place`, `order`, `plan`, `state`, `test`, `mount`,
-`power`, `contact`, `access`, `report`, `label`, `mark`, `screen`) are **excluded** from the list,
-because including them misclassified large amounts of descriptive prose in the fixture corpus.
-
-Consequences:
+Several rules depend on `detectMode()`, which decides whether a passage is an instruction. As of the
+[`compromise`](https://www.npmjs.com/package/compromise) integration (issue #35), this asks a
+grammatical question — does the passage open with an imperative-mood verb? — via
+`sentenceOpensImperative()` in `src/core/pos-tags.ts`, rather than testing set membership against a
+closed word list. It still only looks at the sentence opener, so the classifier's oldest known limit
+is unchanged:
 
 - `Record the value.` → procedural (correct).
 - `Record the value is stored in flash.` → procedural (wrong; it is descriptive).
-- `Power the unit from the 24 V rail.` → descriptive (wrong; `power` is excluded on purpose).
 
-Where a misclassification would change a hard verdict, the affected rule emits a candidate rather
-than a violation. Add project verbs with `extraImperativeVerbs`.
+`src/core/imperative-verbs.ts` (`IMPERATIVE_VERBS`) survives, but its role changed. It is no longer
+consulted as `Set.has()` membership anywhere outside `pos-tags.ts`. It is now:
+
+1. A **domain lexicon** taught to `compromise` via `addWords`, so `compromise`'s own
+   context-sensitive tagger can recognise technical verbs it does not know out of the box —
+   confirmed directly: `torque`, `flash`, `mark` (as a verb), `source`, `sync`, `query`, `rebase`,
+   `unset` and `serialise`/`serialize` all default to a non-verb reading until taught this way.
+   Only words `compromise` does not already tag as a verb are taught — `addWords` was found, by
+   direct testing, to _replace_ `compromise`'s own richer conjugation-aware tag for a word it
+   already knows (`addWords({build: 'Verb'})` turns `Build` from `Verb·PresentTense·Infinitive`
+   into `Verb·PastTense` in "Build, flash, and run a sample application") rather than adding to it,
+   so every word is checked against a pristine tag lookup before ever being taught.
+2. A **fallback** for words `compromise`'s own tagging gets wrong even with full sentence context
+   (below), and for the rare case where `compromise`'s tokenisation of a sentence does not align
+   with this project's own word tokeniser.
+
+`src/deterministic/helpers.ts`'s old `FUNCTION_WORDS`/`isFunctionWord` moved into `pos-tags.ts` for
+the same reason, backing `noun-cluster-candidate` and `ambiguous-pronoun-candidate`. There,
+`compromise`'s tag and list membership are a **union**, not tag-first-list-as-fallback: corpus
+validation found `compromise` mistags unambiguous closed-class words even with full sentence
+context (`no` and `so` tag as `Expression`, `under` as `Adjective` in "is under the exclusive
+control of" — confirmed directly, not alignment misses). This is also this design's known
+limitation: a word the closed list wrongly treats as _always_ a function word — this issue's own
+motivating examples, `per` as a unit marker and `further` as a comparative adjective — is not fixed
+by adding `compromise`, because the list still fires unconditionally and `compromise`'s tag is
+exactly the thing just shown to be unreliable here.
+
+**Additional known failure modes, all found by corpus validation and fixed with small, documented
+overrides rather than silently accepted:**
+
+- `compromise` tags a capitalised sentence-initial word that collides with a common English verb as
+  imperative regardless of what it actually names — `VACUUM reclaims storage occupied by dead
+tuples.` (PostgreSQL's own command name) tags `VACUUM` as `Verb·Imperative`, which then cascades
+  into mistagging the real verb `reclaims` as a noun. `List Of PRAGMAs …`, a heading rendered as a
+  run-on Title Case line in `fixtures/original/sqlite-pragma-hard-negative.md` — a fixture named for
+  exactly this kind of trap — has the same failure with `List`. Both are excluded by a two-word
+  override list in `pos-tags.ts`, found empirically against this corpus, not enumerated in advance.
+- `compromise` does not tag `#Imperative` on any verb in a coordinated imperative list ("Build,
+  flash, and run a sample application.") — confirmed directly, none of the three verbs get the tag.
+  `sentenceOpensImperative` recovers this by also accepting a bare (infinitive/present-tense,
+  non-passive, non-gerund) tag on the very first word of a sentence, which is otherwise a
+  vanishingly rare shape outside imperative mood — guarded against a word immediately followed by a
+  colon (`Note:`, `Exception:`), which is a label, not a verb taking an object.
+- `have`/`has`/`had`, `do`/`does`/`did`, `be`/`being`/`been`, `get`/`gets`/`got`, `go`/`goes` are
+  excluded from the tag-based "is this a bare action verb" signal used by
+  `one-instruction-per-sentence`'s conjunction/comma detection, even though `compromise` correctly
+  tags them as bare verbs. This was the one regression corpus validation found against the
+  annotated ground truth: without the exclusion, "Select, and have each affected employee use, the
+  types of PPE…" (`fixtures/annotations/osha-ppe-requirements.json`, a confirmed real defect) went
+  from a `one-instruction-per-sentence` **candidate** — this project's own candidate/adjudication
+  architecture working as intended — to an immediate `deterministic-violation`, skipping semantic
+  adjudication. The verdict was right; the architecture was bypassed for the wrong reason, and the
+  same tag would misfire on ordinary descriptive prose using "have" as an auxiliary near an
+  unrelated "and".
+
+Add project verbs with `extraImperativeVerbs`; they are taught to `compromise` the same way the
+built-in domain lexicon is (same already-known-as-verb guard), so a configured verb genuinely
+participates in mood detection.
+
+**Measured corpus effect** (`fixtures/original/*.md`, all 18 documents, before/after this change):
+
+| Rule                           | Before | After | Note                                                                                                                                                                                           |
+| ------------------------------ | -----: | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list-instruction-structure`   |      3 |     3 | Unaffected — does not depend on imperative/function-word detection.                                                                                                                            |
+| `one-instruction-per-sentence` |      6 |     6 | Same count; composition unchanged after the auxiliary-verb fix above.                                                                                                                          |
+| `noun-cluster-candidate`       |     70 |    48 | −22. This rule has **zero** confirmed true positives in 35 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
+| `ambiguous-pronoun-candidate`  |     68 |    60 | −8. Both of the rule's 2 confirmed true positives (`httpd-mod-ssl-directive-config`, `postgres-vacuum-overview`) were checked directly and are still generated as candidates.                  |
+
+The one confirmed `one-instruction-per-sentence` true positive (`osha-ppe-requirements`) was also
+checked directly and is still generated as a candidate, not a hard violation.

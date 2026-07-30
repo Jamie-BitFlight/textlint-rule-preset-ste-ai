@@ -454,6 +454,14 @@ describe('one-instruction-per-sentence', () => {
     });
     expect(result.forRule(id)).toHaveLength(0);
   });
+
+  it('flags two imperatives joined by "and" using a verb the old hardcoded list never enumerated', () => {
+    // Neither "wipe" nor "trim" is in `IMPERATIVE_VERBS` (src/core/imperative-verbs.ts) — this is
+    // real recall from `compromise`'s grammatical tagging, not just parity with the closed list.
+    const result = run('Wipe the sensor lens and trim the excess cable.\n');
+    expect(result.forRule(id)).toHaveLength(1);
+    expect(result.forRule(id)[0]?.category).toBe('deterministic-violation');
+  });
 });
 
 describe('candidate rules never assert violations', () => {
@@ -494,6 +502,20 @@ describe('candidate rules never assert violations', () => {
         rules: { 'noun-cluster-candidate': { adjudicate: false } },
       }).forRule('noun-cluster-candidate'),
     ).toHaveLength(0);
+  });
+
+  it('noun-cluster-candidate still breaks a run on "no", which compromise mistags as Expression', () => {
+    // Regression guard: `compromise` tags "no" as `Expression` rather than `Determiner`/`Negative`
+    // in ordinary sentence context (confirmed directly against fixtures/original), so
+    // `isFunctionWord` must still catch it via the closed-class list, not rely on the tag alone.
+    const result = run('Check the engine has no oil pressure warning lamp fault today.\n', {
+      rules: { 'noun-cluster-candidate': { adjudicate: false } },
+    });
+    const clusters = result.forRule('noun-cluster-candidate');
+    for (const cluster of clusters) {
+      const text = result.text.slice(cluster.range.start, cluster.range.end);
+      expect(text.toLowerCase().split(/\s+/)).not.toContain('no');
+    }
   });
 
   it('ambiguous-pronoun-candidate flags a bare demonstrative subject', () => {

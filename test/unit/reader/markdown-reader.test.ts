@@ -174,6 +174,23 @@ describe('MarkdownReader', () => {
     expect(units[0]?.admonition).toBe('warning');
   });
 
+  it('scopes a GFM alert container’s admonition to every paragraph inside it, not just the first', async () => {
+    // Regression for the reviewer-found bug: `[!WARNING]` and its two quoted paragraphs parse as
+    // THREE separate Paragraph nodes (blank `>` lines split them), all children of the same
+    // BlockQuote. The marker's register must scope the whole container, not lapse after the first
+    // paragraph consumes it — a container opener (GFM/MkDocs/RST) is not a one-shot label like
+    // AsciiDoc's `[WARNING]`.
+    const text = ['> [!WARNING]', '>', '> First paragraph.', '>', '> Second paragraph.', ''].join(
+      '\n',
+    );
+    const units = await read(text);
+    assertRoundTrips(text, units);
+    const first = units.find((u) => u.text === 'First paragraph.');
+    const second = units.find((u) => u.text === 'Second paragraph.');
+    expect(first?.admonition).toBe('warning');
+    expect(second?.admonition).toBe('warning');
+  });
+
   it('excludes the table markup from a table-cell unit', async () => {
     const text = ['| Step | Action |', '| --- | --- |', '| 1 | Utilise the tool |', ''].join('\n');
     const units = await read(text);

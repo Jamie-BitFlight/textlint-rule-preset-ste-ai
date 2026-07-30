@@ -65,6 +65,15 @@ export function readMarkdownUnitsSync(doc: SourceDocument): TextUnit[] {
     // top of each recursive `walkChildren` call cannot reproduce that; a box threaded unchanged
     // through every recursive call can.
     pending: { value: 'none' },
+    // A container-scoped admonition register, distinct from `pending` above: `structure.ts`'s own
+    // `containerAdmonition` applies to every block belonging to the container an opener introduced,
+    // not just the next one — the register lapses only when the container itself ends, not on first
+    // use. A GFM alert (`> [!WARNING]`) is the shape that needs it: its marker and every following
+    // quoted paragraph are siblings inside the same `BlockQuote`, so this box gets replaced with a
+    // fresh one exactly when `walkChildren` recurses into a `BlockQuote`'s own children — reset at
+    // the container's boundary, exactly like `structure.ts`'s indent-based reset, but expressed as
+    // object identity instead of an indent comparison.
+    containerAdmonition: { value: 'none' },
     counter,
   };
   return [...walkChildren(ast.children, ctx)];
@@ -99,15 +108,27 @@ interface WalkContext {
   /** The written ordinal of the enclosing list item, when it is one item of an ordered list. */
   readonly listOrdinal: number | undefined;
   readonly pending: { value: AdmonitionKind };
+  /** See the doc comment where this is first constructed, in `readMarkdownUnitsSync`. */
+  readonly containerAdmonition: { value: AdmonitionKind };
   readonly counter: Counter;
 }
 
 /**
  * Walk one level of siblings, in source order, propagating an admonition register the way
- * `src/core/structure.ts`'s block scanner does: a paragraph that is *only* an admonition opener
- * (`!!! warning`, `.. warning::`, `[WARNING]`) carries no prose of its own, is not turned into a
- * unit, and its register applies to whichever unit is produced *next in traversal order* — once,
- * then it lapses, even if that next unit is found after descending into a list or a blockquote.
+ * `src/core/structure.ts`'s block scanner does — except `structure.ts` actually keeps *two*
+ * distinct registers, and this walk has to as well:
+ *
+ * - `ctx.pending`: a **one-shot** label (AsciiDoc's `[WARNING]`, alone on its own line at the same
+ *   indent as what follows). It applies to whichever unit is produced *next in traversal order* —
+ *   once, then it lapses, even if that next unit is found after descending into a list or a
+ *   blockquote.
+ * - `ctx.containerAdmonition`: a **container-scoped** register (a GFM alert's `> [!WARNING]`, an
+ *   MkDocs `!!! warning`, an RST `.. warning::`) that scopes every child of the container the
+ *   opener introduces — every quoted paragraph in a GFM alert's `BlockQuote`, not just the first —
+ *   and lapses only when the container itself ends, matched here by giving `BlockQuote` a fresh
+ *   box when `walkChildren` recurses into it (see the `BlockQuote` case below), rather than by
+ *   consuming it on first use the way `pending` does.
+ *
  * A combined marker-and-body paragraph (a GFM alert's `> [!WARNING]` and its quoted line parse as
  * one `Paragraph` node) is not a bare opener by this test — `isBareAdmonitionOpener` requires the
  * whole line to be nothing else — so it falls through to the ordinary branch and reports its own
@@ -126,7 +147,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
           'heading',
           contentRange(header),
           header.depth,
-          own !== 'none' ? own : pending,
+          own !== 'none' ? own : pending !== 'none' ? pending : ctx.containerAdmonition.value,
           // scanBlocks forces every heading to `descriptive` unconditionally
           // (`kind === 'heading' ? 'descriptive' : detectMode(...)`) — `detectMode` never runs on a
           // heading's own text at all, so an imperative-sounding title is not misread as an
@@ -152,11 +173,27 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         const openerCandidate = ctx.containerKind === 'blockquote' ? `> ${raw}` : raw;
         // An opener carries no prose: it names a register for what follows and produces no unit,
         // matching `scanBlocks`'s "a block made only of markup carries no prose" rule.
-        if (
-          own !== 'none' &&
-          (isBareAdmonitionOpener(openerCandidate) || isAdmonitionLabelLine(raw))
-        ) {
+        //
+        // AsciiDoc's `[WARNING]` label is one-shot (`ctx.pending`) regardless of where it is found.
+        // A bare *container* opener (GFM alert, MkDocs, RST/MyST) found as a direct child of the
+        // blockquote it is itself opening is different: it must scope every sibling paragraph in
+        // that same `BlockQuote`, not just the next one, so it goes into `ctx.containerAdmonition`
+        // instead — a register this call's own `BlockQuote` recursion resets on entry, never
+        // consumed on first use the way `ctx.pending` is. Found anywhere else (top-level MkDocs/RST,
+        // which the parser represents as plain siblings with no enclosing container node to bound
+        // the scope), it stays one-shot via `ctx.pending`, same as before — the immediately
+        // following unit (typically the indented body `CodeBlock`, see that case below) is what
+        // actually needs it.
+        if (own !== 'none' && isAdmonitionLabelLine(raw)) {
           ctx.pending.value = own;
+          continue;
+        }
+        if (own !== 'none' && isBareAdmonitionOpener(openerCandidate)) {
+          if (ctx.containerKind === 'blockquote') {
+            ctx.containerAdmonition.value = own;
+          } else {
+            ctx.pending.value = own;
+          }
           continue;
         }
         // Without a blank line, commonmark merges a bare opener with the prose that follows it into
@@ -202,7 +239,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
           kind,
           contentRange(paragraph),
           depth,
-          own !== 'none' ? own : pending,
+          own !== 'none' ? own : pending !== 'none' ? pending : ctx.containerAdmonition.value,
           undefined,
           ctx.containerKind === 'list-item' ? ctx.listOrdinal : undefined,
         );
@@ -216,6 +253,12 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
           depth: ctx.depth + 1,
           containerKind: 'blockquote',
           listOrdinal: undefined,
+          // A fresh box, not the enclosing scope's: this `BlockQuote`'s own container-scoped
+          // admonition (if one of its direct-child paragraphs opens one) must not leak out to a
+          // sibling of the blockquote once this recursive call returns, and a blockquote nested
+          // inside another admonition-bearing blockquote must not inherit the outer one's register
+          // as though it were its own container.
+          containerAdmonition: { value: 'none' },
         });
         break;
       }
@@ -266,7 +309,13 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
         const own = detectAdmonition(cell.raw);
-        yield buildUnit(ctx, 'table-cell', contentRange(cell), 0, own !== 'none' ? own : pending);
+        yield buildUnit(
+          ctx,
+          'table-cell',
+          contentRange(cell),
+          0,
+          own !== 'none' ? own : pending !== 'none' ? pending : ctx.containerAdmonition.value,
+        );
         break;
       }
 

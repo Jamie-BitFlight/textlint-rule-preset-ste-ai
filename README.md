@@ -1,15 +1,21 @@
 # textlint-rule-preset-ste-ai
 
-An auditable Simplified Technical English linter for technical documentation: deterministic textlint
-rules, plus an **optional** semantic-adjudication subsystem that calls a small model served locally by
-llama.cpp. It is meant to run inside a pre-commit hook — Husky, prek, or the Python `pre-commit`
-framework, invoked via `npx` — most often checking documentation an AI agent has just drafted, so the
-agent's vocabulary stays consistent with the project's before the commit lands.
+A linter that lets an AI agent gate the documents it writes for clarity, readability, and vocabulary
+consistency — checked against a checkable, per-project-approved vocabulary, not just a generic style
+guide. "Write following ASD-STE100 guidelines" is already a prompt pattern agents respond well to,
+producing shorter, clearer text; this package turns that pattern into something enforceable and
+gateable instead of a hope. It ships deterministic textlint rules, plus an **optional**
+semantic-adjudication subsystem that calls a small model served locally by llama.cpp for the checks
+that genuinely need judgement. It is meant to run inside a pre-commit hook — Husky, prek, or the
+Python `pre-commit` framework, invoked via `npx` — most often checking documentation an AI agent has
+just drafted, so the agent's vocabulary stays consistent with the project's before the commit lands.
 
 > **This package does not implement ASD-STE100 and makes no claim of conformance with it.** The
-> standard and its dictionary are proprietary and were not available to this repository. Every rule
-> shipped here is an authored plain-English heuristic marked `provisional`. Read
-> [`docs/DISCLAIMER.md`](docs/DISCLAIMER.md) before using this anywhere it matters.
+> standard and its dictionary are proprietary and were not available to this repository. ASD-STE100
+> is referenced here as a known target agents already understand, not as a specification this
+> package reproduces. Every rule shipped here is an authored plain-English heuristic marked
+> `provisional`. Read [`docs/DISCLAIMER.md`](docs/DISCLAIMER.md) before using this anywhere it
+> matters.
 
 ## The idea
 
@@ -19,17 +25,16 @@ schema-validated, threshold-gated, span-anchored and traced.
 
 ```
                     ┌────────────────────────────────┐
-  markdown / text → │ protected regions → blocks →   │ → deterministic rules → violations
-                    │ sentences → words (offsets     │ ↘
-                    │ preserved throughout)          │   candidates → broker → evaluator → verdict
+  markdown / text → │ pluggable document reader →    │ → deterministic rules → violations
+                    │ text units → sentences → words │ ↘
+                    │ (offsets preserved throughout) │   candidates → broker → evaluator → verdict
                     └────────────────────────────────┘        (optional, local, off by default)
 ```
 
-The "protected regions → blocks" step is implemented today by hand-written regex over masked text,
-selected by a `markdown`/`text` format flag. That is being replaced by a pluggable document reader —
-a real parser for Markdown first — feeding the same reader-agnostic rules below; see
-[issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25) and
-[`docs/architecture.md`](docs/architecture.md). It is in progress, not shipped.
+Document structure is read through a real parser (`@textlint/markdown-to-ast` for Markdown today) via
+a pluggable `DocumentReader` interface, not hand-written regex over masked text; see
+[`docs/architecture.md`](docs/architecture.md) for the reasoning and
+[issue #25](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/25) for the history.
 
 ## Install
 

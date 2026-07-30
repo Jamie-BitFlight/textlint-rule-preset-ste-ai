@@ -14,6 +14,7 @@ import type {
   Sentence,
   SourceRange,
 } from '../../core/types.js';
+import { buildWinkPosIndex, type WinkPosIndex } from '../../core/wink-tags.js';
 import { excerpt } from '../helpers.js';
 
 /**
@@ -60,6 +61,13 @@ function pushCandidate(
 
 /**
  * Irregular past participles. PROVENANCE: implementation assumption — ordinary English morphology.
+ *
+ * This list, and the `[a-z]{3,}ed` regular-participle shape below, are kept **verbatim** from the
+ * pre-`wink-nlp` heuristic, deliberately, so this prototype changes exactly one variable: what
+ * decides whether a matched `be + word` construction is really a passive, not what constructions
+ * get matched in the first place. See {@link isPassiveParticiple} for why, and the "known gap
+ * found, not fixed here" note below it for a real regex-shape gap corpus validation surfaced but
+ * that is out of scope for that reason.
  */
 const PARTICIPLES = [
   'known',
@@ -136,10 +144,61 @@ const PARTICIPLES = [
   'withdrawn',
 ].join('|');
 
+/**
+ * Matches the same auxiliary set as the pre-`wink-nlp` heuristic (`is/are/was/were/be/been/
+ * being/gets/get/got`) — unchanged, deliberately, per the prototype's own scope — and the same
+ * word shape: a regular `-ed` participle of at least 5 letters, or a member of the irregular
+ * {@link PARTICIPLES} list. {@link isPassiveParticiple} then adds `wink-nlp`'s POS tag as an
+ * **additional** condition on top of that shape, rather than replacing the shape check, so this
+ * prototype can only ever emit a subset of the candidates the old regex emitted, never a new span
+ * — see the note below on why coverage expansion is deliberately out of scope here.
+ */
 const PASSIVE_RE = new RegExp(
-  String.raw`\b(is|are|was|were|be|been|being|gets|get|got)\s+((?:[a-z]+ly\s+)?(?:[a-z]{3,}ed|${PARTICIPLES}))\b(\s+by\b)?`,
-  'gi',
+  String.raw`\b(?<aux>is|are|was|were|be|been|being|gets|get|got)\s+(?<construction>(?:[a-z]+ly\s+)?(?<participle>[a-z]{3,}ed|${PARTICIPLES}))\b(?<agent>\s+by\b)?`,
+  'gid',
 );
+
+interface PassiveMatchGroups {
+  readonly aux: string;
+  readonly construction: string;
+  readonly participle: string;
+  readonly agent?: string;
+}
+
+/**
+ * Words `wink-nlp` mistags as `VERB` directly after a `be`-auxiliary with no article ("The SQLite
+ * library **is code** that implements…"), regardless of surrounding sentence context — confirmed
+ * directly, reproducible across several rewordings of the same sentence, not a one-off. `code` is
+ * verb/noun-ambiguous the way `record`/`file`/`access` are (see `imperative-verbs.ts`), and
+ * `wink-nlp`'s coarser universal tagset resolves the ambiguity the wrong way here where
+ * `compromise`'s tagger (used elsewhere in this codebase) resolves the equivalent case correctly.
+ * A small, empirically-justified override list, found by corpus validation, not enumerated in
+ * advance — the same pattern used for `compromise`'s own false positives in `pos-tags.ts`.
+ */
+const WINK_FALSE_VERB_TAGS: ReadonlySet<string> = new Set(['code']);
+
+/**
+ * Is the word at `[start, end)` in `text` tagged as a verb by `wink-nlp`, rather than an adjective
+ * or anything else? This is the tag-conditioned filter added on top of the old `PARTICIPLES`-list
+ * shape check: it rejects an adjectival reading the list could not distinguish ("the SSL Engine is
+ * disabled" tags `disabled` as `ADJ`, not `VERB` — confirmed directly).
+ *
+ * **Known gap found, not fixed here:** `[a-z]{3,}ed` requires at least 5 letters, so a real
+ * 4-letter regular participle like `used` never reaches this function at all — "that protocol
+ * **is used**" and "**be used** inside a `VirtualHost`" (`fixtures/original/curl-url-option-
+ * reference.md`, `fixtures/original/httpd-mod-ssl-directive-config.md`) are genuine passives the
+ * pre-`wink-nlp` regex has always missed. `wink-nlp` tags `used` `VERB` correctly and would catch
+ * both if the shape gate above were loosened to admit them. That loosening is deliberately not
+ * made part of this change: it would emit spans no reviewer has ever adjudicated, which the
+ * project's own candidate/ground-truth invariant (`test/fixtures/corpus.test.ts`) exists to
+ * prevent without a human review pass. Reported honestly rather than silently dropped or quietly
+ * worked around by excluding `used` the way `code` is excluded above — `used` is not a tagging
+ * mistake, unlike `code`.
+ */
+function isPassiveParticiple(index: WinkPosIndex, start: number, word: string): boolean {
+  if (WINK_FALSE_VERB_TAGS.has(word.toLowerCase())) return false;
+  return index.tagAt(start) === 'VERB';
+}
 
 const passiveOptionsSchema = z.object({
   /** Require an explicit `by` agent before flagging. Fewer candidates, lower recall. */
@@ -159,9 +218,11 @@ const passiveSpec: CandidateRuleSpec = {
     fixable: false,
     inspectsProtectedRegions: false,
     description:
-      'Detects a `be` form followed by a past participle. The construction is only a candidate: ' +
-      'many such strings are adjectival ("the bolt is tightened" vs "the surface is clean"), and ' +
-      'a passive is sometimes the clearest form in a description. Adjudication decides.',
+      'Detects a `be` form followed by a word `wink-nlp` tags as a verb (a prototype POS-tag-' +
+      'conditioned replacement for a closed participle list; see docs/provisional-rules.md). The ' +
+      'construction is only a candidate: many such strings are adjectival ("the bolt is ' +
+      'tightened" vs "the surface is clean"), and a passive is sometimes the clearest form in a ' +
+      'description. Adjudication decides.',
   },
   evaluatorId: 'passive-voice-adjudication',
   invariants: ['actor responsibility', 'negation', 'modal force', 'action order'],
@@ -176,8 +237,17 @@ export const passiveVoiceCandidateRule: DeterministicRule<z.output<typeof passiv
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
     for (const sentence of doc.sentences) {
-      for (const m of sentence.masked.matchAll(PASSIVE_RE)) {
-        const hasAgent = m[3] !== undefined;
+      const matches = [...sentence.masked.matchAll(PASSIVE_RE)];
+      if (matches.length === 0) continue;
+      const winkIndex = buildWinkPosIndex(sentence.masked);
+      for (const m of matches) {
+        const groups = m.groups as PassiveMatchGroups | undefined;
+        const participleRange = m.indices?.groups?.['participle'];
+        if (groups === undefined || participleRange === undefined || m.index === undefined) {
+          continue;
+        }
+        if (!isPassiveParticiple(winkIndex, participleRange[0], groups.participle)) continue;
+        const hasAgent = groups.agent !== undefined;
         if (options.requireByAgent && !hasAgent) continue;
         const range: SourceRange = {
           start: sentence.range.start + m.index,
@@ -191,12 +261,12 @@ export const passiveVoiceCandidateRule: DeterministicRule<z.output<typeof passiv
               range,
               {
                 construction: m[0],
-                auxiliary: m[1],
-                participle: m[2],
+                auxiliary: groups.aux,
+                participle: groups.construction,
                 hasExplicitAgent: hasAgent,
                 offsetInPassage: m.index,
               },
-              'Auxiliary plus past participle.',
+              'Auxiliary plus a word wink-nlp tags as a verb.',
             ),
           );
         } else if (policy.reportReviewRequired) {

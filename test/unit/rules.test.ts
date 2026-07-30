@@ -485,6 +485,32 @@ describe('candidate rules never assert violations', () => {
     expect(withoutAgent.forRule('passive-voice-candidate')).toHaveLength(0);
   });
 
+  it('passive-voice-candidate still catches an ordinary irregular participle from the old list', () => {
+    // "known" is in the old 70-entry `PARTICIPLES` list, and wink-nlp independently tags it VERB
+    // here — the wink-nlp check is a filter added on top of the unchanged shape gate (regular
+    // `-ed` word or `PARTICIPLES` membership), not a replacement for it: see the "Known gap found,
+    // not fixed here" note on `isPassiveParticiple` in candidate-rules.ts for why a genuinely novel
+    // irregular participle outside that list ("hewn", "forsaken" — wink-nlp tags both VERB, and
+    // neither is in `PARTICIPLES`) is deliberately not admitted by this prototype: it would emit a
+    // candidate span no reviewer has ever adjudicated.
+    const result = run('The value is known.\n', {
+      rules: { 'passive-voice-candidate': { adjudicate: false } },
+    });
+    expect(result.forRule('passive-voice-candidate').length).toBeGreaterThan(0);
+  });
+
+  it('passive-voice-candidate no longer flags the exact adjectival case the corpus reviewer named', () => {
+    // "is disabled" in this shape ("By default X is disabled") is the corpus's own example of a
+    // configuration-state reading, not a passive action (httpd-mod-ssl-directive-config.json).
+    // wink-nlp tags "disabled" ADJ here, so the tag-conditioned check does not generate a
+    // candidate for it at all — a real behaviour change from the old regex, which always matched
+    // it (any `-ed` word matched) and relied on semantic adjudication to call it a non-violation.
+    const result = run('By default the SSL Engine is disabled.\n', {
+      rules: { 'passive-voice-candidate': { adjudicate: false } },
+    });
+    expect(result.forRule('passive-voice-candidate')).toHaveLength(0);
+  });
+
   it('noun-cluster-candidate flags a long run of content words', () => {
     const result = run('Check the engine oil pressure warning lamp test procedure.\n', {
       rules: { 'noun-cluster-candidate': { adjudicate: false } },

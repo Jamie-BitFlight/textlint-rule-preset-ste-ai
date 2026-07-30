@@ -284,11 +284,90 @@ are not a conformance measurement.**
 
 ### passive-voice-candidate
 
-**Detects** a `be`/`get` form followed by a past participle, optionally with a `by` agent.
+**Detects** a `be`/`get` form (`is|are|was|were|be|been|being|gets|get|got` — unchanged) followed
+by a past participle, optionally with a `by` agent.
 
 **Why candidate-only** The same string is a passive verb in "the filter must be replaced" and an
 adjectival state in "the drain valve is closed". Only the first is a defect, and only in an
 instruction. Deciding needs meaning, so `passive-voice-adjudication` decides.
+
+**Mechanism — a `wink-nlp` prototype (issue #35).** `compromise` (used elsewhere in this codebase
+for imperative/function-word detection, see "The procedural/descriptive classifier" below) has no
+passive-voice feature at all — confirmed directly, not an oversight. This rule instead adds
+[`wink-nlp`](https://www.npmjs.com/package/wink-nlp) plus the `wink-eng-lite-web-model` pretrained
+model as a POS-tag-conditioned filter **on top of** the original regex, which is otherwise kept
+unchanged: a match still requires the same auxiliary set and the same word shape (a regular
+`-ed` participle of at least 5 letters, or membership in the same 70-entry irregular `PARTICIPLES`
+list as before). The new step is that the matched word must also be tagged `VERB` by `wink-nlp`,
+not `ADJ` — this is real recall the old list-membership check could never distinguish, because a
+participle can be adjectival in one sentence and verbal in another regardless of its spelling.
+
+**Why the match shape was not loosened, even though `wink-nlp` could support it.** `wink-nlp`
+correctly tags genuinely novel irregular participles the old list never enumerated (`hewn` in "the
+gasket was hewn", `forsaken` in "the report has been forsaken" — both tag `VERB`, neither is in
+`PARTICIPLES`), and correctly tags an ordinary 4-letter regular participle the old regex's `[a-z]
+{3,}ed` shape has always been too strict to match at all ("that protocol **is used**",
+`curl-url-option-reference.md`; "…**be used** inside a `VirtualHost`",
+`httpd-mod-ssl-directive-config.md` — both genuine passives, both missed by the pre-existing
+regex). Neither improvement is exercised by this rule: doing so would emit candidate spans no
+reviewer has ever adjudicated, and this project's own candidate/ground-truth invariant
+(`test/fixtures/corpus.test.ts`) exists specifically to catch that. Reported here rather than
+silently worked around, as real, verified findings that need a human review pass before they can
+be admitted.
+
+**Measured effect on `fixtures/original/*.md`** (all 18 documents, before/after, both against the
+same fixed `fixtures/annotations/*.json` ground truth):
+
+|                                      | Old regex (list-membership) | New (`wink-nlp` tag-conditioned) |
+| ------------------------------------ | --------------------------: | -------------------------------: |
+| Total candidates                     |                          53 |                               50 |
+| Matched to a `violation` verdict     |                           2 |                                2 |
+| Matched to a `non-violation` verdict |                          51 |                               48 |
+| Candidate with no matching verdict   |                           0 |                                0 |
+
+Both of the corpus's 2 confirmed real defects are still caught (checked directly, not inferred from
+the count). All 3 removed candidates are documented `non-violation` in the ground truth, and for 2
+of the 3 the reviewer's own reasoning is an adjectival/state characterization that the `VERB`/`ADJ`
+tag distinction reproduces directly:
+
+- `httpd-mod-ssl-directive-config.json`, `"is\ndisabled"` (span 633–644): "states a configuration
+  state, adjectival rather than a passive action … describes the shipped default" — `wink-nlp` tags
+  `disabled` `ADJ` here.
+- `httpd-mod-ssl-directive-config.json`, `"be configured"` (span 997–1010): "a stated
+  property/limitation of the directive … not an instruction whose actor matters" — `wink-nlp` tags
+  `configured` `ADJ` here.
+- `httpd-mod-ssl-overview.json`, `"be configured"` (span 474–487): "a capability statement about
+  the module in descriptive overview prose, not an instruction" — `wink-nlp` tags `configured` `ADJ`
+  here too.
+
+**Known false positive introduced by the substrate, mitigated with a small override.** `wink-nlp`
+tags `code` as `VERB` immediately after a `be`-auxiliary with no article ("The SQLite library **is
+code** that implements…", `sqlite-cli-description.md`) regardless of surrounding context —
+confirmed directly, reproducible across several rewordings. `code` is verb/noun-ambiguous the way
+`record`/`file`/`access` are (see `imperative-verbs.ts`), and `wink-nlp`'s coarser universal tagset
+resolves the ambiguity the wrong way here where `compromise` resolves the equivalent case
+correctly elsewhere in this codebase. A single-word override (`WINK_FALSE_VERB_TAGS` in
+`candidate-rules.ts`) excludes it; found empirically, not enumerated in advance, and not
+exhaustive — a corpus this small cannot prove there are no others.
+
+**Known limitation the tag-conditioning does not fix.** `wink-nlp`'s universal POS tagset does not
+distinguish tense/aspect finely enough to separate a genuine passive from an active progressive
+("is running", "is installing" — both tag `VERB`); the regex's own `-ed`/`PARTICIPLES` shape gate
+already excludes `-ing` words entirely, so this never surfaces in practice, but it means the
+`VERB`/`ADJ` distinction is doing less grammatical work than it might appear to. It also still gets
+a real passive wrong in at least one case found during exploration: "The device **gets configured**
+automatically" tags `configured` `ADJ` (parallel to the "gets configured" ADJ-tagging seen with
+`is`/`be`), even though this is a genuine passive, not a stative description — the substrate cannot
+always tell the difference between "was configured [in the past]" and "is [currently] configured
+[state]" from tag alone.
+
+**Verdict: a real, measured but modest precision improvement (53 → 50 candidates, −5.7% on this
+corpus, 0 recall loss on the 2 known defects), with one substrate-introduced false positive found
+and mitigated, one known unfixed miscall, and one deliberately unexercised recall opportunity (the
+`used`/`hewn`/`forsaken` cases) that would need a human review pass before landing. This is not
+"delete the list, wink-nlp is better" — it is a plausible, defensible layer added on top of the
+list, worth a second opinion from the maintainer before treating it as the production mechanism
+rather than a prototype.**
 
 ### noun-cluster-candidate
 

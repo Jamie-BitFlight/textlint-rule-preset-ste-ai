@@ -361,7 +361,7 @@ describe('a suppressed candidate is never sent to the model', () => {
     ]);
     const record = result.suppressions.find((s) => s.ruleId === 'passive-voice-candidate');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus past participle.');
+    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
     expect(record?.reason).toBe('Quoted verbatim from the supplier.');
     expect(result.notices.map((n) => n.code)).not.toContain('suppression-unused');
   });
@@ -417,7 +417,7 @@ describe('a suppressed candidate is never sent to the model', () => {
     const record = result.suppressions.find((s) => s.ruleId === CANDIDATE_RULE);
     expect(record?.reason).toBe('directive text is not prose');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus past participle.');
+    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
   });
 
   it('redacts a directive comment from a surviving candidate that merely shares its sentence', async () => {

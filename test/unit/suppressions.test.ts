@@ -648,6 +648,33 @@ describe('applySuppressions', () => {
   });
 
   it('does not duplicate a refusal notice already reported for the diagnostic’s underlying candidate', () => {
+    // `candidateId` is set explicitly rather than reused from `diagnostic.range`: identity here is
+    // the candidate's own id, precisely because adjudication is free to move a diagnostic's range
+    // away from the candidate's — matching by range is the bug this dedup guards against.
+    const diagnostic = {
+      ...diagnosticFor(WARNING_DOC, 'Utilise the bracket'),
+      candidateId: 'cand-1',
+    };
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: WARNING_DOC });
+    const scan = scanSuppressions(doc);
+    const applied = applySuppressions({
+      doc,
+      diagnostics: [diagnostic],
+      directives: scan.directives,
+      allowInAdmonitions: false,
+      knownRuleIds: KNOWN_RULE_IDS,
+      alreadyRefused: ['cand-1'],
+    });
+    // Still kept: only the second, redundant notice is what has to disappear.
+    expect(applied.diagnostics).toHaveLength(1);
+    expect(applied.notices.map((n) => n.code)).not.toContain('suppression-refused-in-admonition');
+  });
+
+  it('does not treat a range match alone as the same candidate when the id differs', () => {
+    // Two distinct candidates can legitimately share a range only in contrived cases, but the
+    // inverse is the real-world one this guards: the same candidate's diagnostic can carry a
+    // *different* range post-adjudication. Either way, identity must come from the id, not the
+    // range — so a coincidental range match with no id at all must not suppress the notice.
     const diagnostic = diagnosticFor(WARNING_DOC, 'Utilise the bracket');
     const doc = analyseDocument({ id: 't', format: 'markdown', text: WARNING_DOC });
     const scan = scanSuppressions(doc);
@@ -657,11 +684,10 @@ describe('applySuppressions', () => {
       directives: scan.directives,
       allowInAdmonitions: false,
       knownRuleIds: KNOWN_RULE_IDS,
-      alreadyRefused: [{ ruleId: diagnostic.ruleId, range: diagnostic.range }],
+      alreadyRefused: ['some-other-candidate-id'],
     });
-    // Still kept: only the second, redundant notice is what has to disappear.
     expect(applied.diagnostics).toHaveLength(1);
-    expect(applied.notices.map((n) => n.code)).not.toContain('suppression-refused-in-admonition');
+    expect(applied.notices.map((n) => n.code)).toContain('suppression-refused-in-admonition');
   });
 
   it('rejects an ignore-end that carries trailing arguments and leaves the range open', () => {

@@ -159,6 +159,37 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
           ctx.pending.value = own;
           continue;
         }
+        // Without a blank line, commonmark merges a bare opener with the prose that follows it into
+        // ONE `Paragraph` node — `scanBlocks`, a line-by-line scanner, never merges an opener line
+        // with what follows it, blank line or not, so this shape has no counterpart there to match
+        // by omission. `isBareAdmonitionOpener`/`isAdmonitionLabelLine` test one line in isolation;
+        // run against the whole merged blob above, the opener is followed by real content and no
+        // longer reads as "only" a marker, so the register was silently lost. Not attempted inside a
+        // blockquote: a GFM alert's marker-and-body merging into one unit, with the marker's own
+        // admonition applied directly to it (the branch just above, when it does *not* split), is a
+        // deliberate, different convention for that one form, not an oversight to unify with this.
+        if (ctx.containerKind !== 'blockquote') {
+          const split = splitLeadingOpener(raw);
+          if (split !== undefined) {
+            const contentRangeValue = contentRange(paragraph);
+            const bodyRange: SourceRange = {
+              start: contentRangeValue.start + split.bodyOffset,
+              end: contentRangeValue.end,
+            };
+            const kind = ctx.containerKind ?? 'paragraph';
+            const depth = ctx.containerKind === 'list-item' ? ctx.listDepth : 0;
+            yield buildUnit(
+              ctx,
+              kind,
+              bodyRange,
+              depth,
+              split.admonition,
+              undefined,
+              ctx.containerKind === 'list-item' ? ctx.listOrdinal : undefined,
+            );
+            break;
+          }
+        }
         const kind = ctx.containerKind ?? 'paragraph';
         const depth =
           ctx.containerKind === 'list-item'
@@ -245,6 +276,27 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         break;
     }
   }
+}
+
+/**
+ * Whether the first line of `raw` is, on its own, a bare admonition opener — `undefined` when it is
+ * not, or when `raw` is only one line to begin with (already handled by the whole-string check that
+ * runs before this one; nothing left to split).
+ *
+ * Tests exactly the first line in isolation, the way `scanBlocks` (a line-by-line scanner) always
+ * does, rather than the whole merged blob a `Paragraph` node can carry when no blank line separates
+ * an opener from what follows it.
+ */
+function splitLeadingOpener(
+  raw: string,
+): { readonly admonition: AdmonitionKind; readonly bodyOffset: number } | undefined {
+  const newline = raw.indexOf('\n');
+  if (newline < 0) return undefined;
+  const firstLine = raw.slice(0, newline);
+  const admonition = detectAdmonition(firstLine);
+  if (admonition === 'none') return undefined;
+  if (!isBareAdmonitionOpener(firstLine) && !isAdmonitionLabelLine(firstLine)) return undefined;
+  return { admonition, bodyOffset: newline + 1 };
 }
 
 /**

@@ -129,6 +129,30 @@ describe('MarkdownReader', () => {
     expect(units[0]?.admonition).toBe('warning');
   });
 
+  it('splits a bare opener from the body it merges with when no blank line separates them', async () => {
+    // Found via the fixture corpus after wiring, not anticipated in isolation: without a blank
+    // line, commonmark merges the opener and the following prose into ONE Paragraph node —
+    // scanBlocks, a line-by-line scanner, never merges an opener line with what follows it, blank
+    // line or not. `detectAdmonition`/`isBareAdmonitionOpener` are written to test one line in
+    // isolation, so run against the whole merged blob they see the opener followed by real content
+    // and no longer recognise it as "only" an opener — the marker is lost, and so is the register.
+    const text = ['[WARNING]', 'The cover is opened by the operator.', ''].join('\n');
+    const units = await read(text);
+    // The opener carries no prose of its own: it must not become a unit.
+    expect(units.map((u) => u.text)).toEqual(['The cover is opened by the operator.']);
+    expect(units[0]?.admonition).toBe('warning');
+  });
+
+  it('keeps the combined-node GFM alert convention inside a blockquote unaffected by the split', async () => {
+    // Regression guard: the new split logic must not fire inside a blockquote, where a GFM alert's
+    // marker-and-body merging into one unit, with the marker's admonition applied directly to it,
+    // is deliberate — a different convention from the bare-opener forms, not an oversight to unify.
+    const text = ['> [!WARNING]', '> Do not touch the busbar.', ''].join('\n');
+    const units = await read(text);
+    expect(units).toHaveLength(1);
+    expect(units[0]?.admonition).toBe('warning');
+  });
+
   it('propagates a GFM alert marker split into its own node by an embedded HTML comment', async () => {
     // Found through the full suite, not anticipated in isolation: an HTML comment on its own line
     // inside a blockquote (the shape a suppression directive takes) makes the parser split the

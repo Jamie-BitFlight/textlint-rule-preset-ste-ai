@@ -73,6 +73,21 @@ describe('the reader is wired into analyseTextDeterministic for markdown', () =>
     const finding = result.diagnostics.find((d) => d.ruleId === 'list-instruction-structure');
     expect(finding?.message).toContain('Numbered step 1');
   });
+
+  // Regression: PR #32 review on src/analysis/analyse.ts. Both production entry points pass
+  // `structure: { extraImperativeVerbs: ... }` to `analyseDocument`, but they also always supply
+  // `blocks` (from the reader), which means `analyseDocument` never calls `scanBlocks()` — the only
+  // place that option was ever read. A configured extra imperative verb therefore had no effect on
+  // mode classification in production, even though `analyseTextDeterministic`/`analyseText` accept
+  // it via `config.extraImperativeVerbs`.
+  it('classifies a sentence beginning with a configured extra imperative verb as procedural', () => {
+    const text = 'Reticulate the splines before shipping the part.\n';
+    const result = analyseTextDeterministic(text, {
+      config: { extraImperativeVerbs: ['reticulate'] },
+    });
+    const block = result.document.blocks.find((b) => b.text.startsWith('Reticulate'));
+    expect(block?.mode).toBe('procedural');
+  });
 });
 
 describe('the reader is wired into analyseText for markdown', () => {

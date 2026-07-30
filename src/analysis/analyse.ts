@@ -1,6 +1,7 @@
 import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
 import { analyseDocument } from '../core/document.js';
 import { runDeterministicRules } from '../core/runner.js';
+import { defaultStructureOptions, detectMode, type StructureOptions } from '../core/structure.js';
 import {
   applySuppressions,
   DIRECTIVE_TEXT_REASON,
@@ -52,13 +53,33 @@ import { resolveOverlappingFixes } from '../core/runner.js';
  * one. The eight other direct callers of `analyseDocument` outside this module (`fixture-tools`,
  * `evaluation`, six unit-test files) do not go through this function and are unaffected —
  * `scanBlocks()` still runs for them, exactly as before this stage.
+ *
+ * `structureOptions` is threaded through to {@link unitToBlock} so a configured
+ * `extraImperativeVerbs` actually reaches mode classification. Every reader classifies its own
+ * units with `defaultStructureOptions` (an empty extra-verb list) because a reader has no notion of
+ * this package's config; supplying `blocks` here means `analyseDocument`'s own `scanBlocks()` —
+ * the only other place that option was ever read — never runs either. Without this, a configured
+ * extra imperative verb would be silently inert on both production entry points.
  */
-function readerBlocksFor(sourceDoc: SourceDocument): readonly TextBlock[] {
+function readerBlocksFor(
+  sourceDoc: SourceDocument,
+  structureOptions: StructureOptions,
+): readonly TextBlock[] {
   const units: readonly TextUnit[] =
     sourceDoc.format === 'markdown'
       ? readMarkdownUnitsSync(sourceDoc)
       : readPlainTextUnitsSync(sourceDoc);
-  return units.map(unitToBlock);
+  return units.map((unit) => unitToBlock(unit, structureOptions));
+}
+
+/**
+ * The real {@link StructureOptions} for this run, built once and shared by the `analyseDocument`
+ * call (for its own, now-unused-when-`blocks`-is-supplied `structure` option, kept for parity with
+ * every other caller of `analyseDocument`) and by {@link readerBlocksFor}'s mode recomputation,
+ * which is what actually consults it on the reader path.
+ */
+function structureOptionsFor(format: DocumentFormat, config: SteAiConfig): StructureOptions {
+  return { ...defaultStructureOptions, format, extraImperativeVerbs: config.extraImperativeVerbs };
 }
 
 /**
@@ -78,19 +99,29 @@ const UNIT_KIND_TO_BLOCK_KIND: Readonly<Record<string, BlockKind>> = {
 
 /**
  * `TextUnit` was deliberately designed close to `TextBlock`, not as a rewrite of it — see
- * `src/reader/types.ts`. This is a direct field-for-field carry-over once `kind` is translated.
+ * `src/reader/types.ts`. This is a direct field-for-field carry-over once `kind` is translated,
+ * except `mode`, which is recomputed here rather than carried over from `unit.mode`.
+ *
+ * The reader classified `unit.mode` itself, against `defaultStructureOptions` — it has no access to
+ * this package's config, extra imperative verbs included. Recomputing with the real
+ * `structureOptions`, using the exact same `detectMode` that `scanBlocks()` calls, is what makes a
+ * configured extra imperative verb take effect on the reader path, matching what `scanBlocks()`
+ * would have decided for the same text. Headings are the one exception `scanBlocks()` carves out —
+ * `detectMode` never runs on a heading's own text at all — and the reader already forces
+ * `'descriptive'` for headings for the same reason, so `unit.mode` is left untouched there.
  */
-function unitToBlock(unit: TextUnit): TextBlock {
+function unitToBlock(unit: TextUnit, structureOptions: StructureOptions): TextBlock {
   const kind = UNIT_KIND_TO_BLOCK_KIND[unit.kind];
   if (kind === undefined) {
     throw new Error(`No BlockKind mapping for reader unit kind "${unit.kind}" (unit ${unit.id}).`);
   }
+  const mode = kind === 'heading' ? unit.mode : detectMode(unit.masked, structureOptions);
   return {
     id: unit.id,
     kind,
     range: unit.range,
     text: unit.text,
-    mode: unit.mode,
+    mode,
     admonition: unit.admonition,
     depth: unit.depth,
     inList: unit.kind === 'list-item',
@@ -151,13 +182,14 @@ export function analyseTextDeterministic(
     text,
     ...(options.path === undefined ? {} : { path: options.path }),
   };
+  const structureOptions = structureOptionsFor(format, config);
   const document = analyseDocument(sourceDoc, {
     protectedRegions: {
       approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
       extraPatterns: config.extraProtectedPatterns,
     },
-    structure: { extraImperativeVerbs: config.extraImperativeVerbs },
-    blocks: readerBlocksFor(sourceDoc),
+    structure: structureOptions,
+    blocks: readerBlocksFor(sourceDoc, structureOptions),
   });
 
   // Fix conflicts are resolved below instead, once the suppressed findings are out of the list: a
@@ -480,13 +512,14 @@ export async function analyseText(
     text,
     ...(options.path === undefined ? {} : { path: options.path }),
   };
+  const structureOptions = structureOptionsFor(format, config);
   const document = analyseDocument(sourceDoc, {
     protectedRegions: {
       approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
       extraPatterns: config.extraProtectedPatterns,
     },
-    structure: { extraImperativeVerbs: config.extraImperativeVerbs },
-    blocks: readerBlocksFor(sourceDoc),
+    structure: structureOptions,
+    blocks: readerBlocksFor(sourceDoc, structureOptions),
   });
 
   // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the

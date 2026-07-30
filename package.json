@@ -108,7 +108,7 @@
     "@textlint/types": "^15.7.1",
     "@types/node": "^22.15.0",
     "@vitest/coverage-v8": "^4.0.0",
-    "eslint": "^9.39.0",
+    "eslint": "^10.8.0",
     "prettier": "^3.6.2",
     "textlint": "^15.7.1",
     "textlint-tester": "^15.7.1",

@@ -109,20 +109,14 @@
           "end": 760
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "punctuation-constraints",
-          "category": "deterministic-violation",
-          "quote": "..."
-        }
-      ],
-      "reason": "This ellipsis is inside a literal Apache configuration example ('<VirtualHost _default_:443> / SSLEngine on / #... / </VirtualHost>'), where '#...' is the conventional config-comment placeholder meaning 'other directives go here'. It is example syntax, not prose, and editing it would corrupt the example.",
+      "expectedDiagnostics": [],
+      "reason": "This ellipsis is inside a literal Apache configuration example ('<VirtualHost _default_:443> / SSLEngine on / #... / </VirtualHost>'), where '#...' is the conventional config-comment placeholder meaning 'other directives go here'. It is example syntax, not prose, and editing it would corrupt the example. The tool now agrees: the document reader (issue #25) parses the whole '<VirtualHost>...</VirtualHost>' construct as one opaque HTML block instead of masking only its opening and closing tag lines, so 'SSLEngine on' and '#...' are no longer read as prose at all and the finding no longer occurs, so expectedDiagnostics is empty. The prose was left unchanged.",
       "semanticInvariants": [
         "the VirtualHost configuration example, including the '#...' placeholder comment, must remain byte-identical"
       ],
       "unresolved": [],
       "status": "disputed",
-      "reviewerConfidence": 0.92
+      "reviewerConfidence": 1
     },
     {
       "passageId": "httpd-mod-ssl-directive-config-p5",

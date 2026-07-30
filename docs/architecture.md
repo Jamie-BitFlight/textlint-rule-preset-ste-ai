@@ -332,6 +332,57 @@ checked against that risk yet, only against the offset and determinism requireme
 exactly that with a `String.split(/\n{2,}/)`-equivalent scan and real offsets, zero new dependencies.
 This is the "simplest reader that satisfies the interface" the task asked to keep working.
 
+**Policy, general and explicit, not just true of the Markdown choice above: every `DocumentReader` is
+built on an existing, mature parsing library for its format. None is ever hand-written.** This is the
+entire point of issue #25 — what is being replaced here is exactly a hand-rolled stand-in for a real
+parser, the regex scanner in `protected-regions.ts`/`structure.ts`. Writing a second one, for a
+different format, in this codebase, would be repeating the mistake in a new place rather than fixing
+it. This does not mean every future reader's library choice is settled — none of the following are
+decisions, they are leads for whoever picks up issue #31 or the RST/HTML/docx readers, to verify the
+same way `@textlint/markdown-to-ast` was verified above rather than assumed:
+
+- **TypeScript/JavaScript** (docstrings and JSDoc/TSDoc comments in source): the TypeScript Compiler
+  API (the `typescript` package) — a full AST, exact character positions, and it already attaches
+  JSDoc to the nodes it documents.
+- **HTML**: `parse5` or `htmlparser2`, both with position tracking.
+- **Python** (docstrings): the real wrinkle. Python's own `ast` module is authoritative, but it is a
+  Python library, and this project has zero non-npm runtime dependencies today. Using it means either
+  a Python subprocess — a genuine new deployment dependency, not just a `package.json` line — or a
+  JS-native alternative. `tree-sitter` with a Python grammar is a credible candidate: it avoids the
+  subprocess and gives exact byte ranges by design. Unverified against this project; a lead, not a
+  choice.
+- **RST**: `docutils` is the reference implementation, also Python-only, the same subprocess question
+  as above. Whether a JS-native RST parser exists with the same fidelity is an open question, not
+  checked yet.
+- **docx is a genuinely different case, not just another format to pick a parser for.** It is a ZIP
+  archive of XML, not a linear text file, so "an offset into the original document" does not have an
+  obvious meaning the way it does for every format above — offset into `word/document.xml`? Into a
+  reconstructed paragraph view assembled from several XML parts? That question has to be answered
+  before the offset contract in §4 even applies to a docx reader, not after. Worth stating plainly so
+  docx does not read as "one more format on the list" when it is actually a different kind of problem
+  than RST, HTML, Python or TypeScript/JavaScript are.
+
+A source-code reader (TypeScript/JavaScript, Python) is also a different _shape_ of reader from the
+ones built here, worth naming so nobody designs against the wrong assumption: a Markdown, RST, HTML or
+docx reader treats the whole file as prose-shaped and walks its own tree directly, while a source-code
+reader must first parse the _host_ language, then select the small subset of nodes that are
+prose-bearing (a docstring literal, a JSDoc-shaped comment) rather than assume most of the tree is a
+unit — filtering, not a different mechanism. Whether interpreting a docstring's own internal
+convention (Google/NumPy/reST sections, JSDoc tags) into finer-grained units is worth doing is a real,
+separate, addable-later refinement, not a blocker to emitting one `TextUnit` per whole docstring first.
+
+The offset contract still has to hold for a source-code reader, and it holds the same way it holds
+everywhere else in this codebase: by masking per-line noise (Python's leading indentation, JSDoc's
+leading `*`) at the same length, never by stripping it. This was checked against something concrete,
+not asserted from principle — while building `MarkdownReader` for this note, a real gap surfaced that
+is exactly this shape: a multi-line blockquote's _continuation_ line keeps its own `>` marker
+embedded verbatim inside the paragraph node's text (verified: `parse('> First line.\n> Second line.\n')`
+gives one `Paragraph` node whose text is `"First line.\n> Second line."` — the first line's marker is
+excluded, the second line's is not). The fix, deferred to whichever stage first builds masking for
+this reader, is to mask that embedded marker at the same length, not strip it — a single coordinate
+system survives exactly because nothing is ever deleted, only replaced, which is the same invariant
+`maskedText.length === text.length` already asserts for the pipeline this reader is replacing.
+
 ### 3. Where the module-boundary line sits
 
 **A new top-level module, `src/reader/`, that `core` does not import — not a change to what `core`

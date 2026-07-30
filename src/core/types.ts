@@ -237,6 +237,15 @@ export interface Diagnostic {
   readonly evidence?: string;
   readonly suggestions?: readonly string[];
   readonly fix?: TextFix;
+  /**
+   * The originating {@link CandidatePassage.id}, when this diagnostic was built from one.
+   *
+   * Adjudication is free to remap `range` to the model's evidence span, which can legitimately
+   * differ from the candidate's own span — so anything that must recognise "this is the same
+   * candidate decision" (for example, a refusal already reported before adjudication ran) has to
+   * match on this stable id rather than on the diagnostic's final range.
+   */
+  readonly candidateId?: string;
   readonly meta?: Readonly<Record<string, string | number | boolean>>;
 }
 

@@ -222,15 +222,18 @@ export interface ApplySuppressionsInput {
    */
   readonly alreadyClaimed?: readonly SuppressionDirective[];
   /**
-   * Candidates an earlier stage already refused to suppress inside a safety admonition, and
+   * Ids of candidates an earlier stage already refused to suppress inside a safety admonition, and
    * already reported.
    *
    * A refused candidate is kept and proceeds to adjudication, so the diagnostic it produces
    * reaches this function and is matched again by the same directive — without this, the same
    * refusal is reported a second time for what is, to a reader, one decision about one passage.
-   * Identity is `(ruleId, range)`, which is what `directiveFor` itself matches on.
+   * Identity is the candidate's own id (`Diagnostic.candidateId`), not `(ruleId, range)`: semantic
+   * adjudication can remap a diagnostic's range to the model's evidence span
+   * (`resolveEvidenceRange` in `src/semantic/analyse.ts`), which need not equal the candidate's own
+   * span, so matching on range would miss exactly the diagnostic this is meant to recognise.
    */
-  readonly alreadyRefused?: readonly { readonly ruleId: string; readonly range: SourceRange }[];
+  readonly alreadyRefused?: readonly string[];
 }
 
 export interface ApplySuppressionsResult {
@@ -248,7 +251,7 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
   const suppressions: SuppressionRecord[] = [];
   const notices: RunNotice[] = [];
   const claimed = new Set<SuppressionDirective>(input.alreadyClaimed ?? []);
-  const alreadyRefused = input.alreadyRefused ?? [];
+  const alreadyRefused = new Set(input.alreadyRefused ?? []);
 
   const reported = new Set<string>();
   for (const directive of directives) {
@@ -294,12 +297,10 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
     if (refusal !== undefined) {
       // An earlier stage may have refused this exact candidate already and reported it there —
       // the diagnostic it produced is not a second decision, so it must not become a second notice.
-      const alreadyReported = alreadyRefused.some(
-        (entry) =>
-          entry.ruleId === diagnostic.ruleId &&
-          entry.range.start === diagnostic.range.start &&
-          entry.range.end === diagnostic.range.end,
-      );
+      // Matched by candidate id rather than range: adjudication is free to remap the range to the
+      // model's evidence span, and that remapped range is still the same refused candidate.
+      const alreadyReported =
+        diagnostic.candidateId !== undefined && alreadyRefused.has(diagnostic.candidateId);
       if (!alreadyReported) notices.push(refusal);
       kept.push(diagnostic);
       continue;

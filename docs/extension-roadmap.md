@@ -199,6 +199,15 @@ should route through that, not around it.
 
 ## 5. Proposed sequence
 
+**Out of scope here:** replacing the regex-based protected-region and structure scanner with a
+real document parser is tracked separately in
+[issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25), not sequenced in the
+list below. It carries different constraints — a possible new dependency for the deliberately thin
+`core` module, an offset-contract obligation to re-verify, and measured evidence
+([issue #11](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/11)) about what the current
+scanner already gets wrong — so it is tracked on its own rather than competing for priority with
+steps 1–7, which take today's document-analysis layer as given.
+
 Ordered so each step is independently useful and none depends on resolving the licence
 question.
 

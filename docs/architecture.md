@@ -42,6 +42,30 @@ Everything downstream of parsing depends on one property: **an offset obtained a
 valid offset into the original source text.** It is maintained by never rewriting text — only masking
 it.
 
+### Document reading: current implementation, and where it is going
+
+The diagram below is what `src/core/document.ts` runs today — regex passes over progressively masked
+text, selected by a two-value `format: 'markdown' | 'text'` flag (`src/core/types.ts:176`) — and it is
+not the intended permanent design. [Issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25)
+records the cost: `noun-cluster-candidate` measured 0 confirmed defects in 35 reviewer-adjudicated
+candidates ([issue #11](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/11)), with the false
+positives traced to a line scanner disagreeing with a table cell, a `See [` link, and a directive name
+followed by its title line — constructs a real parser reads correctly and a line scanner reliably does
+not. `src/textlint/adapter.ts:168-172` already builds a markdown AST via the textlint kernel and
+discards it, calling `getSource(node)` and re-scanning the string with this same regex machinery.
+Prose is not part of that defect: the same three sentences written as one line or as six
+soft-wrapped ones already produce byte-identical diagnostics, because segmentation works over blocks,
+not physical lines — the weakness is specifically structured constructs, not prose in general.
+
+The stated direction (issue #25) is a pluggable `DocumentReader`, one implementation per media type —
+a real parser for Markdown, a minimal reader for plain text, with the interface open to RST, HTML and
+docx readers later without a change below it — feeding a reader-agnostic prose checker. The rule
+contract described further down already qualifies as reader-agnostic: it reads only `sentence.masked`
+and `sentence.words`, never the raw document. Positions would then trace back through the reader's own
+AST rather than through hand-rolled offsets. This is in progress on this branch, being implemented
+separately from this document; nothing below reflects that change yet — the pipeline that follows is
+what actually runs today.
+
 ```
 raw text
   │

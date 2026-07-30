@@ -96,6 +96,12 @@ The runner applies these after your rule returns, so do not attempt them:
 Never run a regex over `doc.text`. Use `sentence.masked` or `doc.maskedText`; that is what keeps code,
 URLs, identifiers and quantities from being read as prose.
 
+That contract — read only `sentence.masked` and `sentence.words`, never `doc.text` — is what stays
+stable while the document-reading layer is rearchitected
+([issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25)). A rule that only touches
+already-masked, sentence-level data does not depend on whether a block came from the current regex
+scanner or a future parser-backed reader.
+
 ## Offering a fix
 
 Set `meta.fixable: true` and attach a `TextFix`. Then expect it to be refused, and make sure the

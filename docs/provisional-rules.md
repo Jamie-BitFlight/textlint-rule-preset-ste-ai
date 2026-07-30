@@ -219,6 +219,8 @@ candidates.** Reviewers found that most spans are not noun runs at all — they 
 (`allows`, `include`, `named`), a parenthetical, a table cell, a `See [` link, or a title line
 immediately below a directive name — and that the remainder name real components. Treat any finding
 from this rule as unsubstantiated until the span detection is corrected and the corpus re-reviewed.
+The architectural cause — hand-written regex scanning rather than a real parser — and the proposed
+fix are tracked in [issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25).
 
 ### ambiguous-pronoun-candidate
 

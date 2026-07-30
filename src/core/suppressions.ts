@@ -1,4 +1,5 @@
 import { STRUCTURAL_MARKER_KINDS } from './document.js';
+import { detectAdmonition, isAdmonitionLabelLine, isBareAdmonitionOpener } from './structure.js';
 import { computeLineStarts, positionAt } from './text.js';
 import type {
   AdmonitionKind,
@@ -8,6 +9,7 @@ import type {
   SourceRange,
   SuppressionDirective,
   SuppressionRecord,
+  TextBlock,
 } from './types.js';
 
 /**
@@ -96,6 +98,21 @@ export function scanSuppressions(doc: AnalysedDocument): SuppressionScanResult {
 
   for (const comment of directiveComments(doc, lineStarts)) {
     if (comment.keyword === END_KEYWORD) {
+      // `ste-ai-ignore-end` takes no rule ids and no reason. A typo that appends one — most
+      // plausibly a rule id, expecting it to scope the close — must not silently close the range:
+      // leaving it open is the safer failure, since it surfaces as `suppression-unclosed-range`
+      // rather than ending the region one comment early with nothing to say why.
+      if (comment.rest.trim().length > 0) {
+        notices.push(
+          notice(
+            'suppression-malformed',
+            'warning',
+            `"${comment.keyword}" takes no rule ids or reason and was not treated as a terminator`,
+            { line: comment.line },
+          ),
+        );
+        continue;
+      }
       if (open === undefined) {
         notices.push(
           notice('suppression-end-without-start', 'warning', 'A suppression range was ended', {
@@ -204,6 +221,16 @@ export interface ApplySuppressionsInput {
    * that is doing exactly what it was written to do.
    */
   readonly alreadyClaimed?: readonly SuppressionDirective[];
+  /**
+   * Candidates an earlier stage already refused to suppress inside a safety admonition, and
+   * already reported.
+   *
+   * A refused candidate is kept and proceeds to adjudication, so the diagnostic it produces
+   * reaches this function and is matched again by the same directive — without this, the same
+   * refusal is reported a second time for what is, to a reader, one decision about one passage.
+   * Identity is `(ruleId, range)`, which is what `directiveFor` itself matches on.
+   */
+  readonly alreadyRefused?: readonly { readonly ruleId: string; readonly range: SourceRange }[];
 }
 
 export interface ApplySuppressionsResult {
@@ -221,6 +248,7 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
   const suppressions: SuppressionRecord[] = [];
   const notices: RunNotice[] = [];
   const claimed = new Set<SuppressionDirective>(input.alreadyClaimed ?? []);
+  const alreadyRefused = input.alreadyRefused ?? [];
 
   const reported = new Set<string>();
   for (const directive of directives) {
@@ -264,7 +292,15 @@ export function applySuppressions(input: ApplySuppressionsInput): ApplySuppressi
       allowInAdmonitions,
     );
     if (refusal !== undefined) {
-      notices.push(refusal);
+      // An earlier stage may have refused this exact candidate already and reported it there —
+      // the diagnostic it produced is not a second decision, so it must not become a second notice.
+      const alreadyReported = alreadyRefused.some(
+        (entry) =>
+          entry.ruleId === diagnostic.ruleId &&
+          entry.range.start === diagnostic.range.start &&
+          entry.range.end === diagnostic.range.end,
+      );
+      if (!alreadyReported) notices.push(refusal);
       kept.push(diagnostic);
       continue;
     }
@@ -431,7 +467,7 @@ function nextBlockRange(
   commentRanges: readonly SourceRange[],
   directiveRange: SourceRange,
 ): SourceRange {
-  let chosen: SourceRange | undefined;
+  let chosen: TextBlock | undefined;
   for (const block of doc.blocks) {
     if (block.range.end <= directiveRange.end) continue;
     const inComment = commentRanges.some(
@@ -442,18 +478,18 @@ function nextBlockRange(
     // never widened into its container.
     if (
       chosen === undefined ||
-      block.range.start < chosen.start ||
-      (block.range.start === chosen.start && block.range.end < chosen.end)
+      block.range.start < chosen.range.start ||
+      (block.range.start === chosen.range.start && block.range.end < chosen.range.end)
     ) {
-      chosen = block.range;
+      chosen = block;
     }
   }
   // Nothing left to claim. An empty span claims nothing and surfaces as `suppression-unused`.
   const nothing = { start: doc.text.length, end: doc.text.length };
   if (chosen === undefined) return nothing;
-  const start = Math.max(chosen.start, directiveRange.end);
-  if (!gapIsClear(doc, commentRanges, directiveRange.end, start)) return nothing;
-  return { start, end: chosen.end };
+  const start = Math.max(chosen.range.start, directiveRange.end);
+  if (!gapIsClear(doc, commentRanges, directiveRange.end, start, chosen.admonition)) return nothing;
+  return { start, end: chosen.range.end };
 }
 
 /**
@@ -463,17 +499,25 @@ function nextBlockRange(
  * an HTML block, a paragraph made entirely of protected content — was stepped over in silence, and
  * the directive then withheld a finding in a paragraph the author had never pointed at.
  *
- * Three things are skippable, and only three. Whitespace, so that the reflow invariance of block
- * claiming survives. Live directive comments, so that stacked directives keep claiming the same
- * block. Structural markers — a list bullet, a heading's hashes, a blockquote's arrow — because a
- * block's range begins after its own marker, so the marker is the introduction to the claimed block
- * rather than content standing between the author and it.
+ * Four things are skippable. Whitespace, so that the reflow invariance of block claiming survives.
+ * Live directive comments, so that stacked directives keep claiming the same block. Structural
+ * markers — a list bullet, a heading's hashes, a blockquote's arrow — because a block's range
+ * begins after its own marker, so the marker is the introduction to the claimed block rather than
+ * content standing between the author and it. And, when the chosen block carries an admonition, the
+ * marker line that opened that register: a GFM alert (`> [!WARNING]`), an RST/MyST directive
+ * (`.. warning::`), an mkdocs container (`!!! warning`) or an AsciiDoc label (`[WARNING]`) is
+ * exactly like a list bullet or a blockquote arrow — structure that introduces the claimed block,
+ * not prose the directive stepped over. Without this, a directive written above an admonition never
+ * claims it: the marker line is neither whitespace nor a structural-region kind, so the claim was
+ * silently voided and the safety-admonition refusal (which depends on the claim reaching the
+ * diagnostic in the first place) never had anything to refuse.
  */
 function gapIsClear(
   doc: AnalysedDocument,
   commentRanges: readonly SourceRange[],
   from: number,
   to: number,
+  blockAdmonition: AdmonitionKind,
 ): boolean {
   if (to <= from) return true;
 
@@ -482,6 +526,7 @@ function gapIsClear(
     ...doc.protectedRegions
       .filter((region) => STRUCTURAL_MARKER_KINDS.has(region.kind))
       .map((region) => region.range),
+    ...admonitionOpenerRanges(doc.text, from, to, blockAdmonition),
   ].sort((a, b) => a.start - b.start || a.end - b.end);
 
   let cursor = from;
@@ -492,6 +537,35 @@ function gapIsClear(
     if (cursor >= to) return true;
   }
   return doc.text.slice(cursor, to).trim().length === 0;
+}
+
+/**
+ * Spans, within `[from, to)`, of lines that only open `blockAdmonition` — the register the claimed
+ * block itself carries. Matched by kind, not merely by "some admonition", so a directive is never
+ * read as stepping past a *different* register's marker on its way to an unrelated block.
+ */
+function admonitionOpenerRanges(
+  text: string,
+  from: number,
+  to: number,
+  blockAdmonition: AdmonitionKind,
+): SourceRange[] {
+  if (blockAdmonition === 'none') return [];
+  const out: SourceRange[] = [];
+  let cursor = from;
+  while (cursor < to) {
+    const newline = text.indexOf('\n', cursor);
+    const lineEnd = newline === -1 || newline >= to ? to : newline + 1;
+    const raw = text.slice(cursor, lineEnd).replace(/\n$/, '');
+    if (
+      detectAdmonition(raw) === blockAdmonition &&
+      (isBareAdmonitionOpener(raw) || isAdmonitionLabelLine(raw))
+    ) {
+      out.push({ start: cursor, end: lineEnd });
+    }
+    cursor = lineEnd;
+  }
+  return out;
 }
 
 /** The safety register of the block holding `offset`; `'none'` when no block does. */

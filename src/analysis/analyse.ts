@@ -156,6 +156,14 @@ interface CandidateSuppressionPass {
   readonly records: readonly SuppressionRecord[];
   /** Directives that claimed a candidate, so the applier does not call them dead. */
   readonly claimed: readonly SuppressionDirective[];
+  /**
+   * Candidates refused inside a safety admonition, already reported here.
+   *
+   * A refused candidate proceeds to adjudication and produces a diagnostic that `applySuppressions`
+   * will match against the very same directive — passed through so it does not report the same
+   * refusal a second time.
+   */
+  readonly refused: readonly { readonly ruleId: string; readonly range: SourceRange }[];
 }
 
 /**
@@ -174,7 +182,7 @@ function suppressCandidates(
   // `enabled: false` means the document is not read for directives at all, not that the directives
   // are parsed and ignored — an audit run must see the document as written.
   if (!config.suppressions.enabled) {
-    return { directives: [], notices: [], candidates, records: [], claimed: [] };
+    return { directives: [], notices: [], candidates, records: [], claimed: [], refused: [] };
   }
 
   const scan = scanSuppressions(document);
@@ -182,6 +190,7 @@ function suppressCandidates(
   const kept: CandidatePassage[] = [];
   const records: SuppressionRecord[] = [];
   const claimed = new Set<SuppressionDirective>();
+  const refused: { ruleId: string; range: SourceRange }[] = [];
 
   for (const candidate of candidates) {
     // Unconditional, and ahead of any directive match: in `format: 'text'` the comment is not
@@ -215,6 +224,7 @@ function suppressCandidates(
     );
     if (refusal !== undefined) {
       notices.push(refusal);
+      refused.push({ ruleId: candidate.ruleId, range: candidate.range });
       kept.push(redactDirectiveComments(candidate, scan.commentRanges));
       continue;
     }
@@ -222,7 +232,14 @@ function suppressCandidates(
     records.push(candidateRecord(candidate, directive.reason, directive.directiveRange));
   }
 
-  return { directives: scan.directives, notices, candidates: kept, records, claimed: [...claimed] };
+  return {
+    directives: scan.directives,
+    notices,
+    candidates: kept,
+    records,
+    claimed: [...claimed],
+    refused,
+  };
 }
 
 /**
@@ -299,6 +316,7 @@ function suppressDiagnostics(
     allowInAdmonitions: config.suppressions.allowInAdmonitions,
     knownRuleIds: deterministicRules.map((rule) => rule.meta.id),
     alreadyClaimed: pass.claimed,
+    alreadyRefused: pass.refused,
   });
 
   const suppressions = [...pass.records, ...applied.suppressions].sort(

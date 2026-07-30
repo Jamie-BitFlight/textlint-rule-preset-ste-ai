@@ -214,6 +214,59 @@ describe('a claim on a candidate inside a safety admonition', () => {
   });
 });
 
+describe('a refused candidate reports its refusal exactly once', () => {
+  const RANGE_OVER_ALERT = [
+    '<!-- ste-ai-ignore-start passive-voice-candidate -- reviewed, keep as written -->',
+    '',
+    '> [!WARNING]',
+    '> The cover is opened by the operator.',
+    '',
+    '<!-- ste-ai-ignore-end -->',
+    '',
+  ].join('\n');
+
+  it('emits one notice through the deterministic entry point', () => {
+    const result = analyseTextDeterministic(RANGE_OVER_ALERT);
+
+    const refusals = result.notices.filter((n) => n.code === 'suppression-refused-in-admonition');
+    expect(refusals).toHaveLength(1);
+    // The finding is kept, not discarded — a refused claim is not a silent one.
+    expect(result.diagnostics.map((d) => d.ruleId)).toContain(CANDIDATE_RULE);
+  });
+
+  it('emits one notice through the semantic entry point', async () => {
+    service = await startFakeSemanticService({
+      handler: () => ({
+        content: verdictJson({
+          ruleId: CANDIDATE_RULE,
+          status: 'uncertain',
+          confidence: 0.5,
+          explanation: 'inconclusive',
+          suggestedReplacements: [],
+        }),
+      }),
+    });
+
+    const result = await analyseText(RANGE_OVER_ALERT, {
+      config: {
+        semantic: {
+          enabled: true,
+          endpoint: service.url,
+          model: 'fake',
+          cache: false,
+          maxRepairAttempts: 0,
+        },
+      },
+    });
+
+    // Positive control: the refused candidate really did reach adjudication.
+    expect(service.requestCount()).toBe(1);
+    const refusals = result.notices.filter((n) => n.code === 'suppression-refused-in-admonition');
+    expect(refusals).toHaveLength(1);
+    expect(result.diagnostics.map((d) => d.ruleId)).toContain(CANDIDATE_RULE);
+  });
+});
+
 describe('a suppressed candidate is never sent to the model', () => {
   it('dispatches the unclaimed passage and not the claimed one', async () => {
     const bodies: string[] = [];

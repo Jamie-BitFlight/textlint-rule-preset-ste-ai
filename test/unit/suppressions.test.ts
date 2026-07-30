@@ -646,4 +646,129 @@ describe('applySuppressions', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.suppressions[0]?.reason).toBe('directive text is not prose');
   });
+
+  it('does not duplicate a refusal notice already reported for the diagnostic’s underlying candidate', () => {
+    const diagnostic = diagnosticFor(WARNING_DOC, 'Utilise the bracket');
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: WARNING_DOC });
+    const scan = scanSuppressions(doc);
+    const applied = applySuppressions({
+      doc,
+      diagnostics: [diagnostic],
+      directives: scan.directives,
+      allowInAdmonitions: false,
+      knownRuleIds: KNOWN_RULE_IDS,
+      alreadyRefused: [{ ruleId: diagnostic.ruleId, range: diagnostic.range }],
+    });
+    // Still kept: only the second, redundant notice is what has to disappear.
+    expect(applied.diagnostics).toHaveLength(1);
+    expect(applied.notices.map((n) => n.code)).not.toContain('suppression-refused-in-admonition');
+  });
+
+  it('rejects an ignore-end that carries trailing arguments and leaves the range open', () => {
+    const text = [
+      '<!-- ste-ai-ignore-start unapproved-vocabulary -- vendor spelling -->',
+      '',
+      'Utilise the bracket.',
+      '',
+      '<!-- ste-ai-ignore-end unapproved-vocabulary -->',
+      '',
+      'Utilise the filter.',
+      '',
+    ].join('\n');
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the filter'),
+    ]);
+    expect(result.codes).toContain('suppression-malformed');
+    expect(result.codes).toContain('suppression-unclosed-range');
+    // The safer failure: the malformed comment did not close the range at all, so it is never
+    // read as a stray `ignore-end` either.
+    expect(result.codes).not.toContain('suppression-end-without-start');
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions).toHaveLength(2);
+  });
+
+  it('claims a note admonition introduced by a GFM alert marker on its own line', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '> [!NOTE]',
+      '> Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions).toHaveLength(1);
+  });
+
+  it('reaches the refusal for a warning admonition introduced by a GFM alert marker, exactly once', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '> [!WARNING]',
+      '> Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.codes.filter((c) => c === 'suppression-refused-in-admonition')).toHaveLength(1);
+  });
+
+  it('claims a note admonition introduced by an RST/MyST directive line', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '.. note::',
+      '',
+      '   Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions).toHaveLength(1);
+  });
+
+  it('claims a note admonition introduced by an mkdocs container line', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '!!! note',
+      '',
+      '   Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.suppressions).toHaveLength(1);
+  });
+
+  it('claims a warning admonition introduced by an AsciiDoc block label', () => {
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '[WARNING]',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.codes.filter((c) => c === 'suppression-refused-in-admonition')).toHaveLength(1);
+  });
+
+  it('still voids the claim across an indented sample even next to an admonition-free block', () => {
+    // Regression guard for item 7: the admonition-opener allowance must not reopen the gap to
+    // arbitrary skipped content.
+    const text = [
+      '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+      '',
+      '    <!-- ste-ai-ignore-next-line unapproved-vocabulary -- Sample only. -->',
+      '',
+      'Utilise the bracket.',
+      '',
+    ].join('\n');
+    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.suppressions).toEqual([]);
+    expect(result.codes).toContain('suppression-unused');
+  });
 });

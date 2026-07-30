@@ -217,13 +217,16 @@ interface CandidateSuppressionPass {
   /** Directives that claimed a candidate, so the applier does not call them dead. */
   readonly claimed: readonly SuppressionDirective[];
   /**
-   * Candidates refused inside a safety admonition, already reported here.
+   * Ids of candidates refused inside a safety admonition, already reported here.
    *
    * A refused candidate proceeds to adjudication and produces a diagnostic that `applySuppressions`
-   * will match against the very same directive — passed through so it does not report the same
-   * refusal a second time.
+   * must recognise as the very same decision, so it does not report the refusal a second time.
+   * Identity is the candidate's own id, not its range: `resolveEvidenceRange`
+   * (`src/semantic/analyse.ts`) can legitimately remap a semantic diagnostic's range to the model's
+   * evidence span, which is not necessarily identical to `candidate.range` — matching on the range
+   * would then miss the very diagnostic this list exists to recognise.
    */
-  readonly refused: readonly { readonly ruleId: string; readonly range: SourceRange }[];
+  readonly refused: readonly string[];
 }
 
 /**
@@ -250,7 +253,7 @@ function suppressCandidates(
   const kept: CandidatePassage[] = [];
   const records: SuppressionRecord[] = [];
   const claimed = new Set<SuppressionDirective>();
-  const refused: { ruleId: string; range: SourceRange }[] = [];
+  const refused: string[] = [];
 
   for (const candidate of candidates) {
     // Unconditional, and ahead of any directive match: in `format: 'text'` the comment is not
@@ -284,7 +287,7 @@ function suppressCandidates(
     );
     if (refusal !== undefined) {
       notices.push(refusal);
-      refused.push({ ruleId: candidate.ruleId, range: candidate.range });
+      refused.push(candidate.id);
       kept.push(redactDirectiveComments(candidate, scan.commentRanges));
       continue;
     }
@@ -436,6 +439,7 @@ function undecidedCandidateDiagnostics(
           `A reviewer must decide it. Reason: ${candidate.reason}`,
         range: candidate.range,
         producedBy: 'deterministic' as const,
+        candidateId: candidate.id,
         meta: { evaluatorId: candidate.evaluatorId },
       }))
     : [];

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { analyseText, analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import {
+  ScriptedTransport,
   startFakeSemanticService,
   verdictJson,
   type FakeService,
@@ -264,6 +265,58 @@ describe('a refused candidate reports its refusal exactly once', () => {
     const refusals = result.notices.filter((n) => n.code === 'suppression-refused-in-admonition');
     expect(refusals).toHaveLength(1);
     expect(result.diagnostics.map((d) => d.ruleId)).toContain(CANDIDATE_RULE);
+  });
+
+  it('emits one notice even when the model reports an evidence span narrower than the candidate range', async () => {
+    // A `[WARNING]` block label rather than a GFM alert, so the claimed sentence carries no
+    // masked blockquote marker of its own — its offsets within the passage are exactly its
+    // offsets within the plain sentence text, which keeps this test's arithmetic legible.
+    const SENTENCE = 'The cover is opened by the operator.';
+    const text = [
+      '<!-- ste-ai-ignore-next-line passive-voice-candidate -- Quoted verbatim. -->',
+      '',
+      '[WARNING]',
+      SENTENCE,
+      '',
+    ].join('\n');
+
+    // The candidate's own span is "is opened by" (auxiliary, participle, agent marker). The model
+    // is scripted to report evidence over "opened" alone instead — a real, valid, narrower span
+    // that is nonetheless not identical to `candidate.range`, exactly as `resolveEvidenceRange`
+    // permits.
+    const evidenceStart = SENTENCE.indexOf('opened');
+    const evidenceEnd = evidenceStart + 'opened'.length;
+    expect(SENTENCE.indexOf('is opened by')).not.toBe(evidenceStart);
+
+    const transport = new ScriptedTransport([
+      {
+        content: verdictJson({
+          ruleId: CANDIDATE_RULE,
+          status: 'violation',
+          confidence: 0.9,
+          evidenceStart,
+          evidenceEnd,
+          explanation: 'passive voice',
+          suggestedReplacements: [],
+        }),
+      },
+    ]);
+
+    const result = await analyseText(text, {
+      transport,
+      config: {
+        semantic: { enabled: true, model: 'fake', cache: false, maxRepairAttempts: 0 },
+      },
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === CANDIDATE_RULE);
+    // Positive control: the remapped range really did diverge from the candidate's own span, which
+    // is the exact condition this test is for.
+    expect(diagnostic?.range.start).toBe(text.indexOf(SENTENCE) + evidenceStart);
+    expect(diagnostic?.range.start).not.toBe(text.indexOf('is opened by'));
+
+    const refusals = result.notices.filter((n) => n.code === 'suppression-refused-in-admonition');
+    expect(refusals).toHaveLength(1);
   });
 });
 

@@ -39,10 +39,11 @@ working tree at the same time. `git checkout`/`git checkout -b` in the shared cl
 on disk out from under any other agent still reading or writing there — including the orchestrator
 itself. Use `git worktree add` (a separate branch, a separate directory) for anything that runs
 concurrently with other in-progress work in the shared clone, and reserve the shared clone itself for
-whichever single task currently owns it. Put the worktree directory outside this repo's own working
-tree (a scratch/tmp path), not under `.claude/` inside it — `.claude/` is committed project
-configuration, not a scratch area, and a worktree created there shows up as untracked content in the
-repo's own `git status`.
+whichever single task currently owns it. Claude Code's own subagent `isolation: "worktree"` creates
+these under `.claude/worktrees/<name>/` inside the repo by default (documented at
+https://code.claude.com/docs/en/worktrees.md) — that's expected, not a mistake to work around; the
+docs' own fix is exactly what `.gitignore` does here (`.claude/worktrees/`), not relocating the
+worktree elsewhere.
 
 ## Draft PRs and automated review
 

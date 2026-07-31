@@ -146,7 +146,7 @@ vite.config.ts.timestamp-*
 # auditable record; the raw upstream bytes are a cache and must not be redistributed.
 .cache/
 
-# Claude Code local tool state (settings, isolated agent worktrees created via `git worktree add`).
-# Not part of the repository's content — a stop-hook git check outside this project flagged this
-# directory as untracked before it was ignored; the fix is ignoring it, not committing it.
-.claude/
+# .claude/ itself is NOT ignored: it's the standard home for project-level Claude Code
+# configuration (settings.json, commands, agents) that belongs in version control. Only the
+# transient, tool-generated worktrees an isolated agent creates under it are ignored here.
+.claude/worktrees/

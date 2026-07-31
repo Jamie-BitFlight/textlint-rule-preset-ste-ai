@@ -39,7 +39,10 @@ working tree at the same time. `git checkout`/`git checkout -b` in the shared cl
 on disk out from under any other agent still reading or writing there — including the orchestrator
 itself. Use `git worktree add` (a separate branch, a separate directory) for anything that runs
 concurrently with other in-progress work in the shared clone, and reserve the shared clone itself for
-whichever single task currently owns it.
+whichever single task currently owns it. Put the worktree directory outside this repo's own working
+tree (a scratch/tmp path), not under `.claude/` inside it — `.claude/` is committed project
+configuration, not a scratch area, and a worktree created there shows up as untracked content in the
+repo's own `git status`.
 
 ## Draft PRs and automated review
 

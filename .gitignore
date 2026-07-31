@@ -145,3 +145,8 @@ vite.config.ts.timestamp-*
 # Downloaded fixture sources. The committed excerpts and fixtures/provenance.lock.json are the
 # auditable record; the raw upstream bytes are a cache and must not be redistributed.
 .cache/
+
+# Claude Code local tool state (settings, isolated agent worktrees created via `git worktree add`).
+# Not part of the repository's content — a stop-hook git check outside this project flagged this
+# directory as untracked before it was ignored; the fix is ignoring it, not committing it.
+.claude/

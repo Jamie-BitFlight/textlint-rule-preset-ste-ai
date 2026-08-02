@@ -37,13 +37,46 @@ absorbing an agent's work is strictly worse than retrying it.
 Running two agents against this repo at once is only safe if they cannot both mutate the same
 working tree at the same time. `git checkout`/`git checkout -b` in the shared clone changes what is
 on disk out from under any other agent still reading or writing there — including the orchestrator
-itself. Use `git worktree add` (a separate branch, a separate directory) for anything that runs
-concurrently with other in-progress work in the shared clone, and reserve the shared clone itself for
-whichever single task currently owns it. Claude Code's own subagent `isolation: "worktree"` creates
-these under `.claude/worktrees/<name>/` inside the repo by default (documented at
-https://code.claude.com/docs/en/worktrees.md) — that's expected, not a mistake to work around; the
-docs' own fix is exactly what `.gitignore` does here (`.claude/worktrees/`), not relocating the
-worktree elsewhere.
+itself.
+
+For any agent dispatched via the `Agent` tool, pass `isolation: "worktree"` rather than manually
+creating and tracking a `git worktree add` directory yourself. The tool creates and owns the
+isolated worktree (under `.claude/worktrees/<name>/` inside the repo by default — documented at
+https://code.claude.com/docs/en/worktrees.md — matched by `.gitignore` here, not something to
+relocate). This is a hard-learned correction, not a preference: a real incident on this repo
+involved manually reusing one hand-created worktree directory across four separate agent dispatches
+for the same task. That reuse — not any individual agent's behavior — caused a cascade: a false
+"another agent is already active here" report from one dispatch, a real agent's in-progress work
+misattributed to a different, actually-contaminated dispatch, a wrongful `TaskStop` against the
+agent that was doing the task correctly, and that agent's real work destroyed by a `git reset --hard`
+run while a second agent was independently still active in the same directory. `isolation:
+"worktree"` makes this whole failure class structurally impossible — each dispatch gets its own
+directory, so there is no shared state left for the orchestrator to mismanage. Reserve manual
+`git worktree add` for work the orchestrator itself does directly (not through the `Agent` tool),
+and reserve the shared clone for whichever single task currently owns it.
+
+## Verifying what an agent actually did: query its session log, not git state
+
+When a real decision — stopping an agent, discarding its work, believing a disputed claim about what
+it did — depends on knowing exactly what an agent did or did not do, check its own session transcript
+(the `.output` JSONL file referenced in its dispatch/notification result), not git state. Git state
+is a weak, indirect proxy: a diff shows the *end result* of a sequence of actions, not the sequence
+itself, and "no trace of X in the current diff" does not prove "never did X" — especially if a
+worktree was later reset or shared with another agent. The transcript is the primary source; git
+state is, at best, a secondary inference from it, and inferring backwards from a weaker signal when
+a stronger one is directly available is how a real agent got wrongly blamed and stopped on this repo
+once already (see above).
+
+The tool result that returns a `.output` path warns not to `Read` or `tail` that file directly via
+the shell — it is the agent's full JSONL transcript and can be large enough to overflow context if
+ingested whole. That warning is about full-file ingestion, not about the file being off-limits: use
+a targeted query instead of reading the whole thing. `Grep` against the file (a specific pattern,
+e.g. a filename you want to confirm was or wasn't read) returns only matching lines. `jq` is stronger
+still, since the transcript is structured JSONL: filter on fields like `.type`/`.name`/`.input` (e.g.
+every `Read` or `Bash` tool call whose input mentions a given path, in order) to get an exact,
+ordered answer instead of a pattern-matched guess. This is not something to do routinely — most
+questions about a session don't need it — but when a decision is actually going to be based on "did
+the agent do X," the transcript is where that gets verified, not inferred.
 
 ## Draft PRs and automated review
 

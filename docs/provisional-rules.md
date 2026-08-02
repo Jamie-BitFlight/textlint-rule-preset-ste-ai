@@ -246,32 +246,32 @@ named semantic evaluator; with semantic analysis disabled they degrade to `revie
 
 ### Measured precision of the candidate heuristics
 
-Four independent reviewers adjudicated **all 123 candidate passages** the rule set emits across the
+Four independent reviewers adjudicated **all 105 candidate passages** the rule set emits across the
 18 fixtures, judging each against the rule intent stated below and nothing else. The verdicts are in
 `fixtures/verdicts/` and are merged into `candidateAdjudications` in each annotation record.
 
 | Rule                           | Candidates | Confirmed defects | Non-defects |
 | ------------------------------ | ---------: | ----------------: | ----------: |
-| `passive-voice-candidate`      |         53 |                 2 |          51 |
-| `noun-cluster-candidate`       |         35 |                 0 |          35 |
-| `ambiguous-pronoun-candidate`  |         34 |                 2 |          32 |
+| `passive-voice-candidate`      |         50 |                 2 |          48 |
+| `noun-cluster-candidate`       |         24 |                 0 |          24 |
+| `ambiguous-pronoun-candidate`  |         30 |                 2 |          28 |
 | `one-instruction-per-sentence` |          1 |                 1 |           0 |
-| **Total**                      |    **123** |             **5** |     **118** |
+| **Total**                      |    **105** |             **5** |     **100** |
 
-**Read this before quoting any figure from the semantic evaluation.** Five confirmed defects in 123
+**Read this before quoting any figure from the semantic evaluation.** Five confirmed defects in 105
 flagged passages is the headline result of this corpus, and it has three consequences:
 
 1. **These heuristics have a very high false-positive rate on well-edited technical documentation.**
    That is why they are candidate-only, why they default to `info` severity, and why they must never
    be promoted to hard violations on this evidence.
-2. **`noun-cluster-candidate` has no observed true positive at all.** It fired 35 times and every
+2. **`noun-cluster-candidate` has no observed true positive at all.** It fired 24 times and every
    verdict was a non-defect. Reviewers reported that most of its spans are not noun runs: they
    straddle a finite verb, a parenthetical, a table cell or a title line, or they name a real
    product (`SSL/TLS Protocol Engine`, `Graphical User Interface (GUI)`). This is a segmentation
    defect as much as a comprehension one, and the rule should be treated as unvalidated.
 3. **Recall is not measurable on this corpus.** With five positives, any recall or F1 number is
    noise. `formatEvaluationReport` therefore withholds recall and F1 below ten gold positives and
-   prints the positive count instead. Precision over 118 negatives is informative; recall is not.
+   prints the positive count instead. Precision over 100 negatives is informative; recall is not.
 
 The counts are asserted in `test/fixtures/corpus.test.ts` so that a rule change which moves them
 cannot pass unnoticed, and `scripts/ci/check-candidate-ground-truth.sh` fails the build if a change
@@ -507,7 +507,7 @@ participates in mood detection.
 | ------------------------------ | -----: | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list-instruction-structure`   |      3 |     3 | Unaffected — does not depend on imperative/function-word detection.                                                                                                                            |
 | `one-instruction-per-sentence` |      6 |     6 | Same count; composition unchanged after the auxiliary-verb fix above.                                                                                                                          |
-| `noun-cluster-candidate`       |     70 |    48 | −22. This rule has **zero** confirmed true positives in 35 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
+| `noun-cluster-candidate`       |     70 |    48 | −22. This rule has **zero** confirmed true positives in 24 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
 | `ambiguous-pronoun-candidate`  |     68 |    60 | −8. Both of the rule's 2 confirmed true positives (`httpd-mod-ssl-directive-config`, `postgres-vacuum-overview`) were checked directly and are still generated as candidates.                  |
 
 The one confirmed `one-instruction-per-sentence` true positive (`osha-ppe-requirements`) was also

@@ -294,20 +294,6 @@
       "reviewerConfidence": 0.6
     },
     {
-      "passageId": "noun-cluster-candidate:s3:436",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "leaves behind empty space",
-      "span": {
-        "start": 436,
-        "end": 461
-      },
-      "verdict": "non-violation",
-      "reason": "This is a verb plus particle plus adjective plus noun, not a noun run at all; there is nothing for a reader to group wrongly. The heuristic's content-word counter has misfired on ordinary predicate structure.",
-      "reviewer": "reviewer-d",
-      "reviewerConfidence": 0.95
-    },
-    {
       "passageId": "ambiguous-pronoun-candidate:s4:489",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -348,20 +334,6 @@
       "reason": "Descriptive statement of the guarantee VACUUM provides about on-disk layout; the storing agent is the database engine and is both obvious and beside the point. Not an instruction to the reader.",
       "reviewer": "reviewer-d",
       "reviewerConfidence": 0.85
-    },
-    {
-      "passageId": "noun-cluster-candidate:s7:883",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "largely stored contiguously within",
-      "span": {
-        "start": 883,
-        "end": 917
-      },
-      "verdict": "non-violation",
-      "reason": "Adverb, participle, adverb and preposition — a normal verb phrase, not a noun pile, and it ends on a preposition that binds to the following noun phrase. There is no grouping ambiguity for a reader to resolve.",
-      "reviewer": "reviewer-d",
-      "reviewerConfidence": 0.95
     },
     {
       "passageId": "passive-voice-candidate:s9:1092",

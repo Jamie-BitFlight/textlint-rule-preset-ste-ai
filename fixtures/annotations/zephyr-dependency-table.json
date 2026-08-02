@@ -135,20 +135,6 @@
   "notes": "Every diagnostic the linter produced on this fixture is a number-unit-format false positive against dotted software version identifiers that live either in list-table cells or in prose that quotes the same version number. No prose sentence in this excerpt has a genuine length, vocabulary, contraction, or punctuation defect, so there is no accepted change: the compliant file is byte-identical to the original apart from the required rewritten-counterpart header line.",
   "candidateAdjudications": [
     {
-      "passageId": "noun-cluster-candidate:s2:283",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "host tools Zephyr needs",
-      "span": {
-        "start": 283,
-        "end": 306
-      },
-      "verdict": "non-violation",
-      "reason": "This is 'the host tools [that] Zephyr needs' - a two-word head noun plus a reduced relative clause, not a stacked noun pile. The grouping is fixed by the verb 'needs'.",
-      "reviewer": "reviewer-b",
-      "reviewerConfidence": 0.85
-    },
-    {
       "passageId": "noun-cluster-candidate:s4:481",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",

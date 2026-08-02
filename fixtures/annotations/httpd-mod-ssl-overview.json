@@ -83,20 +83,6 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "passive-voice-candidate:s5:474",
-      "ruleId": "passive-voice-candidate",
-      "evaluatorId": "passive-voice-adjudication",
-      "quote": "be configured",
-      "span": {
-        "start": 474,
-        "end": 487
-      },
-      "verdict": "non-violation",
-      "reason": "A capability statement about the module in descriptive overview prose, not an instruction; the module is correctly the topic and the configuring administrator is obvious from the document's audience.",
-      "reviewer": "reviewer-b",
-      "reviewerConfidence": 0.8
-    },
-    {
       "passageId": "passive-voice-candidate:s7:785",
       "ruleId": "passive-voice-candidate",
       "evaluatorId": "passive-voice-adjudication",

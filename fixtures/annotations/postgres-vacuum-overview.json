@@ -278,20 +278,6 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "noun-cluster-candidate:s4:530",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "Plain VACUUM (without FULL) simply reclaims space",
-      "span": {
-        "start": 530,
-        "end": 579
-      },
-      "verdict": "non-violation",
-      "reason": "A complete sentence opening with a parenthetical qualifier, not a noun run; 'Plain VACUUM (without FULL)' names the command variant and the rest is verb plus object.",
-      "reviewer": "reviewer-b",
-      "reviewerConfidence": 0.9
-    },
-    {
       "passageId": "ambiguous-pronoun-candidate:s4:590",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",

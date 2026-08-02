@@ -103,20 +103,6 @@
   "notes": "",
   "candidateAdjudications": [
     {
-      "passageId": "noun-cluster-candidate:s2:256",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "Django settings file contains",
-      "span": {
-        "start": 256,
-        "end": 285
-      },
-      "verdict": "non-violation",
-      "reason": "The run swallows the main verb \"contains\"; the actual noun group is \"Django settings file\", a product-specific term used throughout the Django documentation. Component identity outranks simplification.",
-      "reviewer": "reviewer-d",
-      "reviewerConfidence": 0.9
-    },
-    {
       "passageId": "ambiguous-pronoun-candidate:s8:853",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -145,16 +131,16 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "noun-cluster-candidate:s9:905",
+      "passageId": "noun-cluster-candidate:s9:912",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
-      "quote": "assign settings dynamically using normal Python syntax",
+      "quote": "settings dynamically using normal Python syntax",
       "span": {
-        "start": 905,
+        "start": 912,
         "end": 959
       },
       "verdict": "non-violation",
-      "reason": "A verb, object, adverb and a gerund phrase — normal clause structure, not a stack of nouns. \"normal Python syntax\" is the only noun group and it is transparent.",
+      "reason": "This is the object-and-manner tail of \"It can assign settings dynamically using normal Python syntax\": a direct object ('settings'), an adverb ('dynamically'), and a gerund phrase with its own object ('using normal Python syntax'). It is ordinary clause structure, not a stacked noun run, and the only real noun group in it, 'normal Python syntax', is a transparent adjective-adjective-noun phrase with one obvious reading. The heuristic's word count triggered on a verb phrase, not a noun pile.",
       "reviewer": "reviewer-d",
       "reviewerConfidence": 0.9
     },

@@ -88,20 +88,6 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "noun-cluster-candidate:s7:859",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "accessing SQLite database files interactively",
-      "span": {
-        "start": 859,
-        "end": 904
-      },
-      "verdict": "non-violation",
-      "reason": "'accessing SQLite database files interactively' is a gerund phrase with an object and an adverb, not a noun pile; the grouping is fixed by the verb and needs no guessing.",
-      "reviewer": "reviewer-a",
-      "reviewerConfidence": 0.85
-    },
-    {
       "passageId": "noun-cluster-candidate:s8:941",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",

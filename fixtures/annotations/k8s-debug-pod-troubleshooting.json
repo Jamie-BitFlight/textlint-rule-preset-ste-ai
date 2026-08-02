@@ -168,20 +168,6 @@
       "reason": "'messages from the scheduler about why it can not schedule your pod' - only the scheduler schedules, and it is the nearest noun, so the pronoun resolves one way.",
       "reviewer": "reviewer-c",
       "reviewerConfidence": 0.9
-    },
-    {
-      "passageId": "noun-cluster-candidate:s22:1523",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "See [Compute Resources document",
-      "span": {
-        "start": 1523,
-        "end": 1554
-      },
-      "verdict": "non-violation",
-      "reason": "The span begins with the imperative 'See' and an opening markdown bracket; the actual content is the link text 'Compute Resources document', which is a document title and reads unambiguously.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.9
     }
   ]
 }

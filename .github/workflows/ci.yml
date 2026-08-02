@@ -11,20 +11,15 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # 20.11 is the floor advertised in package.json's `engines.node` — kept in the matrix so a
-        # dependency that silently drops support for it (e.g. an ESM-only package that stops
-        # resolving cleanly on older Node) fails CI instead of only surfacing for someone running
-        # the advertised minimum. 22 is the version this project is developed and released against.
-        node-version: ['20.11', 22]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          # 24 is Node's current Active LTS and the floor advertised in package.json's
+          # `engines.node`. Node 20 reached end-of-life on 2026-04-30; Node 22 is Maintenance LTS,
+          # not Active — neither is a version this project should advertise support for.
+          node-version: 24
           cache: npm
 
       - name: Install dependencies

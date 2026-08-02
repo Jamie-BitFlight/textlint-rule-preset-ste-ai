@@ -14,12 +14,12 @@ import {
 } from '../model-client/cache.js';
 import { TransportError, type ChatMessage, type ModelTransport } from '../model-client/types.js';
 import { buildEvaluatorRequest, type EvaluatorRequest } from './evaluators.js';
-import { FilePromptProvider, type PromptProvider } from './prompt-loader.js';
+import { FilePromptProvider } from './prompt-loader.js';
 import { semanticVerdictJsonSchema, validateSemanticResponse } from './response-schema.js';
 
 export interface SemanticBrokerDeps {
   readonly transport: ModelTransport;
-  readonly promptProvider?: PromptProvider;
+  readonly promptProvider?: FilePromptProvider;
   readonly cache?: SemanticCache<SemanticVerdict>;
   /** Injectable clock for deterministic duration assertions in tests. */
   readonly now?: () => number;
@@ -46,7 +46,7 @@ export interface BrokerStats {
 export class SemanticBroker {
   readonly #config: SemanticConfig;
   readonly #transport: ModelTransport;
-  readonly #prompts: PromptProvider;
+  readonly #prompts: FilePromptProvider;
   readonly #cache: SemanticCache<SemanticVerdict>;
   readonly #now: () => number;
   readonly #trace?: (trace: SemanticTrace & { readonly detail?: string }) => void;

@@ -141,7 +141,7 @@ describe('gold labelling', () => {
   it('records that disagree about the same span leave it unlabelled, whatever their order', () => {
     const both = [change('accepted'), change('disputed')];
     expect(goldLabelFor(candidate(), annotation({ changes: both }))).toBe('unlabelled');
-    expect(goldLabelFor(candidate(), annotation({ changes: [...both].reverse() }))).toBe(
+    expect(goldLabelFor(candidate(), annotation({ changes: both.toReversed() }))).toBe(
       'unlabelled',
     );
   });

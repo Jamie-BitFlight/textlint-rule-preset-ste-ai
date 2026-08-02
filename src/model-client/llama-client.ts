@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   TransportError,
   type CompletionRequest,
@@ -14,15 +15,31 @@ export interface LlamaClientOptions {
   readonly fetchImpl?: typeof fetch;
 }
 
-interface ChatCompletionBody {
-  readonly model?: string;
-  readonly choices?: readonly {
-    readonly message?: { readonly content?: unknown };
-    readonly finish_reason?: string;
-  }[];
-  readonly usage?: { readonly prompt_tokens?: number; readonly completion_tokens?: number };
-  readonly error?: { readonly message?: string };
-}
+/**
+ * `response.json()` returns `any` — an assertion to this shape would only assume the server sent
+ * what we expect, not check it. A malformed-but-valid-JSON reply (for example `choices` sent back
+ * as a string) would then crash on the first optional-chained property access instead of being
+ * reported as the `malformed` transport failure it already is below. Validating with a schema, the
+ * same boundary-validation convention `src/core/config.ts` uses, turns that class of crash into
+ * the existing graceful failure path.
+ */
+const chatCompletionBodySchema = z.object({
+  model: z.string().optional(),
+  choices: z
+    .array(
+      z.object({
+        message: z.object({ content: z.unknown().optional() }).optional(),
+        finish_reason: z.string().optional(),
+      }),
+    )
+    .optional(),
+  usage: z
+    .object({ prompt_tokens: z.number().optional(), completion_tokens: z.number().optional() })
+    .optional(),
+  error: z.object({ message: z.string().optional() }).optional(),
+});
+
+type ChatCompletionBody = z.infer<typeof chatCompletionBodySchema>;
 
 /**
  * llama.cpp-compatible transport using the server's OpenAI-shaped
@@ -107,18 +124,29 @@ export class LlamaCppClient implements ModelTransport {
       );
     }
 
-    let parsed: ChatCompletionBody;
+    let raw: unknown;
     try {
-      parsed = (await response.json()) as ChatCompletionBody;
+      raw = await response.json();
     } catch (error) {
       throw new TransportError(
-        'Semantic service response was not JSON',
+        'Semantic service response was not valid JSON',
         'malformed',
         false,
         response.status,
         { cause: error },
       );
     }
+    const shape = chatCompletionBodySchema.safeParse(raw);
+    if (!shape.success) {
+      throw new TransportError(
+        'Semantic service response did not match the expected shape',
+        'malformed',
+        false,
+        response.status,
+        { cause: shape.error },
+      );
+    }
+    const parsed: ChatCompletionBody = shape.data;
 
     const content = parsed.choices?.[0]?.message?.content;
     if (typeof content !== 'string') {

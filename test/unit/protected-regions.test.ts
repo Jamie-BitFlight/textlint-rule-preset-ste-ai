@@ -34,7 +34,14 @@ describe('protected-region extraction', () => {
   it('never masks newlines, so line and column arithmetic is unaffected', () => {
     const text = '```\ncode\nmore code\n```\n\nProse.\n';
     const doc = analyse(text);
-    const newlinePositions = [...text].flatMap((c, i) => (c === '\n' ? [i] : []));
+    // `[...text]` iterates by Unicode code point, not UTF-16 code unit, and would silently
+    // mis-index against `doc.maskedText[i]` (and every other offset in this codebase) for any
+    // text containing an astral character. Index by code unit directly instead, matching the
+    // offset contract everywhere else.
+    const newlinePositions: number[] = [];
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === '\n') newlinePositions.push(i);
+    }
     for (const i of newlinePositions) {
       expect(doc.maskedText[i]).toBe('\n');
     }

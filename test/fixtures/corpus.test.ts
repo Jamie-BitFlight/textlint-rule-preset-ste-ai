@@ -23,6 +23,25 @@ const pairs = manifest.fixtures
       : undefined,
   }));
 
+/**
+ * Counts, not presence. A short quote such as "!" or ";" can occur several times in one document
+ * — for example inside an unfenced terminal transcript that the linter reads as prose. Asserting
+ * absence would then fail even though the annotated occurrence really was fixed, so the check is
+ * that the number of occurrences of that (ruleId, quote) pair went down.
+ */
+const countMatching = (text: string, ruleId: string, quote: string): number =>
+  analyseTextDeterministic(text).diagnostics.filter(
+    (d) => d.ruleId === ruleId && text.slice(d.range.start, d.range.end) === quote,
+  ).length;
+
+/** A fenced-code region's exact source text, byte-identical check between two documents. */
+const fences = (text: string): string[] => {
+  const doc = analyseTextDeterministic(text).document;
+  return doc.protectedRegions
+    .filter((r) => r.kind === 'fenced-code')
+    .map((r) => text.slice(r.range.start, r.range.end));
+};
+
 describe('fixture provenance', () => {
   it('the corpus passes every provenance and integrity check', () => {
     const report = validateFixtureCorpus(FIXTURES);
@@ -84,7 +103,7 @@ describe('fixture provenance', () => {
     const straddling = [...splitsByOrg.entries()]
       .filter(([, splits]) => splits.size > 1)
       .map(([org]) => org)
-      .sort();
+      .toSorted();
     expect(straddling).toEqual([
       'Occupational Safety and Health Administration (U.S. Department of Labor)',
     ]);
@@ -116,9 +135,11 @@ describe('original fixtures produce diagnostics', () => {
     for (const fixture of manifest.fixtures) {
       const text = readFileSync(join(FIXTURES, fixture.originalPath), 'utf8');
       const analysis = analyseTextDeterministic(text, { path: fixture.originalPath });
-      const fences = analysis.document.protectedRegions.filter((r) => r.kind === 'fenced-code');
+      const fencedRegions = analysis.document.protectedRegions.filter(
+        (r) => r.kind === 'fenced-code',
+      );
       for (const diagnostic of analysis.diagnostics) {
-        for (const fence of fences) {
+        for (const fence of fencedRegions) {
           const inside =
             diagnostic.range.start >= fence.range.start && diagnostic.range.end <= fence.range.end;
           expect(inside, `${fixture.id}: ${diagnostic.ruleId} reported inside a code fence`).toBe(
@@ -217,15 +238,6 @@ describe.skipIf(pairs.length === 0)('rewritten counterparts', () => {
   });
 
   it('clears every violation the annotation says it addresses', () => {
-    // Counts, not presence. A short quote such as "!" or ";" can occur several times in one
-    // document — for example inside an unfenced terminal transcript that the linter reads as prose.
-    // Asserting absence would then fail even though the annotated occurrence really was fixed, so
-    // the check is that the number of occurrences of that (ruleId, quote) pair went down.
-    const countMatching = (text: string, ruleId: string, quote: string): number =>
-      analyseTextDeterministic(text).diagnostics.filter(
-        (d) => d.ruleId === ruleId && text.slice(d.range.start, d.range.end) === quote,
-      ).length;
-
     for (const pair of pairs) {
       if (pair.annotation === undefined) continue;
       for (const change of pair.annotation.changes) {
@@ -266,12 +278,6 @@ describe.skipIf(pairs.length === 0)('rewritten counterparts', () => {
 
   it('keeps the code fences of the original byte-identical', () => {
     for (const pair of pairs) {
-      const fences = (text: string): string[] => {
-        const doc = analyseTextDeterministic(text).document;
-        return doc.protectedRegions
-          .filter((r) => r.kind === 'fenced-code')
-          .map((r) => text.slice(r.range.start, r.range.end));
-      };
       expect(fences(pair.compliant), pair.fixture.id).toEqual(fences(pair.original));
     }
   });

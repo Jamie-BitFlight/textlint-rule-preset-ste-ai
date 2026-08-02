@@ -1,5 +1,4 @@
 import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import type {
   CompletionRequest,
   CompletionResponse,
@@ -117,6 +116,12 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
       requests += 1;
       let parsed: { model?: string; messages?: { role: string; content: string }[] } = {};
       try {
+        // Every field of `parsed` is already optional and every real consumer below reads it
+        // through `?.` (`body.messages?.find(...)`, `parsed.model ?? 'fake'`), so an unexpected
+        // request shape from this fake server's own tests degrades to a missing field, not a
+        // crash — the same tolerance a schema would buy here, without the machinery, for a
+        // test-only double that only ever receives bodies this file's own tests construct.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof parsed;
       } catch {
         res.writeHead(400, { 'content-type': 'application/json' });
@@ -147,13 +152,25 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
   });
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address() as AddressInfo;
+  const address = server.address();
+  // `server.address()` is `string | AddressInfo | null` in general (a string for a Unix socket,
+  // null before listening) — but `listen(port, host, ...)` above always binds a TCP/IP address, so
+  // this is a real check, not an assumption, and fails loudly if that ever stops being true.
+  if (address === null || typeof address === 'string') {
+    throw new Error('fake semantic service: expected a TCP address after listen()');
+  }
   return {
     url: `http://127.0.0.1:${address.port}`,
     requestCount: () => requests,
     close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => (error === undefined ? resolve() : reject(error))),
-      ),
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        });
+      }),
   };
 }

@@ -285,7 +285,7 @@ const tableMarkupPass: Pass = {
       offset += line.length + 1;
     }
     const delimiter = /^[ \t]*\|?[ \t]*:?-{1,}:?[ \t]*(?:\|[ \t]*:?-{1,}:?[ \t]*)*\|?[ \t]*$/;
-    const inTable = new Array<boolean>(lines.length).fill(false);
+    const inTable: boolean[] = Array.from({ length: lines.length }, () => false);
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
       const next = lines[i + 1];

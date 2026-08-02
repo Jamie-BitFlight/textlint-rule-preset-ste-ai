@@ -18,15 +18,26 @@ import { deterministicRules } from '../../src/deterministic/index.js';
 
 const exampleDir = fileURLToPath(new URL('../../examples/', import.meta.url));
 
+/** A real runtime check, not an assumption: every example file is expected to be a JSON object. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`${label}: expected a JSON object, got ${typeof value}`);
+  return value;
+}
+
 function readJson(name: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(exampleDir, name), 'utf8')) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(readFileSync(join(exampleDir, name), 'utf8'));
+  return asRecord(parsed, name);
 }
 
 const coreRuleIds = new Set(deterministicRules.map((rule) => rule.meta.id));
 
 describe('examples/.textlintrc.json', () => {
   const config = readJson('.textlintrc.json');
-  const rules = config['rules'] as Record<string, unknown>;
+  const rules = asRecord(config['rules'], '.textlintrc.json#rules');
 
   it('configures the preset as a single key with nested per-rule options', () => {
     // textlint's `isPresetRuleKey` matches on the `preset-` prefix and then resolves the *whole*
@@ -38,15 +49,15 @@ describe('examples/.textlintrc.json', () => {
   });
 
   it('names only rules the preset actually exports', () => {
-    const presetOptions = rules['preset-ste-ai'] as Record<string, unknown>;
+    const presetOptions = asRecord(rules['preset-ste-ai'], '.textlintrc.json#rules.preset-ste-ai');
     for (const ruleId of Object.keys(presetOptions)) {
       expect(coreRuleIds, `unknown rule id "${ruleId}"`).toContain(ruleId);
     }
   });
 
   it('names only plugins declared as dependencies of this package', () => {
-    const plugins = config['plugins'] as Record<string, unknown>;
-    expect(Object.keys(plugins).sort()).toEqual(['@textlint/markdown', '@textlint/text']);
+    const plugins = asRecord(config['plugins'], '.textlintrc.json#plugins');
+    expect(Object.keys(plugins).toSorted()).toEqual(['@textlint/markdown', '@textlint/text']);
   });
 });
 

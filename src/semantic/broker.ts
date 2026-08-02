@@ -105,7 +105,7 @@ export class SemanticBroker {
     const skipped = new Set(candidates.filter((c) => !selected.includes(c)).map((c) => c.id));
 
     // Deterministic work order, independent of the caller's array order.
-    const ordered = [...selected].sort((a, b) => a.id.localeCompare(b.id));
+    const ordered = selected.toSorted((a, b) => a.id.localeCompare(b.id));
 
     const requests = new Map<string, EvaluatorRequest>();
     const hashByCandidate = new Map<string, string>();

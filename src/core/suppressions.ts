@@ -528,7 +528,7 @@ function gapIsClear(
       .filter((region) => STRUCTURAL_MARKER_KINDS.has(region.kind))
       .map((region) => region.range),
     ...admonitionOpenerRanges(doc.text, from, to, blockAdmonition),
-  ].sort((a, b) => a.start - b.start || a.end - b.end);
+  ].toSorted((a, b) => a.start - b.start || a.end - b.end);
 
   let cursor = from;
   for (const span of skippable) {

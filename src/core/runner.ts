@@ -60,7 +60,7 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
     if (!enabled) continue;
 
     const rawOptions = {
-      ...(packSpec?.options ?? {}),
+      ...packSpec?.options,
       ...stripControlKeys(userConfig),
     };
     const parsed = rule.optionsSchema.safeParse(rawOptions);
@@ -106,7 +106,7 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
           : {
               ...processed,
               ruleStatus: packStatus,
-              meta: { ...(processed.meta ?? {}), sourceRef: packSpec?.sourceRef ?? '' },
+              meta: { ...processed.meta, sourceRef: packSpec?.sourceRef ?? '' },
             },
       );
     }
@@ -291,7 +291,7 @@ export function resolveOverlappingFixes(diagnostics: readonly Diagnostic[]): {
 }
 
 function sortCandidates(candidates: readonly CandidatePassage[]): CandidatePassage[] {
-  return [...candidates].sort(
+  return candidates.toSorted(
     (a, b) =>
       a.range.start - b.range.start ||
       a.range.end - b.range.end ||

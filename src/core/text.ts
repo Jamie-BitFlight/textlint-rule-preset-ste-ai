@@ -19,7 +19,7 @@ export function rangeLength(range: SourceRange): number {
 
 /** Merge overlapping/adjacent ranges into a minimal sorted set. */
 export function mergeRanges(ranges: readonly SourceRange[]): SourceRange[] {
-  const sorted = [...ranges].sort((a, b) => a.start - b.start || a.end - b.end);
+  const sorted = ranges.toSorted((a, b) => a.start - b.start || a.end - b.end);
   const out: SourceRange[] = [];
   for (const r of sorted) {
     const last = out[out.length - 1];

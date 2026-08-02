@@ -6,10 +6,12 @@ import { describe, expect, it, beforeEach } from 'vitest';
 // The published typings for these plugins declare a default export whose shape TypeScript resolves
 // as the module namespace under NodeNext, so the `Processor` property is not visible to the
 // compiler even though it is present at run time. The casts are narrowed to exactly that gap.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const markdownPlugin = markdownPluginModule as unknown as TextlintPluginCreator;
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const textPlugin = textPluginModule as unknown as TextlintPluginCreator;
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
-import preset from '../../src/textlint/preset.js';
+import { rules, rulesConfig } from '../../src/textlint/preset.js';
 
 /**
  * End-to-end runs through the real textlint kernel, with the real markdown plugin, the real
@@ -23,7 +25,7 @@ import preset from '../../src/textlint/preset.js';
 const kernel = new TextlintKernel();
 
 function presetRules(only?: readonly string[]) {
-  return Object.entries(preset.rules)
+  return Object.entries(rules)
     .filter(([id]) => only === undefined || only.includes(id))
     .map(([ruleId, rule]) => ({ ruleId, rule, options: true as const }));
 }
@@ -212,7 +214,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'sentence-length-procedural',
-          rule: preset.rules['sentence-length-procedural']!,
+          rule: rules['sentence-length-procedural']!,
           options: { floorWords: 1, maxGradeLevel: 3 },
         },
       ],
@@ -235,7 +237,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'number-unit-format',
-          rule: preset.rules['number-unit-format']!,
+          rule: rules['number-unit-format']!,
           options: {
             shared: { diagnostics: { severity: { 'deterministic-violation': 'info' } } },
           },
@@ -251,7 +253,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'number-unit-format',
-          rule: preset.rules['number-unit-format']!,
+          rule: rules['number-unit-format']!,
           options: { shared: { rules: { 'number-unit-format': { severity: 'warning' } } } },
         },
       ],
@@ -266,7 +268,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'unapproved-vocabulary',
-          rule: preset.rules['unapproved-vocabulary']!,
+          rule: rules['unapproved-vocabulary']!,
           options: { shared: { rules: { 'unapproved-vocabulary': { enabled: false } } } },
         },
       ],
@@ -277,9 +279,9 @@ describe('per-rule textlint options', () => {
 
 describe('preset shape', () => {
   it('exposes one rule module per core rule and enables them all by default', () => {
-    expect(Object.keys(preset.rules)).toHaveLength(14);
-    expect(Object.values(preset.rulesConfig).every((v) => v === true)).toBe(true);
-    for (const rule of Object.values(preset.rules)) {
+    expect(Object.keys(rules)).toHaveLength(14);
+    expect(Object.values(rulesConfig).every((v) => v === true)).toBe(true);
+    for (const rule of Object.values(rules)) {
       expect(typeof rule).toBe('object');
       expect('linter' in rule && 'fixer' in rule).toBe(true);
     }

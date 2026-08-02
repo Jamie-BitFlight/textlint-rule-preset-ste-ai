@@ -1,6 +1,6 @@
 import TextLintTesterModule from 'textlint-tester';
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
-import preset from '../../src/textlint/preset.js';
+import { rules } from '../../src/textlint/preset.js';
 
 interface TesterCase {
   readonly text: string;
@@ -20,6 +20,7 @@ interface Tester {
 // `textlint-tester` publishes a CommonJS default export that TypeScript resolves as the module
 // namespace under NodeNext, so the class is not constructable to the compiler even though it is at
 // run time. The cast is narrowed to exactly that gap, and gives the harness a typed surface.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const TextLintTester = TextLintTesterModule as unknown as new () => Tester;
 
 /**
@@ -37,7 +38,7 @@ const tester = new TextLintTester();
 
 clearAnalysisCache();
 
-tester.run('no-contractions', preset.rules['no-contractions']!, {
+tester.run('no-contractions', rules['no-contractions']!, {
   valid: [
     { text: 'Do not remove the cover.\n' },
     { text: 'The unit does not start.\n' },
@@ -80,7 +81,7 @@ tester.run('no-contractions', preset.rules['no-contractions']!, {
   ],
 });
 
-tester.run('unapproved-vocabulary', preset.rules['unapproved-vocabulary']!, {
+tester.run('unapproved-vocabulary', rules['unapproved-vocabulary']!, {
   valid: [
     { text: 'Use the bracket.\n' },
     { text: 'Open the file at /opt/utilise/bin now.\n' },
@@ -120,7 +121,7 @@ tester.run('unapproved-vocabulary', preset.rules['unapproved-vocabulary']!, {
   ],
 });
 
-tester.run('no-repeated-words', preset.rules['no-repeated-words']!, {
+tester.run('no-repeated-words', rules['no-repeated-words']!, {
   valid: [
     { text: 'Remove the cover.\n' },
     { text: 'The value that that follows is set.\n' },
@@ -150,7 +151,7 @@ tester.run('no-repeated-words', preset.rules['no-repeated-words']!, {
   ],
 });
 
-tester.run('number-unit-format', preset.rules['number-unit-format']!, {
+tester.run('number-unit-format', rules['number-unit-format']!, {
   valid: [{ text: 'Torque the bolt to 25 Nm now.\n' }, { text: 'Charge to 80% now.\n' }],
   invalid: [
     {
@@ -166,7 +167,7 @@ tester.run('number-unit-format', preset.rules['number-unit-format']!, {
   ],
 });
 
-tester.run('one-instruction-per-sentence', preset.rules['one-instruction-per-sentence']!, {
+tester.run('one-instruction-per-sentence', rules['one-instruction-per-sentence']!, {
   valid: [
     { text: 'Remove the cover and the filter.\n' },
     { text: 'The unit reads the sensor and writes the value.\n' },

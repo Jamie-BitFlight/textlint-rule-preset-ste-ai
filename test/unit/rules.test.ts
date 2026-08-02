@@ -106,7 +106,7 @@ describe('sentence-length-procedural', () => {
   });
 
   it('ignores headings by default and includes them when configured', () => {
-    const heading = `# ${'Install the panel and the bracket and the cover and the frame and the plate now'}\n`;
+    const heading = `# Install the panel and the bracket and the cover and the frame and the plate now\n`;
     expect(run(heading).forRule('sentence-length-descriptive')).toHaveLength(0);
     expect(
       run(heading, {
@@ -547,7 +547,7 @@ describe('runner invariants', () => {
     const a = run(text).diagnostics.map((d) => `${d.range.start}:${d.ruleId}`);
     const b = run(text).diagnostics.map((d) => `${d.range.start}:${d.ruleId}`);
     expect(a).toEqual(b);
-    expect(a).toEqual([...a].sort((x, y) => Number(x.split(':')[0]) - Number(y.split(':')[0])));
+    expect(a).toEqual(a.toSorted((x, y) => Number(x.split(':')[0]) - Number(y.split(':')[0])));
   });
 
   it('every diagnostic range points at real, non-empty source', () => {

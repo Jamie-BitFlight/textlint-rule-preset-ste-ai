@@ -144,7 +144,7 @@ export async function analyseSemantically(
         severity: policy.severity['suppressed-low-confidence'],
         message:
           `A semantic violation was reported below the decision threshold and was suppressed: ` +
-          `${verdict.explanation}`,
+          verdict.explanation,
         range,
         producedBy: 'semantic',
         candidateId: candidate.id,

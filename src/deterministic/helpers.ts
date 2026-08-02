@@ -200,11 +200,6 @@ export function isFunctionWord(word: Word): boolean {
   return FUNCTION_WORDS.has(word.lower);
 }
 
-/** Blocks indexed by id. */
-export function indexBlocks(blocks: readonly TextBlock[]): Map<string, TextBlock> {
-  return new Map(blocks.map((b) => [b.id, b]));
-}
-
 /** Sibling list items: same depth, contiguous in document order, all `list-item`. */
 export function groupSiblingListItems(blocks: readonly TextBlock[]): TextBlock[][] {
   const groups: TextBlock[][] = [];

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { DiagnosticCategory, Severity } from './types.js';
 
 export const severitySchema = z.enum(['info', 'warning', 'error']);
 
@@ -150,8 +149,4 @@ export type SteAiConfigInput = z.input<typeof steAiConfigSchema>;
 
 export function resolveConfig(input: unknown): SteAiConfig {
   return steAiConfigSchema.parse(input ?? {});
-}
-
-export function severityFor(policy: DiagnosticPolicy, category: DiagnosticCategory): Severity {
-  return policy.severity[category];
 }

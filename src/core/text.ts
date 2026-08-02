@@ -122,11 +122,6 @@ export function tokenizeWords(masked: string, offset = 0): Word[] {
   return out;
 }
 
-/** Count words, which is what every sentence-length limit is expressed in. */
-export function countWords(words: readonly Word[]): number {
-  return words.length;
-}
-
 /** Trim a range so it excludes leading/trailing whitespace in `text`. */
 export function trimRange(text: string, range: SourceRange): SourceRange {
   let { start, end } = range;

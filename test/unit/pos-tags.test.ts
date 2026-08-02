@@ -43,6 +43,23 @@ describe('sentenceOpensImperative', () => {
     ).toBe(true);
   });
 
+  // Regression: `addWords` teaches `compromise`'s shared, module-global lexicon. A word taught for
+  // one call's `extraVerbs` must not still be "known" as a verb on a later call that configures no
+  // extra verbs at all (or a different set) — that would make classification depend on what some
+  // earlier, unrelated call happened to teach, not on this call's own arguments.
+  //
+  // "cache" and not "reticulate" (used above): `compromise`'s own unknown-word guesser already
+  // tags a capitalised sentence-initial nonsense or rare word as `Verb Imperative` regardless of
+  // any teaching — confirmed directly ("Zorbulate the device." tags `zorbulate` `Verb Imperative`
+  // with no lexicon entry at all) — so a word like that would pass this assertion even with the
+  // leak still present, proving nothing. "cache" is a real English noun `compromise` already
+  // recognises on its own (tags `Noun`, confirmed directly) and does not guess as a verb, so it
+  // only reads as an imperative opener here because `extraVerbs` taught it to.
+  it('does not let one call’s extraVerbs leak into a later call with a different configuration', () => {
+    expect(sentenceOpensImperative('Cache the response before returning.', ['cache'])).toBe(true);
+    expect(sentenceOpensImperative('Cache the response before returning.')).toBe(false);
+  });
+
   it('does not misfire on a passive-voice sentence opener', () => {
     expect(sentenceOpensImperative('The driver is installed before you continue.')).toBe(false);
   });

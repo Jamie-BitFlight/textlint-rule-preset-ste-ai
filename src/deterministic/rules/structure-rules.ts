@@ -159,7 +159,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
 > = {
   meta: oneInstructionMeta,
   optionsSchema: oneInstructionOptionsSchema,
-  run({ doc, options, policy }): RuleOutput {
+  run({ doc, options, policy, extraImperativeVerbs }): RuleOutput {
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
     const conjunctions = new Set(options.conjunctions.map((c) => c.toLowerCase()));
@@ -169,8 +169,8 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const words = sentence.words.filter((w) => w.protectedKind === undefined);
       const first = words[0];
       if (first === undefined) continue;
-      if (!sentenceOpensImperative(sentence.masked)) continue;
-      const posIndex = buildSentencePosIndex(sentence);
+      if (!sentenceOpensImperative(sentence.masked, extraImperativeVerbs)) continue;
+      const posIndex = buildSentencePosIndex(sentence, extraImperativeVerbs);
 
       let conjunctionHit: { index: number; verb: (typeof words)[number] } | null = null;
       for (let i = 1; i < words.length - 1; i += 1) {

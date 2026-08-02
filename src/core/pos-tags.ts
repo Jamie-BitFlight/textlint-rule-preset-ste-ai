@@ -45,7 +45,6 @@ function firstTermTags(text: string): readonly string[] | undefined {
 }
 
 let domainLexiconLoaded = false;
-const extraLexiconLoaded = new Set<string>();
 
 /** Does `compromise`, unmodified, already tag `word` (in isolation) as a verb? */
 function alreadyKnownAsVerb(word: string): boolean {
@@ -63,20 +62,109 @@ function ensureDomainLexicon(): void {
   domainLexiconLoaded = true;
 }
 
-function ensureExtraLexicon(extraVerbs: readonly string[]): void {
-  const fresh = extraVerbs
-    .map((v) => v.toLowerCase())
-    .filter((v) => v.length > 0 && !extraLexiconLoaded.has(v));
-  if (fresh.length === 0) return;
-  const lexicon: Record<string, string> = {};
-  for (const verb of fresh) {
-    if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
-    extraLexiconLoaded.add(verb);
-  }
-  if (Object.keys(lexicon).length > 0) nlp.addWords(lexicon);
+ensureDomainLexicon();
+
+// ---------------------------------------------------------------------------
+// Per-configuration ("extra") vocabulary — scoped, not a permanent ratchet
+// ---------------------------------------------------------------------------
+
+/**
+ * The two lexicon stores `addWords` writes into. PROVENANCE: `compromise` exposes no per-instance
+ * or per-document tagger — `nlp.world()` is documented as a "reach-into internals" escape hatch
+ * (`node_modules/compromise/src/nlp.js`) and returns the package's one module-global `world`
+ * object, confirmed by direct inspection (`world.model.one.lexicon`,
+ * `world.model.one._multiCache`) to be exactly what `addWords` (`1-one/lexicon/lib.js`) mutates,
+ * in place, for every future `nlp(...)` call in the process — there is no `removeWords`.
+ */
+interface LexiconStore {
+  readonly model: {
+    readonly one: {
+      lexicon: Record<string, unknown>;
+      _multiCache: Record<string, unknown>;
+    };
+  };
 }
 
-ensureDomainLexicon();
+function lexiconStore(): LexiconStore {
+  return nlp.world() as unknown as LexiconStore;
+}
+
+/** Mutate `target` in place so its own contents exactly match `snapshot` — add, overwrite, delete. */
+function restoreLexiconInPlace(
+  target: Record<string, unknown>,
+  snapshot: Readonly<Record<string, unknown>>,
+): void {
+  for (const key of Object.keys(target)) {
+    if (!Object.prototype.hasOwnProperty.call(snapshot, key)) delete target[key];
+  }
+  Object.assign(target, snapshot);
+}
+
+/**
+ * A snapshot of `compromise`'s shared lexicon taken right after the permanent domain lexicon
+ * (`IMPERATIVE_VERBS`, above) is loaded and before any *per-configuration* word is ever taught.
+ * {@link ensureExtraLexicon} restores to this baseline before teaching each call's own
+ * `extraVerbs`, which is what stops one call's configuration from surviving into the next.
+ */
+const extraLexiconBaseline: {
+  lexicon: Record<string, unknown>;
+  multiCache: Record<string, unknown>;
+} = (() => {
+  const store = lexiconStore();
+  return {
+    lexicon: { ...store.model.one.lexicon },
+    multiCache: { ...store.model.one._multiCache },
+  };
+})();
+
+/** Canonical identity of an `extraVerbs` list — same words, any order or case, same identity. */
+function extraVerbsKey(extraVerbs: readonly string[]): string {
+  return [...new Set(extraVerbs.map((v) => v.toLowerCase()).filter((v) => v.length > 0))]
+    .sort()
+    .join(' ');
+}
+
+/** The `extraVerbs` configuration currently taught to `compromise`'s shared lexicon, if any. */
+let activeExtraKey = '';
+
+/**
+ * Make `compromise`'s shared lexicon reflect exactly this call's `extraVerbs` and nothing another
+ * call taught it.
+ *
+ * `addWords` mutates a lexicon that is `compromise`'s own module-global singleton (see
+ * {@link LexiconStore}), not scoped to a document or a configuration. Left as a one-way ratchet —
+ * teach and never untach, the previous design — a word from one document's
+ * `extraImperativeVerbs` stayed "known" as a verb for every later document analysed in the same
+ * process, including one with a different configuration or none at all: which rule fired, and
+ * which limit applied, then depended on analysis order rather than on that run's own
+ * configuration (found via `test/integration/reader-wiring.test.ts` and
+ * `test/unit/pos-tags.test.ts`, both reproducing it directly).
+ *
+ * Fixed by resynchronising on every call instead: restore the pre-extra-vocabulary baseline, then
+ * teach only the words this call actually asked for. Safe to do unconditionally because every
+ * call site in this codebase now passes its own `extraImperativeVerbs` explicitly
+ * (`RuleInput.extraImperativeVerbs`, threaded from `SteAiConfig`) rather than relying on an
+ * earlier, unrelated call having taught the word. A call requesting the same configuration as the
+ * one currently active is a no-op, so repeated calls for one document (the common case — most
+ * sentences in most documents configure no extra verbs at all) do not pay a restore/reteach cost.
+ */
+function ensureExtraLexicon(extraVerbs: readonly string[]): void {
+  const key = extraVerbsKey(extraVerbs);
+  if (key === activeExtraKey) return;
+
+  const store = lexiconStore();
+  restoreLexiconInPlace(store.model.one.lexicon, extraLexiconBaseline.lexicon);
+  restoreLexiconInPlace(store.model.one._multiCache, extraLexiconBaseline.multiCache);
+
+  if (key.length > 0) {
+    const lexicon: Record<string, string> = {};
+    for (const verb of key.split(' ')) {
+      if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
+    }
+    if (Object.keys(lexicon).length > 0) nlp.addWords(lexicon);
+  }
+  activeExtraKey = key;
+}
 
 // ---------------------------------------------------------------------------
 // Sentence-opener imperative mood

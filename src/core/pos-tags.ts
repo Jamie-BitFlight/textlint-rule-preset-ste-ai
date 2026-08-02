@@ -1,6 +1,5 @@
 import nlp from 'compromise';
 import { IMPERATIVE_VERBS } from './imperative-verbs.js';
-import { MASK_CHAR } from './text.js';
 import type { Sentence, Word } from './types.js';
 
 /**
@@ -109,9 +108,19 @@ function writeKey(store: Record<string, unknown>, key: string, value: KeyValue):
 }
 
 /**
+ * What {@link ensureExtraLexicon}'s own most recent `addWords` call did to one `lexicon`/
+ * `_multiCache` key: `prev` is what was there immediately before that call (`ABSENT` if the key
+ * did not exist yet), `written` is what this module's own call actually changed it to.
+ */
+interface TouchedKey {
+  readonly prev: KeyValue;
+  readonly written: KeyValue;
+}
+
+/**
  * Exactly which `lexicon`/`_multiCache` keys {@link ensureExtraLexicon}'s own most recent
- * `addWords` call actually changed, and what was in each one immediately before that call —
- * `ABSENT` if the key did not exist yet.
+ * `addWords` call actually changed, and what each one was doing immediately before and after that
+ * call.
  *
  * PROVENANCE: an earlier version of this fix instead restored a whole-object snapshot of the
  * shared lexicon/`_multiCache` taken once, right after the permanent domain lexicon loaded.
@@ -131,9 +140,21 @@ function writeKey(store: Record<string, unknown>, key: string, value: KeyValue):
  * {@link ensureExtraLexicon} puts back exactly what was at each of *its own* previously-touched
  * keys (deleting a key that did not exist before, restoring one that did) and leaves every other
  * key in the shared lexicon/`_multiCache` — whoever wrote it, whenever — completely untouched.
- * The "before" value for each key is captured immediately before that key's own `addWords` call
+ * The `prev` value for each key is captured immediately before that key's own `addWords` call
  * (not once, globally), so it reflects whatever was really there at that moment, including a
  * value some other consumer had already written by then.
+ *
+ * `written` exists for a second, related bug in that same key-local fix (`chatgpt-codex-connector`,
+ * P2): tracking `prev` alone tells this module what to put back, but not whether it is still safe
+ * to do so. If another consumer of the shared singleton writes a *newer* value to a key this module
+ * also touched — e.g. this package teaches `cache` as a configured verb, and the host then calls
+ * `nlp.addWords({ cache: 'Noun' })` — the next configuration switch has no way to tell "nothing has
+ * touched this key since I wrote it" from "someone wrote something newer since I wrote it", and
+ * unconditionally restored over that newer value either way, discarding it. Recording `written` — a
+ * second diff read, immediately after this module's own `addWords` call, of the same candidate keys
+ * — fixes that: {@link ensureExtraLexicon} now only restores a key if its *current* live value still
+ * equals `written`; a live value that differs means something else changed it since, and that key is
+ * left alone.
  *
  * Populated by diffing a small set of *candidate* keys (the words just taught, plus the first
  * token of any multi-word entry among them, which is `compromise`'s own `_multiCache` key scheme
@@ -147,14 +168,37 @@ function writeKey(store: Record<string, unknown>, key: string, value: KeyValue):
  * exists defensively, for a hypothetical multi-word `extraImperativeVerbs` entry, since nothing in
  * `SteAiConfig` forbids one.
  */
-let taughtLexiconKeys = new Map<string, KeyValue>();
-let taughtMultiCacheKeys = new Map<string, KeyValue>();
+let taughtLexiconKeys = new Map<string, TouchedKey>();
+let taughtMultiCacheKeys = new Map<string, TouchedKey>();
 
-/** Canonical identity of an `extraVerbs` list — same words, any order or case, same identity. */
+/**
+ * Normalised `extraVerbs` entries: lower-cased, blank-filtered, de-duplicated. Each entry is kept
+ * intact, including a multi-word phrase's own internal space — never re-split — so a caller can
+ * always tell "one phrase" from "several separate words" apart.
+ */
+function normalizeExtraVerbs(extraVerbs: readonly string[]): string[] {
+  return [...new Set(extraVerbs.map((v) => v.toLowerCase()).filter((v) => v.length > 0))];
+}
+
+/**
+ * Canonical identity of an `extraVerbs` list — same entries, any order or case, same identity.
+ *
+ * PROVENANCE: an earlier version joined normalised entries with a plain space (`' '`) to build
+ * this identity string, and {@link ensureExtraLexicon} then re-split that same joined string on
+ * whitespace to decide what to actually teach `compromise` — found by `chatgpt-codex-connector`
+ * (P2) to conflate two different things a plain space can mean: the delimiter between separate
+ * entries, and a multi-word phrase's own internal space. A configured `["power cycle"]` (one
+ * phrase) was taught as the two independent single-word verbs "power" and "cycle" instead of the
+ * phrase "power cycle", because the teaching loop split the identity string apart the same way
+ * regardless of which entries produced it. Using `\u0000` (a character no real `extraVerbs` entry
+ * can contain) as the join delimiter here, instead of a space, is *sufficient* to prevent that
+ * specific bug from recurring by fixing this string's own ambiguity, but the actual fix is in
+ * {@link ensureExtraLexicon}: it now teaches directly from the normalised entry list (see
+ * {@link normalizeExtraVerbs}), never by re-splitting this identity string, so nothing downstream
+ * depends on this particular choice of delimiter either way.
+ */
 function extraVerbsKey(extraVerbs: readonly string[]): string {
-  return [...new Set(extraVerbs.map((v) => v.toLowerCase()).filter((v) => v.length > 0))]
-    .sort()
-    .join(' ');
+  return normalizeExtraVerbs(extraVerbs).sort().join('\u0000');
 }
 
 /** The `extraVerbs` configuration currently taught to `compromise`'s shared lexicon, if any. */
@@ -183,23 +227,42 @@ let activeExtraKey = '';
  * all) do not pay a restore/reteach cost.
  */
 function ensureExtraLexicon(extraVerbs: readonly string[]): void {
+  const entries = normalizeExtraVerbs(extraVerbs);
   const key = extraVerbsKey(extraVerbs);
   if (key === activeExtraKey) return;
 
   const store = lexiconStore();
 
   // Undo exactly what the previous call taught: put each touched key back to what compromise
-  // itself had there before that call, or delete it if it had nothing. Every other key in the
-  // shared lexicon/`_multiCache` — including any another consumer of this shared `compromise`
-  // instance wrote, before or after this module last ran — is left untouched.
-  for (const [k, prev] of taughtLexiconKeys) writeKey(store.model.one.lexicon, k, prev);
-  for (const [k, prev] of taughtMultiCacheKeys) writeKey(store.model.one._multiCache, k, prev);
+  // itself had there before that call, or delete it if it had nothing — but only if the key's
+  // *current* live value still equals what this module itself wrote there. PROVENANCE
+  // (`chatgpt-codex-connector`, P2): the immediately preceding fix tracked which keys were touched
+  // and what was there *before* this module's own write, but not what this module itself *wrote* —
+  // so it could not tell "nothing has touched this key since" from "another consumer of this
+  // shared `compromise` singleton wrote a newer value to this exact key after this module did",
+  // and unconditionally restored over that newer value either way, discarding it. Every other key
+  // in the shared lexicon/`_multiCache` — including any another consumer wrote, before or after
+  // this module last ran — is left untouched either way.
+  for (const [k, { prev, written }] of taughtLexiconKeys) {
+    if (readKey(store.model.one.lexicon, k) === written) writeKey(store.model.one.lexicon, k, prev);
+  }
+  for (const [k, { prev, written }] of taughtMultiCacheKeys) {
+    if (readKey(store.model.one._multiCache, k) === written) {
+      writeKey(store.model.one._multiCache, k, prev);
+    }
+  }
   taughtLexiconKeys = new Map();
   taughtMultiCacheKeys = new Map();
 
-  if (key.length > 0) {
+  if (entries.length > 0) {
     const lexicon: Record<string, string> = {};
-    for (const verb of key.split(' ')) {
+    // Teach directly from `entries` — the normalised list, each entry intact — never by re-deriving
+    // words from `key`. PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version looped over
+    // `key.split(' ')` here, which re-split a multi-word `extraVerbs` entry (e.g. `"power cycle"`)
+    // apart on the very same space that joined it to any other entries in `key`, teaching "power"
+    // and "cycle" as two independent single-word verbs instead of the phrase "power cycle". See
+    // {@link extraVerbsKey}'s own PROVENANCE note.
+    for (const verb of entries) {
       if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
     }
     if (Object.keys(lexicon).length > 0) {
@@ -226,10 +289,12 @@ function ensureExtraLexicon(extraVerbs: readonly string[]): void {
       nlp.addWords(lexicon);
 
       for (const [k, prev] of beforeLexicon) {
-        if (readKey(store.model.one.lexicon, k) !== prev) taughtLexiconKeys.set(k, prev);
+        const after = readKey(store.model.one.lexicon, k);
+        if (after !== prev) taughtLexiconKeys.set(k, { prev, written: after });
       }
       for (const [k, prev] of beforeMultiCache) {
-        if (readKey(store.model.one._multiCache, k) !== prev) taughtMultiCacheKeys.set(k, prev);
+        const after = readKey(store.model.one._multiCache, k);
+        if (after !== prev) taughtMultiCacheKeys.set(k, { prev, written: after });
       }
     }
   }
@@ -282,7 +347,29 @@ const FALSE_IMPERATIVE_OPENERS: ReadonlySet<string> = new Set(['vacuum', 'list']
  * participates in mood detection rather than being matched by a second, parallel mechanism.
  */
 export function sentenceOpensImperative(text: string, extraVerbs: readonly string[] = []): boolean {
-  const leading = new RegExp(`^[\\s${MASK_CHAR}>*_-]+`, 'u');
+  // Deliberately excludes `MASK_CHAR`: a masked run at the very front of `text` can be either
+  // decorative structural markup (a blockquote arrow, an emphasis marker) or a protected
+  // content-bearing token (an inline-code identifier, a URL, a quantity) standing in the sentence's
+  // actual subject position — `sentenceOpensImperative` cannot tell which from the text alone, and
+  // the two cases need opposite treatment. Stripping it here unconditionally, the same way leading
+  // whitespace is stripped, was found (chatgpt-codex-connector, P2) to treat both alike: on the
+  // direct `analyseDocument`/`scanBlocks` path, "`workers` run the service and emit metrics." masks
+  // to a run of `MASK_CHAR` standing for the backticked "workers" followed by " run the service...",
+  // and skipping straight through it left "run" reading as a bare sentence-opening imperative even
+  // though "workers" is the real subject.
+  //
+  // Leaving `MASK_CHAR` unstripped does not regress the structural-markup case: `compromise`'s own
+  // tokeniser silently folds a masked run that is *directly, contiguously* adjacent to the following
+  // letters (no separating space — the case for a masked blockquote arrow or emphasis marker, whose
+  // protected region also consumes the single space after it) into that word's own token, so the
+  // verb is still tagged and found as the sentence's first term regardless (confirmed directly:
+  // `nlp('��Install the driver.')` still tags `Install` `Verb Imperative` as its first
+  // term). A masked content-bearing token is followed by a real, unmasked space before the next
+  // word, so `compromise` tokenises the masked run as its own (non-verb) term instead — which is
+  // exactly the "unknown, non-imperative opener" reading this case needs, and every check below
+  // (`#Imperative`, the colon-label guard, the bare-verb-tag-set fallback) already treats a
+  // non-verb-tagged first term as "not imperative" on its own, with no additional guard required.
+  const leading = new RegExp(`^[\\s>*_-]+`, 'u');
   const stripped = text.replace(leading, '');
   if (stripped.length === 0) return false;
   if (NEGATIVE_IMPERATIVE_PREFIX.test(stripped)) return true;
@@ -299,12 +386,15 @@ export function sentenceOpensImperative(text: string, extraVerbs: readonly strin
   // `compromise` reliably tags a lone sentence-initial imperative ("Install the driver.") but not
   // one that opens a coordinated list of imperatives ("Build, flash, and run a sample
   // application." — confirmed directly: none of the three verbs get `#Imperative` there). A bare
-  // (infinitive/present-tense, non-passive, non-gerund) verb as the very first word of a sentence
-  // is otherwise a vanishingly rare shape in declarative English, so it is accepted as the same
-  // signal `compromise` itself uses for `#Imperative`, just without the positional condition that
-  // is defeating its tagger on this shape.
+  // (infinitive, non-passive, non-gerund) verb as the very first word of a sentence is otherwise a
+  // vanishingly rare shape in declarative English, so it is accepted as the same signal
+  // `compromise` itself uses for `#Imperative`, just without the positional condition that is
+  // defeating its tagger on this shape. Uses {@link isImperativeOpenerTagSet}, not the broader
+  // {@link isBareVerbTagSet}: this is deciding whether the sentence *opens an imperative clause*,
+  // exactly the purpose that predicate's own PROVENANCE note says needs the stricter, `Infinitive`
+  // -only check.
   const firstTags = firstTermTags(stripped);
-  return firstTags !== undefined && isBareVerbTagSet(firstTags);
+  return firstTags !== undefined && isImperativeOpenerTagSet(firstTags);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,15 +450,48 @@ const NON_BARE_VERB_TAGS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Is a tag set from {@link tagByOffset} the tag set of a bare/base-form action verb — the shape
- * that opens an instruction ("Install...") or joins a second instruction ("...and install...")?
+ * Is a tag set from {@link tagByOffset} the tag set of *some kind of* non-passive, non-gerund,
+ * non-past-tense verb — a broad "is this word functioning as a verb at all, right now" signal?
  * Excludes gerunds, past-tense and participle forms, which are content words in this project's
- * noun-cluster and antecedent heuristics, not command verbs.
+ * noun-cluster and antecedent heuristics, not verbs to break a run on.
+ *
+ * Accepts `PresentTense` on its own, without `Infinitive`: `compromise` tags an inflected
+ * third-person finite verb ("removes", "sends", "logs") exactly that way, and for the noun-cluster
+ * and antecedent purposes this backs (via {@link isImperativeVerbWord}, both broad "is this a verb"
+ * checks — see the PROVENANCE note there), that inflected verb genuinely is a verb and must not be
+ * counted as a content word alongside surrounding nouns. **Do not use this for deciding whether a
+ * word opens or continues an imperative *clause*** — an inflected finite verb like "sends" answers
+ * that question wrong (see {@link isImperativeOpenerTagSet}, the intentionally stricter check for
+ * that purpose, found necessary by `chatgpt-codex-connector`, P1, against this predicate).
  */
 export function isBareVerbTagSet(tags: readonly string[]): boolean {
   if (!tags.includes('Verb')) return false;
   if (tags.some((t) => NON_BARE_VERB_TAGS.has(t))) return false;
   return tags.includes('Infinitive') || tags.includes('PresentTense');
+}
+
+/**
+ * Is a tag set from {@link tagByOffset} the tag set of a genuine bare/base-form command verb — the
+ * shape that opens an instruction ("Install...") or joins a second instruction ("...and
+ * install...")?
+ *
+ * Stricter than {@link isBareVerbTagSet}: requires `Infinitive`, not `PresentTense` alone.
+ * PROVENANCE: found by `chatgpt-codex-connector` (P1) that `isBareVerbTagSet` — used for this exact
+ * purpose before this predicate existed — accepted `PresentTense` without `Infinitive`, which is
+ * also the tag set `compromise` gives an ordinary inflected third-person finite verb ("removes",
+ * "sends", "logs"), not just a genuine bare/imperative form ("install", "remove"). Confirmed
+ * directly: in "Install the agent, which logs events and sends reports.", both "logs" and "sends"
+ * tag `Verb PresentTense` with no `Infinitive`, so the old check misread "sends" — part of the
+ * descriptive relative clause — as a second instruction opener; a genuine second imperative in the
+ * same position ("...and format the disk.") keeps `Infinitive`, confirmed directly, including for
+ * words taught only through this module's domain lexicon (`nlp.addWords({torque: 'Verb'})` still
+ * yields `Infinitive` on "Torque the bolt..." — `compromise`'s own contextual tagger adds it, not
+ * `addWords`).
+ */
+export function isImperativeOpenerTagSet(tags: readonly string[]): boolean {
+  if (!tags.includes('Verb')) return false;
+  if (tags.some((t) => NON_BARE_VERB_TAGS.has(t))) return false;
+  return tags.includes('Infinitive');
 }
 
 // ---------------------------------------------------------------------------
@@ -595,7 +718,9 @@ const AMBIGUOUS_AUXILIARY_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Is `word` a bare/base-form action verb in this sentence?
+ * Is `word` functioning as *some kind of* verb in this sentence — the broad signal the noun-cluster
+ * and antecedent heuristics need (a verb interrupts a run of content-word nouns; a verb is never a
+ * pronoun's antecedent), not specifically a command form?
  *
  * True if either `compromise`'s contextual tag says so — which also covers ordinary English verbs
  * outside the technical domain lexicon, e.g. "wipe"/"trim", never enumerated in
@@ -603,10 +728,44 @@ const AMBIGUOUS_AUXILIARY_VERBS: ReadonlySet<string> = new Set([
  * number of technical verbs `compromise` cannot resolve from context alone.
  * {@link AMBIGUOUS_AUXILIARY_VERBS} is excluded from the tag-based signal for the reason given on
  * its own comment.
+ *
+ * **Do not use this to decide whether `word` opens or continues an imperative clause** (a second
+ * instruction after a conjunction or a comma) — its tag-based signal, {@link isBareVerbTagSet},
+ * accepts an inflected third-person finite verb ("sends", "logs") that is not a command form; use
+ * {@link isImperativeOpenerWord} for that purpose instead. See {@link isBareVerbTagSet}'s own
+ * PROVENANCE note.
  */
 export function isImperativeVerbWord(word: Word, index: SentencePosIndex): boolean {
   const tags = index.tagsAt(word.range.start);
   if (tags !== undefined && isBareVerbTagSet(tags) && !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower)) {
+    return true;
+  }
+  return IMPERATIVE_VERBS.has(word.lower);
+}
+
+/**
+ * Is `word` a genuine bare/base-form command verb in this sentence — the shape that opens or
+ * continues an *imperative clause* (a second instruction, after a conjunction or a comma)?
+ *
+ * PROVENANCE: split out from {@link isImperativeVerbWord} (`chatgpt-codex-connector`, P1): that
+ * function's tag-based signal, {@link isBareVerbTagSet}, accepts `PresentTense` without
+ * `Infinitive` — the tag set `compromise` gives an inflected third-person finite verb ("sends",
+ * "logs"), not just a genuine bare/imperative form. Used for the noun-cluster/antecedent heuristics
+ * that need "is this any kind of verb" — correctly, since an inflected finite verb like "sends" is
+ * still a verb for those purposes — that same broad signal wrongly read the "sends" in "Install the
+ * agent, which logs events and sends reports." as a second instruction opener, because it sits right
+ * after the conjunction "and". This function uses {@link isImperativeOpenerTagSet} instead, which
+ * requires `Infinitive`, so only a genuine command-form verb ("...and format the disk.") counts.
+ * {@link AMBIGUOUS_AUXILIARY_VERBS} and the {@link IMPERATIVE_VERBS} list fallback are unchanged
+ * from {@link isImperativeVerbWord} — both apply identically to a bare command-form check.
+ */
+export function isImperativeOpenerWord(word: Word, index: SentencePosIndex): boolean {
+  const tags = index.tagsAt(word.range.start);
+  if (
+    tags !== undefined &&
+    isImperativeOpenerTagSet(tags) &&
+    !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower)
+  ) {
     return true;
   }
   return IMPERATIVE_VERBS.has(word.lower);

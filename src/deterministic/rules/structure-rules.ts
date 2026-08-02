@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   buildSentencePosIndex,
-  isImperativeVerbWord,
+  isImperativeOpenerWord,
   sentenceOpensImperative,
 } from '../../core/pos-tags.js';
 import { buildDiagnostic, type DeterministicRule, type RuleOutput } from '../../core/rule.js';
@@ -181,7 +181,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
         // `and then install` — skip the adverb and look at the following word.
         const candidateVerb = next.lower === 'then' ? words[i + 2] : next;
         if (candidateVerb === undefined) continue;
-        if (!isImperativeVerbWord(candidateVerb, posIndex)) continue;
+        if (!isImperativeOpenerWord(candidateVerb, posIndex)) continue;
         conjunctionHit = { index: i, verb: candidateVerb };
         break;
       }
@@ -205,7 +205,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const commaIndex = sentence.masked.indexOf(',');
       if (commaIndex < 0) continue;
       const afterComma = words.filter((w) => w.range.start > sentence.range.start + commaIndex);
-      const secondVerb = afterComma.find((w) => isImperativeVerbWord(w, posIndex));
+      const secondVerb = afterComma.find((w) => isImperativeOpenerWord(w, posIndex));
       if (secondVerb === undefined) continue;
 
       if (!options.adjudicate) {

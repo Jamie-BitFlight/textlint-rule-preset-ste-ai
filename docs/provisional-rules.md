@@ -481,10 +481,23 @@ tuples.` (PostgreSQL's own command name) tags `VACUUM` as `Verb·Imperative`, wh
   override list in `pos-tags.ts`, found empirically against this corpus, not enumerated in advance.
 - `compromise` does not tag `#Imperative` on any verb in a coordinated imperative list ("Build,
   flash, and run a sample application.") — confirmed directly, none of the three verbs get the tag.
-  `sentenceOpensImperative` recovers this by also accepting a bare (infinitive/present-tense,
-  non-passive, non-gerund) tag on the very first word of a sentence, which is otherwise a
-  vanishingly rare shape outside imperative mood — guarded against a word immediately followed by a
-  colon (`Note:`, `Exception:`), which is a label, not a verb taking an object.
+  `sentenceOpensImperative` recovers this by also accepting a bare (infinitive, non-passive,
+  non-gerund) tag on the very first word of a sentence, which is otherwise a vanishingly rare shape
+  outside imperative mood — guarded against a word immediately followed by a colon (`Note:`,
+  `Exception:`), which is a label, not a verb taking an object.
+- `pos-tags.ts` has two "is this a bare verb" checks, not one, and they answer different questions:
+  `isBareVerbTagSet` (accepts `Infinitive` **or** `PresentTense`) asks "is this word functioning as
+  a verb at all right now?", the broad signal `noun-cluster-candidate` and
+  `ambiguous-pronoun-candidate` need. `isImperativeOpenerTagSet` (requires `Infinitive`) asks "does
+  this word open or continue an imperative _clause_?", used by `sentenceOpensImperative`'s
+  coordinated-list fallback above and by `one-instruction-per-sentence`'s conjunction/comma
+  detection. `compromise` tags an inflected third-person finite verb ("removes", "sends", "logs")
+  `Verb·PresentTense` with no `Infinitive` — the same tag shape a genuine bare command verb has
+  minus `Infinitive` — so the broad check alone previously misread the second one as a second
+  instruction: "Install the agent, which logs events and sends reports." (a single instruction
+  followed by a descriptive relative clause) was reported as containing two instructions, because
+  "sends" — sitting right after the conjunction "and" — satisfied the broad, `PresentTense`-only
+  check. Found by `chatgpt-codex-connector` (P1) against the single-predicate version.
 - `have`/`has`/`had`, `do`/`does`/`did`, `be`/`being`/`been`, `get`/`gets`/`got`, `go`/`goes` are
   excluded from the tag-based "is this a bare action verb" signal used by
   `one-instruction-per-sentence`'s conjunction/comma detection, even though `compromise` correctly
@@ -496,10 +509,26 @@ tuples.` (PostgreSQL's own command name) tags `VACUUM` as `Verb·Imperative`, wh
   adjudication. The verdict was right; the architecture was bypassed for the wrong reason, and the
   same tag would misfire on ordinary descriptive prose using "have" as an auxiliary near an
   unrelated "and".
+- Protected content (an inline-code identifier, a URL, a quantity, …) is masked with a repeated
+  placeholder character before grammatical classification runs. `sentenceOpensImperative` does not
+  strip a leading run of that placeholder the way it strips leading whitespace or markup (`>`, `*`,
+  `_`, `-`): a masked run in subject position — "`workers` run the service and emit metrics." masks
+  to a placeholder run standing for "workers", then " run the service…" — is a real, unknown token
+  occupying the sentence's subject, not decoration to skip over. Skipping it unconditionally
+  previously let "run" read as a bare sentence-opening imperative on the direct
+  `analyseDocument`/`scanBlocks` path even though the masked identifier is the actual subject. A
+  masked _structural_ marker (a blockquote arrow, an emphasis marker) immediately, contiguously
+  adjacent to the verb it introduces — no separating space — is unaffected: `compromise`'s own
+  tokeniser folds that run into the following word's own token regardless. Found by
+  `chatgpt-codex-connector` (P2).
 
 Add project verbs with `extraImperativeVerbs`; they are taught to `compromise` the same way the
 built-in domain lexicon is (same already-known-as-verb guard), so a configured verb genuinely
-participates in mood detection.
+participates in mood detection. An entry may be a multi-word phrase (`"power cycle"`); it is taught
+and matched as that whole phrase, not as its individual words — `["power cycle"]` and
+`["power", "cycle"]` are different configurations with different effects, the former teaching only
+the two-word command "power cycle the device", the latter teaching "power" and "cycle" as
+independent one-word verbs.
 
 **Measured corpus effect** (`fixtures/original/*.md`, all 18 documents, before/after this change):
 

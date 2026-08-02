@@ -5,6 +5,7 @@ import {
   isFunctionTagSet,
   sentenceOpensImperative,
 } from '../../src/core/pos-tags.js';
+import { MASK_CHAR } from '../../src/core/text.js';
 
 describe('sentenceOpensImperative', () => {
   it('recognises an ordinary sentence-initial imperative', () => {
@@ -42,6 +43,39 @@ describe('sentenceOpensImperative', () => {
     expect(
       sentenceOpensImperative('Reticulate the splines before shipping the part.', ['reticulate']),
     ).toBe(true);
+  });
+
+  // Regression (chatgpt-codex-connector, P2): `extraVerbsKey()` joins a normalised `extraVerbs`
+  // list with spaces to build a single cache-identity string, and `ensureExtraLexicon` then split
+  // that identity string back on whitespace to decide what to teach — conflating a multi-word
+  // phrase's own internal space with the delimiter used to join separate entries together. A
+  // configured `["gadget widget"]` (one two-word phrase) was therefore taught as two independent
+  // single-word verbs, "gadget" and "widget", rather than as the phrase "gadget widget".
+  //
+  // "gadget"/"widget" (not "gizmo", already taught permanently as a verb by a different test in
+  // this file simulating another `compromise` consumer): confirmed directly that `compromise` tags
+  // both as `Noun Singular` on their own, and does not guess either as a verb, so either one only
+  // reads as an imperative opener here because `extraVerbs` taught it to.
+  it('teaches a multi-word extraImperativeVerbs entry as one phrase, not as separate words', () => {
+    const extraVerbs = ['gadget widget'];
+    // The phrase itself, used together, must open an imperative.
+    expect(sentenceOpensImperative('Gadget widget the device before shipping.', extraVerbs)).toBe(
+      true,
+    );
+    // Neither word alone — taught only as part of the phrase — should read as a verb by itself.
+    expect(sentenceOpensImperative('Widget the gadget before shipping.', extraVerbs)).toBe(false);
+    expect(sentenceOpensImperative('Gadget the widget before shipping.', extraVerbs)).toBe(false);
+  });
+
+  it('gives a one-phrase multi-word entry a different active configuration than its words split apart', () => {
+    // `["gadget widget"]` (one phrase) and `["gadget", "widget"]` (two separate verbs) must not
+    // collapse to the same taught state: switching between them must actually re-teach.
+    expect(
+      sentenceOpensImperative('Widget the gadget before shipping.', ['gadget', 'widget']),
+    ).toBe(true);
+    expect(sentenceOpensImperative('Widget the gadget before shipping.', ['gadget widget'])).toBe(
+      false,
+    );
   });
 
   // Regression: `addWords` teaches `compromise`'s shared, module-global lexicon. A word taught for
@@ -88,6 +122,37 @@ describe('sentenceOpensImperative', () => {
     expect(sentenceOpensImperative('Gizmo the widget before shipping.')).toBe(true);
   });
 
+  // Regression (chatgpt-codex-connector, P2): the key-local restore fix above tracks which keys
+  // this module itself touched and what was there *before* its own write, but — until this fix —
+  // not what this module itself *wrote*. If another consumer of the shared `compromise` singleton
+  // writes a *newer* value to that exact same key after this module wrote it — e.g. this package
+  // teaches "sprocket" as a configured verb, then a host application calls
+  // `nlp.addWords({ sprocket: 'Adjective' })` — the next configuration switch could not tell that
+  // apart from "nothing has touched this key since", and unconditionally restored over the host's
+  // newer value, discarding it.
+  //
+  // "sprocket" (not "cache"/"reticulate"/"gizmo", used above): confirmed directly that `compromise`
+  // tags it `Noun Singular` on its own and does not guess it as a verb.
+  it('does not restore over a newer value another compromise consumer wrote to the same key', () => {
+    // This module teaches "sprocket" as a configured verb.
+    expect(sentenceOpensImperative('Sprocket the gear before shipping.', ['sprocket'])).toBe(true);
+
+    // Simulate a host application (or another package) sharing this process's one `compromise`
+    // singleton, updating that exact same key to something else *after* this module wrote it.
+    nlp.addWords({ sprocket: 'Adjective' });
+
+    // Force `ensureExtraLexicon`'s restore/reteach cycle to run, by switching this module's own
+    // `extraImperativeVerbs` configuration away from "sprocket".
+    sentenceOpensImperative('Torque the bolt.', ['reticulate']);
+
+    // The host's newer write must survive: this module's restore must never overwrite a key whose
+    // live value no longer matches what this module itself last wrote there.
+    expect(
+      (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model.one
+        .lexicon['sprocket'],
+    ).toBe('Adjective');
+  });
+
   it('does not misfire on a passive-voice sentence opener', () => {
     expect(sentenceOpensImperative('The driver is installed before you continue.')).toBe(false);
   });
@@ -121,6 +186,27 @@ describe('sentenceOpensImperative', () => {
     // Matches the previous heuristic's own documented limit: this still misclassifies a sentence
     // whose real grammatical subject is a later clause, because only the first word is examined.
     expect(sentenceOpensImperative('Record the value is stored in flash.')).toBe(true);
+  });
+
+  // Regression (chatgpt-codex-connector, P2): on the direct `analyseDocument`/`scanBlocks` path,
+  // protected content (e.g. an inline-code identifier) is already replaced with `MASK_CHAR` before
+  // this function runs. The old leading-strip regex discarded a whole leading run of `MASK_CHAR`
+  // the same way it discards structural whitespace/markup (`>`, `*`, `_`, `-`), so a masked
+  // identifier sitting in subject position was skipped straight through to the verb that follows
+  // it — "`workers` run the service and emit metrics." (masked: a run of `MASK_CHAR` standing in
+  // for the backticked "workers", then " run the service...") was analysed as if it opened with
+  // "run", a bare imperative verb.
+  it('does not skip a leading masked protected token as if it were structural whitespace', () => {
+    const masked = `${MASK_CHAR.repeat(9)} run the service and emit metrics.`;
+    expect(sentenceOpensImperative(masked)).toBe(false);
+  });
+
+  it('still recognises an imperative whose leading structural markup is masked with no gap before the verb', () => {
+    // Contrast case for the fix above: a masked structural marker (e.g. a blockquote arrow) that is
+    // immediately, contiguously followed by the verb — no separating space, unlike a masked
+    // content-bearing token — must not stop the opener from being recognised.
+    const masked = `${MASK_CHAR.repeat(2)}Install the driver.`;
+    expect(sentenceOpensImperative(masked)).toBe(true);
   });
 });
 

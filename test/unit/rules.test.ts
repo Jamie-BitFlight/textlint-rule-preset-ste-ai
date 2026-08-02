@@ -462,6 +462,20 @@ describe('one-instruction-per-sentence', () => {
     expect(result.forRule(id)).toHaveLength(1);
     expect(result.forRule(id)[0]?.category).toBe('deterministic-violation');
   });
+
+  it('does not flag an inflected third-person verb inside a descriptive relative clause', () => {
+    // Regression (chatgpt-codex-connector, P1): `compromise` tags a finite third-person verb such
+    // as "sends" or "logs" as `Verb`+`PresentTense` without `Infinitive` — the same PresentTense
+    // tag a genuine bare/base-form command verb carries. The old "is this a bare verb" check
+    // accepted either signal alone, so the word after "and" in "which logs events and sends
+    // reports" (itself part of a descriptive relative clause, not a second instruction) satisfied
+    // it and this sentence was reported as containing two instructions, even though "sends" never
+    // opens an imperative clause — confirmed directly: `compromise` tags "sends" `Verb
+    // PresentTense` with no `Infinitive`, exactly like "logs", while a genuine second imperative
+    // ("...and format the disk.") keeps `Infinitive` in the same position.
+    const result = run('Install the agent, which logs events and sends reports.\n');
+    expect(result.forRule(id)).toHaveLength(0);
+  });
 });
 
 describe('candidate rules never assert violations', () => {

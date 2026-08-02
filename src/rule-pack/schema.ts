@@ -74,7 +74,6 @@ export const rulePackLimitsSchema = z.object({
   sentenceReadabilityFloorWords: z.number().int().min(1).max(200),
   maxNounClusterLength: z.number().int().min(2).max(10),
   maxSentencesPerProceduralStep: z.number().int().min(1).max(10),
-  maxParagraphSentences: z.number().int().min(1).max(50),
 });
 
 export const rulePackRuleSpecSchema = z.object({

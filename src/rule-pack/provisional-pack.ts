@@ -51,7 +51,6 @@ export const provisionalRulePack: RulePack = {
     // description at the same length.
     maxNounClusterLength: 3,
     maxSentencesPerProceduralStep: 1,
-    maxParagraphSentences: 6,
   },
 
   dictionary: {

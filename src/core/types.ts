@@ -460,7 +460,6 @@ export interface RulePackLimits {
   readonly sentenceReadabilityFloorWords: number;
   readonly maxNounClusterLength: number;
   readonly maxSentencesPerProceduralStep: number;
-  readonly maxParagraphSentences: number;
 }
 
 export interface RulePackRuleSpec {

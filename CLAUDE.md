@@ -62,6 +62,17 @@ from exactly that stale-build confusion. `tsx` is deliberately not a project dep
 (which fetches it on demand) is the form that actually works in a clean checkout — plain `tsx`
 assumes a global install that may not exist.
 
+## Implementation work goes through an agent, even when it looks small
+
+"Fix it directly" means dispatch an agent to do the fix, not edit the file in the orchestrator
+session. This applies even to a one-line, unambiguous change (a CI workflow tweak, a config value) —
+size and obviousness are not the criteria. The orchestrator editing code itself defeats the same
+reason agents are used for everything else in this workflow: independent verification only means
+something if the thing being verified was produced separately from the verifier. Meta-work that
+isn't implementation — updating this file, replying to a review thread, running a read-only
+verification pass over an agent's already-pushed commit — is not "implementation work" in this sense
+and stays with the orchestrator.
+
 ## `send_later` (self-scheduled check-ins)
 
 The `send_later` MCP tool has required manual approval in this environment and cannot be relied on

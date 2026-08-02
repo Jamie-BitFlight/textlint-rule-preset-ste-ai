@@ -97,6 +97,11 @@ assumes a global install that may not exist.
 
 ## `send_later` (self-scheduled check-ins)
 
-The `send_later` MCP tool has required manual approval in this environment and cannot be relied on
-for unattended PR check-ins here. Don't assume it will silently succeed; if scheduling a check-in
-matters, confirm it actually registered.
+Contradicts an earlier note in this file that claimed `send_later` requires manual approval in this
+environment — directly observed otherwise: a call this session registered immediately, with no
+approval prompt, and was independently confirmed via `list_triggers` (real `trigger_id`, correct
+`next_run_at`). Don't carry forward the old claim. The one part of the original note still worth
+keeping is the underlying discipline, not the specific claim it was attached to: confirm a
+schedule actually registered via `list_triggers` when it matters, rather than trusting the call
+succeeded from its return value alone — that's good practice regardless of whether approval friction
+exists, not evidence that it does.

@@ -10,12 +10,23 @@ import type { Sentence, Word } from './types.js';
  * this project's technical/procedural vocabulary out of the box (`torque`, `flash`, `mark` as a
  * verb, `source`, `sync`, `query`, `rebase`, `unset`, `serialise` all default to a non-verb
  * reading until taught) — confirmed by direct testing against the installed package, not assumed.
- * `IMPERATIVE_VERBS` therefore survives as a **domain lexicon**, taught to `compromise` once via
- * `addWords` so its own context-sensitive tagger decides, per occurrence, whether a taught word
- * is actually functioning as a verb here (`record` still tags as `Noun` in "the maintenance
- * record", `Verb` in "Record the value" — verified directly; `addWords` teaches a possible tag,
- * it does not force one). The list also backs the small fallback described on
+ * `IMPERATIVE_VERBS` therefore survives as a **domain lexicon**, taught to `compromise` via
+ * `addWords` for the duration of each of this module's own public entry-point calls (see
+ * {@link withLexicons}) so its own context-sensitive tagger decides, per occurrence, whether a
+ * taught word is actually functioning as a verb here (`record` still tags as `Noun` in "the
+ * maintenance record", `Verb` in "Record the value" — verified directly; `addWords` teaches a
+ * possible tag, it does not force one). The list also backs the small fallback described on
  * {@link isImperativeVerbWord} below.
+ *
+ * The domain lexicon is **not** taught permanently at module load: `compromise` is a single
+ * module-global singleton shared by the whole Node process (see {@link LexiconStore}'s own
+ * PROVENANCE), so a host application embedding this package alongside its own use of `compromise`
+ * would otherwise see this module's technical vocabulary leak into its own tagging, forever, merely
+ * by importing this module — whether or not any of its rules ever ran. Instead, {@link
+ * withLexicons} teaches the domain lexicon (and any requested `extraImperativeVerbs`) at the start
+ * of a call and restores the shared singleton to exactly what it was immediately before, once that
+ * call's own work is completely done — so the mutation is never observable by any other consumer of
+ * the shared singleton, at any point between two of this module's calls.
  *
  * Critically, `addWords` is only called for words `compromise` does **not** already tag as a verb
  * on its own. Calling it unconditionally for the whole list was tried first and found, by direct
@@ -43,25 +54,31 @@ function firstTermTags(text: string): readonly string[] | undefined {
   return data[0]?.terms?.[0]?.tags;
 }
 
-let domainLexiconLoaded = false;
-
 /** Does `compromise`, unmodified, already tag `word` (in isolation) as a verb? */
 function alreadyKnownAsVerb(word: string): boolean {
   const tags = firstTermTags(word);
   return tags !== undefined && tags.includes('Verb');
 }
 
-function ensureDomainLexicon(): void {
-  if (domainLexiconLoaded) return;
-  const lexicon: Record<string, string> = {};
-  for (const verb of IMPERATIVE_VERBS) {
-    if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
+/**
+ * The domain lexicon (see {@link IMPERATIVE_VERBS}) as an `addWords` payload: only the words
+ * `compromise` does not already tag as a verb on its own (see {@link alreadyKnownAsVerb}). Computed
+ * once, lazily, on first use and cached — the underlying word list is static, so which words need
+ * teaching never changes between calls; only *whether* they are currently taught does (see
+ * {@link withLexicons} below, which teaches this dict at the start of every public entry-point call
+ * and restores it at the end of that same call, never leaving it taught in between).
+ */
+let cachedDomainLexicon: Record<string, string> | undefined;
+function domainLexiconDict(): Record<string, string> {
+  if (cachedDomainLexicon === undefined) {
+    const lexicon: Record<string, string> = {};
+    for (const verb of IMPERATIVE_VERBS) {
+      if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
+    }
+    cachedDomainLexicon = lexicon;
   }
-  if (Object.keys(lexicon).length > 0) nlp.addWords(lexicon);
-  domainLexiconLoaded = true;
+  return cachedDomainLexicon;
 }
-
-ensureDomainLexicon();
 
 // ---------------------------------------------------------------------------
 // Per-configuration ("extra") vocabulary — scoped, not a permanent ratchet
@@ -108,9 +125,9 @@ function writeKey(store: Record<string, unknown>, key: string, value: KeyValue):
 }
 
 /**
- * What {@link ensureExtraLexicon}'s own most recent `addWords` call did to one `lexicon`/
- * `_multiCache` key: `prev` is what was there immediately before that call (`ABSENT` if the key
- * did not exist yet), `written` is what this module's own call actually changed it to.
+ * What one {@link teachAndTrack} call did to one `lexicon`/`_multiCache` key: `prev` is what was
+ * there immediately before that call (`ABSENT` if the key did not exist yet), `written` is what
+ * that call actually changed it to.
  */
 interface TouchedKey {
   readonly prev: KeyValue;
@@ -118,43 +135,41 @@ interface TouchedKey {
 }
 
 /**
- * Exactly which `lexicon`/`_multiCache` keys {@link ensureExtraLexicon}'s own most recent
- * `addWords` call actually changed, and what each one was doing immediately before and after that
- * call.
+ * Exactly which `lexicon`/`_multiCache` keys one {@link teachAndTrack} call actually changed, and
+ * what each one was doing immediately before and after that call. Returned by {@link teachAndTrack}
+ * and consumed by {@link restoreTracked} to put the shared singleton back the way it was, key by
+ * key, once the call that needed those words taught is done with them.
  *
- * PROVENANCE: an earlier version of this fix instead restored a whole-object snapshot of the
- * shared lexicon/`_multiCache` taken once, right after the permanent domain lexicon loaded.
+ * PROVENANCE: an earlier version of this fix restored a whole-object snapshot of the shared
+ * lexicon/`_multiCache` taken once, right after the (then-permanent) domain lexicon loaded.
  * `compromise` is imported as a module-global singleton (`import nlp from 'compromise'`), shared
  * by the entire Node process — a host application embedding this package as a library, or another
  * package doing the same thing, can call `nlp.addWords()` directly on that same singleton. A
- * whole-object restore has no way to distinguish "a key this module itself taught for the
- * previous configuration" from "a key some other consumer of the shared singleton wrote, before
- * or after this module's baseline snapshot was captured" — it silently deletes the latter (or
- * stomps it back to a stale value) the next time a configuration switch runs a restore. Found by
- * `chatgpt-codex-connector` review against that version; reproduced directly in
+ * whole-object restore has no way to distinguish "a key this module itself taught" from "a key
+ * some other consumer of the shared singleton wrote, before or after this module's baseline
+ * snapshot was captured" — it silently deletes the latter (or stomps it back to a stale value).
+ * Found by `chatgpt-codex-connector` review against that version; reproduced directly in
  * `test/unit/pos-tags.test.ts` ("leaves a word added by another compromise consumer...") before
  * this fix, using `nlp.addWords()` from the test itself to stand in for the other consumer.
  *
- * Fixed by tracking only the specific keys this module itself last wrote, key-by-key, instead of
- * a snapshot of the whole shared object: before teaching a new configuration's words,
- * {@link ensureExtraLexicon} puts back exactly what was at each of *its own* previously-touched
- * keys (deleting a key that did not exist before, restoring one that did) and leaves every other
- * key in the shared lexicon/`_multiCache` — whoever wrote it, whenever — completely untouched.
- * The `prev` value for each key is captured immediately before that key's own `addWords` call
- * (not once, globally), so it reflects whatever was really there at that moment, including a
- * value some other consumer had already written by then.
+ * Fixed by tracking only the specific keys this call itself wrote, key-by-key, instead of a
+ * snapshot of the whole shared object: {@link restoreTracked} puts back exactly what was at each
+ * of *this call's own* touched keys (deleting a key that did not exist before, restoring one that
+ * did) and leaves every other key in the shared lexicon/`_multiCache` — whoever wrote it,
+ * whenever — completely untouched. The `prev` value for each key is captured immediately before
+ * that key's own `addWords` call (not once, globally), so it reflects whatever was really there at
+ * that moment, including a value some other consumer had already written by then.
  *
  * `written` exists for a second, related bug in that same key-local fix (`chatgpt-codex-connector`,
  * P2): tracking `prev` alone tells this module what to put back, but not whether it is still safe
  * to do so. If another consumer of the shared singleton writes a *newer* value to a key this module
  * also touched — e.g. this package teaches `cache` as a configured verb, and the host then calls
- * `nlp.addWords({ cache: 'Noun' })` — the next configuration switch has no way to tell "nothing has
- * touched this key since I wrote it" from "someone wrote something newer since I wrote it", and
- * unconditionally restored over that newer value either way, discarding it. Recording `written` — a
- * second diff read, immediately after this module's own `addWords` call, of the same candidate keys
- * — fixes that: {@link ensureExtraLexicon} now only restores a key if its *current* live value still
- * equals `written`; a live value that differs means something else changed it since, and that key is
- * left alone.
+ * `nlp.addWords({ cache: 'Noun' })` — the restore has no way to tell "nothing has touched this key
+ * since I wrote it" from "someone wrote something newer since I wrote it", and would unconditionally
+ * restore over that newer value either way, discarding it. Recording `written` — a second diff read,
+ * immediately after the `addWords` call, of the same candidate keys — fixes that:
+ * {@link restoreTracked} only restores a key if its *current* live value still equals `written`; a
+ * live value that differs means something else changed it since, and that key is left alone.
  *
  * Populated by diffing a small set of *candidate* keys (the words just taught, plus the first
  * token of any multi-word entry among them, which is `compromise`'s own `_multiCache` key scheme
@@ -168,8 +183,70 @@ interface TouchedKey {
  * exists defensively, for a hypothetical multi-word `extraImperativeVerbs` entry, since nothing in
  * `SteAiConfig` forbids one.
  */
-let taughtLexiconKeys = new Map<string, TouchedKey>();
-let taughtMultiCacheKeys = new Map<string, TouchedKey>();
+interface LexiconDiff {
+  readonly lexicon: Map<string, TouchedKey>;
+  readonly multiCache: Map<string, TouchedKey>;
+}
+
+function candidateMultiCacheKeysFor(lexiconKeys: readonly string[]): string[] {
+  return [
+    ...new Set(
+      lexiconKeys
+        .map((word) => word.split(/\s+/)[0])
+        .filter((first): first is string => first !== undefined && first.length > 0),
+    ),
+  ];
+}
+
+/**
+ * Teach `lexicon` (a `word -> 'Verb'` `addWords` payload) to the shared singleton and record
+ * exactly which `lexicon`/`_multiCache` keys that changed, and to what — see {@link LexiconDiff}.
+ * A no-op (no `addWords` call, empty diff) when `lexicon` is empty, which is the common case for
+ * the extra/per-configuration lexicon (most sentences in most documents configure no extra verbs).
+ */
+function teachAndTrack(store: LexiconStore, lexicon: Record<string, string>): LexiconDiff {
+  const lexiconKeys = Object.keys(lexicon);
+  if (lexiconKeys.length === 0) return { lexicon: new Map(), multiCache: new Map() };
+
+  const multiCacheKeys = candidateMultiCacheKeysFor(lexiconKeys);
+  const beforeLexicon = lexiconKeys.map((k) => [k, readKey(store.model.one.lexicon, k)] as const);
+  const beforeMultiCache = multiCacheKeys.map(
+    (k) => [k, readKey(store.model.one._multiCache, k)] as const,
+  );
+
+  nlp.addWords(lexicon);
+
+  const lexiconDiff = new Map<string, TouchedKey>();
+  for (const [k, prev] of beforeLexicon) {
+    const after = readKey(store.model.one.lexicon, k);
+    if (after !== prev) lexiconDiff.set(k, { prev, written: after });
+  }
+  const multiCacheDiff = new Map<string, TouchedKey>();
+  for (const [k, prev] of beforeMultiCache) {
+    const after = readKey(store.model.one._multiCache, k);
+    if (after !== prev) multiCacheDiff.set(k, { prev, written: after });
+  }
+  return { lexicon: lexiconDiff, multiCache: multiCacheDiff };
+}
+
+/**
+ * Undo exactly what one earlier {@link teachAndTrack} call did: put each touched key back to what
+ * `compromise` itself had there before that call, or delete it if it had nothing — but only if the
+ * key's *current* live value still equals what that call actually wrote there (see
+ * {@link LexiconDiff}'s own PROVENANCE for why that guard exists). Every other key in the shared
+ * lexicon/`_multiCache` — including any another consumer wrote, before, during, or after — is left
+ * untouched.
+ */
+function restoreTracked(store: LexiconStore, diff: LexiconDiff): void {
+  for (const [k, { prev, written }] of diff.lexicon) {
+    if (readKey(store.model.one.lexicon, k) === written) writeKey(store.model.one.lexicon, k, prev);
+  }
+  for (const [k, { prev, written }] of diff.multiCache) {
+    if (readKey(store.model.one._multiCache, k) === written) {
+      writeKey(store.model.one._multiCache, k, prev);
+    }
+  }
+}
 
 /**
  * Normalised `extraVerbs` entries: lower-cased, blank-filtered, de-duplicated. Each entry is kept
@@ -184,121 +261,109 @@ function normalizeExtraVerbs(extraVerbs: readonly string[]): string[] {
  * Canonical identity of an `extraVerbs` list — same entries, any order or case, same identity.
  *
  * PROVENANCE: an earlier version joined normalised entries with a plain space (`' '`) to build
- * this identity string, and {@link ensureExtraLexicon} then re-split that same joined string on
- * whitespace to decide what to actually teach `compromise` — found by `chatgpt-codex-connector`
- * (P2) to conflate two different things a plain space can mean: the delimiter between separate
- * entries, and a multi-word phrase's own internal space. A configured `["power cycle"]` (one
- * phrase) was taught as the two independent single-word verbs "power" and "cycle" instead of the
- * phrase "power cycle", because the teaching loop split the identity string apart the same way
- * regardless of which entries produced it. Using `\u0000` (a character no real `extraVerbs` entry
- * can contain) as the join delimiter here, instead of a space, is *sufficient* to prevent that
- * specific bug from recurring by fixing this string's own ambiguity, but the actual fix is in
- * {@link ensureExtraLexicon}: it now teaches directly from the normalised entry list (see
+ * this identity string, and the teaching step then re-split that same joined string on whitespace
+ * to decide what to actually teach `compromise` — found by `chatgpt-codex-connector` (P2) to
+ * conflate two different things a plain space can mean: the delimiter between separate entries,
+ * and a multi-word phrase's own internal space. A configured `["power cycle"]` (one phrase) was
+ * taught as the two independent single-word verbs "power" and "cycle" instead of the phrase
+ * "power cycle", because the teaching loop split the identity string apart the same way regardless
+ * of which entries produced it. Using `\u0000` (a character no real `extraVerbs` entry can contain)
+ * as the join delimiter here, instead of a space, is *sufficient* to prevent that specific bug from
+ * recurring by fixing this string's own ambiguity, but the actual fix is in
+ * {@link extraLexiconDict}: it teaches directly from the normalised entry list (see
  * {@link normalizeExtraVerbs}), never by re-splitting this identity string, so nothing downstream
- * depends on this particular choice of delimiter either way.
+ * depends on this particular choice of delimiter either way. This identity string now exists only
+ * to key the small teach-dict cache below, not to decide what gets restored — restoring happens
+ * every call regardless of identity (see {@link withLexicons}).
  */
 function extraVerbsKey(extraVerbs: readonly string[]): string {
   return normalizeExtraVerbs(extraVerbs).sort().join('\u0000');
 }
 
-/** The `extraVerbs` configuration currently taught to `compromise`'s shared lexicon, if any. */
-let activeExtraKey = '';
+/**
+ * The extra/per-configuration lexicon (see {@link extraVerbsKey}) as an `addWords` payload for one
+ * `extraVerbs` configuration: only the entries `compromise` does not already tag as a verb on its
+ * own (see {@link alreadyKnownAsVerb}). Cached by `key`, one entry deep — a call requesting the
+ * same configuration as the one most recently computed reuses the same dict rather than
+ * recomputing `alreadyKnownAsVerb` for every entry again, which is the one piece of the old
+ * same-config no-op optimisation that survives the move to restore-after-every-call (see
+ * {@link withLexicons}): the teach/restore round trip itself still runs on every call — it has
+ * to, so the shared singleton is never left mutated between calls — but the relatively more
+ * expensive "which of these words does compromise not already know" computation does not.
+ */
+let cachedExtraLexicon: { readonly key: string; readonly dict: Record<string, string> } | undefined;
+
+function extraLexiconDict(entries: readonly string[], key: string): Record<string, string> {
+  if (cachedExtraLexicon !== undefined && cachedExtraLexicon.key === key) {
+    return cachedExtraLexicon.dict;
+  }
+  const dict: Record<string, string> = {};
+  // Teach directly from `entries` — the normalised list, each entry intact — never by re-deriving
+  // words from `key`. PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version looped over
+  // `key.split(' ')` here, which re-split a multi-word `extraVerbs` entry (e.g. `"power cycle"`)
+  // apart on the very same space that joined it to any other entries in `key`, teaching "power"
+  // and "cycle" as two independent single-word verbs instead of the phrase "power cycle". See
+  // {@link extraVerbsKey}'s own PROVENANCE note.
+  for (const verb of entries) {
+    if (!alreadyKnownAsVerb(verb)) dict[verb] = 'Verb';
+  }
+  cachedExtraLexicon = { key, dict };
+  return dict;
+}
 
 /**
- * Make `compromise`'s shared lexicon reflect exactly this call's `extraVerbs` and nothing another
- * call taught it — without touching any lexicon/`_multiCache` key this module itself did not add.
+ * Run `fn` with `compromise`'s shared lexicon reflecting exactly this call's domain lexicon (see
+ * {@link domainLexiconDict}) and `extraVerbs` (see {@link extraLexiconDict}) — restoring the shared
+ * singleton to exactly what it was immediately before, once `fn` (and everything it calls
+ * internally) is completely done, before this function returns to *its* caller.
  *
  * `addWords` mutates a lexicon that is `compromise`'s own module-global singleton (see
- * {@link LexiconStore}), not scoped to a document or a configuration. Left as a one-way ratchet —
- * teach and never untach, the original design — a word from one document's
- * `extraImperativeVerbs` stayed "known" as a verb for every later document analysed in the same
- * process, including one with a different configuration or none at all: which rule fired, and
- * which limit applied, then depended on analysis order rather than on that run's own
- * configuration (found via `test/integration/reader-wiring.test.ts` and
- * `test/unit/pos-tags.test.ts`, both reproducing it directly).
+ * {@link LexiconStore}), not scoped to a document, a configuration, or a call. Every public
+ * entry point into this module that queries `compromise` ({@link sentenceOpensImperative},
+ * {@link tagByOffset}) routes its own `nlp()` work through this function so that neither the
+ * domain lexicon nor any requested extra lexicon is ever left taught once that entry point has
+ * returned to its caller — not even until "the next call arrives with a different configuration".
  *
- * Fixed by resynchronising on every call instead: undo exactly what the *previous* call taught
- * (see {@link taughtLexiconKeys}), then teach only the words this call actually asked for. Safe
- * to do unconditionally because every call site in this codebase now passes its own
- * `extraImperativeVerbs` explicitly (`RuleInput.extraImperativeVerbs`, threaded from
- * `SteAiConfig`) rather than relying on an earlier, unrelated call having taught the word. A call
- * requesting the same configuration as the one currently active is a no-op, so repeated calls for
- * one document (the common case — most sentences in most documents configure no extra verbs at
- * all) do not pay a restore/reteach cost.
+ * PROVENANCE (`chatgpt-codex-connector` round 4, two findings against the previous, lazier design):
+ *
+ *  - (finding B, `discussion_r3698561014`) the domain lexicon was taught once, permanently, at
+ *    module load, and never restored — any process importing this module carried that mutation to
+ *    its shared `compromise` singleton forever, whether or not `extraImperativeVerbs` was ever
+ *    used.
+ *  - (finding A, `discussion_r3698561010`) the extra lexicon's own restore ran lazily, only when a
+ *    *later* call arrived with a *different* `extraVerbs` configuration — between the end of one
+ *    call and the start of the next differently-configured one, the shared singleton sat mutated,
+ *    observable by any other consumer of the same process's `compromise` import during that
+ *    window.
+ *
+ * Both are fixed by the same shape: teach at the start of *this* call's work, restore at the end of
+ * *this* call's work, unconditionally, rather than leaving either lexicon taught across a call
+ * boundary for any later call (or nothing at all) to clean up. `fn` may call other internal helpers
+ * of this module any number of times while both lexicons are taught (e.g. {@link tagByOffset}
+ * tagging every term of a multi-sentence document in one pass) — restoration happens exactly once,
+ * after `fn` (this call's *entire* body of work) returns or throws, never between two of this
+ * module's own internal sub-steps.
+ *
+ * This does reintroduce, by design, a teach/restore round trip for the domain lexicon on every
+ * call — a real cost the previous, permanently-loaded-once design did not pay, accepted here
+ * because leaving the domain lexicon taught between calls is exactly finding B. The extra lexicon's
+ * relatively more expensive "which entries need teaching" computation is still cached across calls
+ * (see {@link extraLexiconDict}), and a call configuring no extra verbs at all — the common case —
+ * pays no extra-lexicon `addWords`/restore cost either way, since {@link teachAndTrack} is a no-op
+ * on an empty dict.
  */
-function ensureExtraLexicon(extraVerbs: readonly string[]): void {
+function withLexicons<T>(extraVerbs: readonly string[], fn: () => T): T {
+  const store = lexiconStore();
+  const domainDiff = teachAndTrack(store, domainLexiconDict());
   const entries = normalizeExtraVerbs(extraVerbs);
   const key = extraVerbsKey(extraVerbs);
-  if (key === activeExtraKey) return;
-
-  const store = lexiconStore();
-
-  // Undo exactly what the previous call taught: put each touched key back to what compromise
-  // itself had there before that call, or delete it if it had nothing — but only if the key's
-  // *current* live value still equals what this module itself wrote there. PROVENANCE
-  // (`chatgpt-codex-connector`, P2): the immediately preceding fix tracked which keys were touched
-  // and what was there *before* this module's own write, but not what this module itself *wrote* —
-  // so it could not tell "nothing has touched this key since" from "another consumer of this
-  // shared `compromise` singleton wrote a newer value to this exact key after this module did",
-  // and unconditionally restored over that newer value either way, discarding it. Every other key
-  // in the shared lexicon/`_multiCache` — including any another consumer wrote, before or after
-  // this module last ran — is left untouched either way.
-  for (const [k, { prev, written }] of taughtLexiconKeys) {
-    if (readKey(store.model.one.lexicon, k) === written) writeKey(store.model.one.lexicon, k, prev);
+  const extraDiff = teachAndTrack(store, extraLexiconDict(entries, key));
+  try {
+    return fn();
+  } finally {
+    restoreTracked(store, extraDiff);
+    restoreTracked(store, domainDiff);
   }
-  for (const [k, { prev, written }] of taughtMultiCacheKeys) {
-    if (readKey(store.model.one._multiCache, k) === written) {
-      writeKey(store.model.one._multiCache, k, prev);
-    }
-  }
-  taughtLexiconKeys = new Map();
-  taughtMultiCacheKeys = new Map();
-
-  if (entries.length > 0) {
-    const lexicon: Record<string, string> = {};
-    // Teach directly from `entries` — the normalised list, each entry intact — never by re-deriving
-    // words from `key`. PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version looped over
-    // `key.split(' ')` here, which re-split a multi-word `extraVerbs` entry (e.g. `"power cycle"`)
-    // apart on the very same space that joined it to any other entries in `key`, teaching "power"
-    // and "cycle" as two independent single-word verbs instead of the phrase "power cycle". See
-    // {@link extraVerbsKey}'s own PROVENANCE note.
-    for (const verb of entries) {
-      if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
-    }
-    if (Object.keys(lexicon).length > 0) {
-      // Candidate keys this call's `addWords` might touch: the words themselves, plus the first
-      // token of any multi-word entry among them (see {@link taughtLexiconKeys} for why). Captured
-      // before the call and diffed after, rather than assumed, so exactly what `addWords` actually
-      // changed is recorded — no more, no less.
-      const candidateLexiconKeys = Object.keys(lexicon);
-      const candidateMultiCacheKeys = [
-        ...new Set(
-          candidateLexiconKeys
-            .map((word) => word.split(/\s+/)[0])
-            .filter((first): first is string => first !== undefined && first.length > 0),
-        ),
-      ];
-
-      const beforeLexicon = candidateLexiconKeys.map(
-        (k) => [k, readKey(store.model.one.lexicon, k)] as const,
-      );
-      const beforeMultiCache = candidateMultiCacheKeys.map(
-        (k) => [k, readKey(store.model.one._multiCache, k)] as const,
-      );
-
-      nlp.addWords(lexicon);
-
-      for (const [k, prev] of beforeLexicon) {
-        const after = readKey(store.model.one.lexicon, k);
-        if (after !== prev) taughtLexiconKeys.set(k, { prev, written: after });
-      }
-      for (const [k, prev] of beforeMultiCache) {
-        const after = readKey(store.model.one._multiCache, k);
-        if (after !== prev) taughtMultiCacheKeys.set(k, { prev, written: after });
-      }
-    }
-  }
-  activeExtraKey = key;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,28 +438,33 @@ export function sentenceOpensImperative(text: string, extraVerbs: readonly strin
   const stripped = text.replace(leading, '');
   if (stripped.length === 0) return false;
   if (NEGATIVE_IMPERATIVE_PREFIX.test(stripped)) return true;
-  ensureExtraLexicon(extraVerbs);
-  const first = nlp(stripped).terms().first();
-  if (first.found === false) return false;
-  const firstWord = /^[\p{L}]+/u.exec(stripped)?.[0]?.toLowerCase();
-  if (firstWord !== undefined && FALSE_IMPERATIVE_OPENERS.has(firstWord)) return false;
-  if (first.has('#Imperative')) return true;
-  // A word immediately followed by a colon ("Note:", "Exception:") is a label, not a verb taking
-  // an object — confirmed directly: without this guard, "Note: Exception: The employer need not
-  // document..." misclassifies as procedural because "Note" alone is a bare present-tense verb.
-  if (/^[\p{L}]+:/u.test(stripped)) return false;
-  // `compromise` reliably tags a lone sentence-initial imperative ("Install the driver.") but not
-  // one that opens a coordinated list of imperatives ("Build, flash, and run a sample
-  // application." — confirmed directly: none of the three verbs get `#Imperative` there). A bare
-  // (infinitive, non-passive, non-gerund) verb as the very first word of a sentence is otherwise a
-  // vanishingly rare shape in declarative English, so it is accepted as the same signal
-  // `compromise` itself uses for `#Imperative`, just without the positional condition that is
-  // defeating its tagger on this shape. Uses {@link isImperativeOpenerTagSet}, not the broader
-  // {@link isBareVerbTagSet}: this is deciding whether the sentence *opens an imperative clause*,
-  // exactly the purpose that predicate's own PROVENANCE note says needs the stricter, `Infinitive`
-  // -only check.
-  const firstTags = firstTermTags(stripped);
-  return firstTags !== undefined && isImperativeOpenerTagSet(firstTags);
+  // Domain + extra lexicon teaching/restoration is scoped to this one call (see
+  // {@link withLexicons}): both lexicons are taught before the checks below run and restored
+  // before this function returns, so `compromise`'s shared singleton is never left mutated once
+  // control passes back to this function's own caller.
+  return withLexicons(extraVerbs, () => {
+    const first = nlp(stripped).terms().first();
+    if (first.found === false) return false;
+    const firstWord = /^[\p{L}]+/u.exec(stripped)?.[0]?.toLowerCase();
+    if (firstWord !== undefined && FALSE_IMPERATIVE_OPENERS.has(firstWord)) return false;
+    if (first.has('#Imperative')) return true;
+    // A word immediately followed by a colon ("Note:", "Exception:") is a label, not a verb taking
+    // an object — confirmed directly: without this guard, "Note: Exception: The employer need not
+    // document..." misclassifies as procedural because "Note" alone is a bare present-tense verb.
+    if (/^[\p{L}]+:/u.test(stripped)) return false;
+    // `compromise` reliably tags a lone sentence-initial imperative ("Install the driver.") but not
+    // one that opens a coordinated list of imperatives ("Build, flash, and run a sample
+    // application." — confirmed directly: none of the three verbs get `#Imperative` there). A bare
+    // (infinitive, non-passive, non-gerund) verb as the very first word of a sentence is otherwise a
+    // vanishingly rare shape in declarative English, so it is accepted as the same signal
+    // `compromise` itself uses for `#Imperative`, just without the positional condition that is
+    // defeating its tagger on this shape. Uses {@link isImperativeOpenerTagSet}, not the broader
+    // {@link isBareVerbTagSet}: this is deciding whether the sentence *opens an imperative clause*,
+    // exactly the purpose that predicate's own PROVENANCE note says needs the stricter, `Infinitive`
+    // -only check.
+    const firstTags = firstTermTags(stripped);
+    return firstTags !== undefined && isImperativeOpenerTagSet(firstTags);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -413,16 +483,21 @@ export function tagByOffset(
   text: string,
   extraVerbs: readonly string[] = [],
 ): Map<number, readonly string[]> {
-  ensureExtraLexicon(extraVerbs);
-  const map = new Map<number, readonly string[]>();
-  const data = nlp(text).json({ offset: true }) as readonly CompromiseOffsetSentence[];
-  for (const sentence of data) {
-    for (const term of sentence.terms ?? []) {
-      if (term.offset === undefined) continue;
-      map.set(term.offset.start, term.tags ?? []);
+  // Domain + extra lexicon teaching/restoration is scoped to this one call (see
+  // {@link withLexicons}): both lexicons are taught before `nlp(text)` runs and restored before
+  // this function returns, so `compromise`'s shared singleton is never left mutated once control
+  // passes back to this function's own caller.
+  return withLexicons(extraVerbs, () => {
+    const map = new Map<number, readonly string[]>();
+    const data = nlp(text).json({ offset: true }) as readonly CompromiseOffsetSentence[];
+    for (const sentence of data) {
+      for (const term of sentence.terms ?? []) {
+        if (term.offset === undefined) continue;
+        map.set(term.offset.start, term.tags ?? []);
+      }
     }
-  }
-  return map;
+    return map;
+  });
 }
 
 const FUNCTION_TAGS: ReadonlySet<string> = new Set([

@@ -4,8 +4,14 @@ import {
   isBareVerbTagSet,
   isFunctionTagSet,
   sentenceOpensImperative,
+  tagByOffset,
 } from '../../src/core/pos-tags.js';
 import { MASK_CHAR } from '../../src/core/text.js';
+
+function sharedLexicon(): Record<string, unknown> {
+  return (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model
+    .one.lexicon;
+}
 
 describe('sentenceOpensImperative', () => {
   it('recognises an ordinary sentence-initial imperative', () => {
@@ -151,6 +157,45 @@ describe('sentenceOpensImperative', () => {
       (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model.one
         .lexicon['sprocket'],
     ).toBe('Adjective');
+  });
+
+  // Regression (chatgpt-codex-connector round 4, finding A / discussion_r3698561010): the previous
+  // fix only undid a call's `extraImperativeVerbs` teaching *lazily*, when a later call arrived with
+  // a *different* configuration. Between the end of one call and the start of the next
+  // differently-configured one, the shared `compromise` singleton sat mutated — observable by any
+  // other consumer of the same process's `compromise` import during that window, not just at the
+  // boundary the lazy fix already handled. This call must leave no trace immediately, with no
+  // second, differently-configured call required to trigger the restore.
+  it('does not leave extraImperativeVerbs taught in the shared lexicon once a single call has returned', () => {
+    expect(sharedLexicon()['cache']).toBeUndefined();
+    expect(sentenceOpensImperative('Cache the response before returning.', ['cache'])).toBe(true);
+    expect(sharedLexicon()['cache']).toBeUndefined();
+  });
+
+  // Regression (chatgpt-codex-connector round 4, finding B / discussion_r3698561014):
+  // `ensureDomainLexicon` taught `IMPERATIVE_VERBS` to the shared singleton once, at module load,
+  // and never restored it — a permanent mutation to any process that imports this module, whether or
+  // not `extraImperativeVerbs` is ever used. "torque" is not tagged as a *verb* by `compromise`'s own
+  // base lexicon (confirmed directly: it defaults to a non-verb, `Noun·Singular` reading until
+  // taught) — but `compromise`'s base lexicon does already carry a `'Singular'` entry for it
+  // (confirmed directly against a pristine `compromise` import), so the correct post-call value to
+  // restore to is whatever was there immediately before this call — captured here, not assumed to
+  // be `undefined` — not the domain lexicon's own `'Verb'` override.
+  it('does not leave the domain lexicon taught in the shared lexicon once a single call has returned', () => {
+    const before = sharedLexicon()['torque'];
+    expect(before).not.toBe('Verb');
+    expect(sentenceOpensImperative('Torque the bolt to 25 Nm.')).toBe(true);
+    expect(sharedLexicon()['torque']).toBe(before);
+  });
+
+  // Same two regressions, via the other public entry point that also teaches these lexicons.
+  it('does not leave either lexicon taught in the shared lexicon after a single tagByOffset call', () => {
+    const beforeTorque = sharedLexicon()['torque'];
+    expect(beforeTorque).not.toBe('Verb');
+    expect(sharedLexicon()['cache']).toBeUndefined();
+    tagByOffset('Cache the torqued response before returning.', ['cache']);
+    expect(sharedLexicon()['torque']).toBe(beforeTorque);
+    expect(sharedLexicon()['cache']).toBeUndefined();
   });
 
   it('does not misfire on a passive-voice sentence opener', () => {

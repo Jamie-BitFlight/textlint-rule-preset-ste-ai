@@ -107,15 +107,15 @@
     "zod": "^4.1.10"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
+    "@eslint/js": "^10.0.1",
     "@textlint/types": "^15.7.1",
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.0.0",
     "eslint": "^10.8.0",
     "prettier": "^3.6.2",
     "textlint": "^15.7.1",
     "textlint-tester": "^15.7.1",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.46.0",
     "vitest": "^4.0.0"
   }

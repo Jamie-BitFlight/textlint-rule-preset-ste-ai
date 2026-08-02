@@ -1,9 +1,24 @@
 name: CI
 
+# `push` is scoped to `main` (this repo's default branch) rather than every branch. Every other
+# branch is already covered by the `pull_request` trigger below, and in this repo's actual workflow
+# a branch is pushed and its PR opened together (see PRs #44, #45) — there is no pattern of work
+# sitting on a branch, unopened as a PR, expecting CI. Without this scoping, a push to a branch with
+# an open PR fires both `push` (branches: ['**'] matches everything) and `pull_request` synchronize
+# for the same commit, producing two redundant `verify` runs — observed directly on this repo's own
+# PRs #44 and #45, two check runs with different run IDs for one SHA. Scoping `push` to `main` still
+# covers direct pushes/merges landing on the default branch, which `pull_request` alone would not.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+
+# A newer push to the same ref (branch or PR head) cancels a still-running older run for that ref,
+# instead of letting both finish. Without this, two quick pushes to the same branch leave two
+# `verify` runs racing to completion on stale and current code alike.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # Every step invokes a script or an npm script. No logic is inlined in this file: inline YAML code
 # is not linted, not type-checked, not syntax-highlighted and not runnable locally. Anything a step

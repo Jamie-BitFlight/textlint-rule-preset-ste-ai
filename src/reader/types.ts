@@ -1,10 +1,4 @@
-import type {
-  AdmonitionKind,
-  DocumentFormat,
-  SourceDocument,
-  SourceRange,
-  TextMode,
-} from '../core/types.js';
+import type { AdmonitionKind, SourceRange, TextMode } from '../core/types.js';
 
 /**
  * One reader-recognised span of the document that the checker treats as a unit of judgement.
@@ -43,14 +37,4 @@ export interface TextUnit {
   /** 1-based, the number actually written for this item in an ordered list. Same meaning as
    * `TextBlock.listOrdinal`; `undefined` for anything that is not an ordered list's item. */
   readonly listOrdinal?: number;
-}
-
-export interface DocumentReader {
-  readonly mediaType: DocumentFormat;
-  /**
-   * Async even though every reader today is synchronous underneath. A reader for docx, or one
-   * backed by a remotely-fetched document, may need real I/O to produce its next unit, and there
-   * must be no second interface for that later — every caller already awaits.
-   */
-  read(doc: SourceDocument): AsyncIterable<TextUnit>;
 }

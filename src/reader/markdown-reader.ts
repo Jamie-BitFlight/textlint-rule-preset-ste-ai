@@ -19,7 +19,7 @@ import {
   isBareAdmonitionOpener,
 } from '../core/structure.js';
 import type { AdmonitionKind, SourceDocument, SourceRange, TextMode } from '../core/types.js';
-import type { DocumentReader, TextUnit } from './types.js';
+import type { TextUnit } from './types.js';
 
 /**
  * Reads Markdown through a real parser (`@textlint/markdown-to-ast`) instead of the regex-driven
@@ -32,25 +32,15 @@ import type { DocumentReader, TextUnit } from './types.js';
  * parsed node's own `range`, or derived from its children's ranges (see {@link contentRange}). The
  * offset contract holds by construction: nothing here re-slices, re-indexes or otherwise
  * reconstructs a position, so every range is already a valid offset into the source the parser saw.
+ *
+ * Synchronous, not behind an async `DocumentReader` interface: `src/analysis/analyse.ts` is the one
+ * production caller, `analyseTextDeterministic` documents itself as performing no I/O (a contract
+ * existing callers rely on), and nothing here actually needs an event-loop turn — `parse()` and the
+ * tree walk are both synchronous underneath. An earlier async `DocumentReader.read()` wrapper around
+ * this function was removed (ponytail-audit yagni finding) once it turned out to have no caller of
+ * its own; see `docs/architecture.md`, "Document reader", for the full history. Reintroduce an async
+ * seam if and when a reader that genuinely needs real I/O (docx, a remotely-fetched document) lands.
  */
-export class MarkdownReader implements DocumentReader {
-  readonly mediaType = 'markdown' as const;
-
-  /**
-   * `async` to satisfy {@link DocumentReader}, but a thin wrapper: every step underneath —
-   * `parse()`, the tree walk — is synchronous. `readMarkdownUnitsSync` is the real implementation,
-   * exported separately for callers (`src/core/document.ts` via `src/analysis/analyse.ts`) that
-   * cannot themselves become async: `core` must never import `reader` at all (module boundary), and
-   * `analyseTextDeterministic` documents itself as performing no I/O, a contract existing callers
-   * rely on. Nothing here actually needs an event-loop turn, so nothing is lost by also offering it
-   * synchronously.
-   */
-  async *read(doc: SourceDocument): AsyncIterable<TextUnit> {
-    for (const unit of readMarkdownUnitsSync(doc)) yield unit;
-  }
-}
-
-/** The synchronous core `MarkdownReader.read()` wraps. See the class doc for why this exists. */
 export function readMarkdownUnitsSync(doc: SourceDocument): TextUnit[] {
   const ast = parse(doc.text);
   const counter = new Counter();

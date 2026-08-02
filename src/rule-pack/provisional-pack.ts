@@ -34,8 +34,21 @@ export const provisionalRulePack: RulePack = {
   },
 
   limits: {
-    proceduralSentenceMaxWords: 20,
-    descriptiveSentenceMaxWords: 25,
+    // See docs/provisional-rules.md#sentence-length-procedural for how these were chosen: a
+    // Flesch-Kincaid US grade level, gated by a word-count floor below which the formula is not
+    // computed at all because it is unstable on short input. The floor happens to equal the old
+    // bundled `proceduralSentenceMaxWords` word limit; that is a deliberate anchor, not a
+    // coincidence carried over by accident. The grade thresholds (7/8) read low next to the
+    // "grade 8-10" starting hypothesis for technical writing because they are calibrated against
+    // `sentence.masked` text, which already removes the syllable inflation that identifiers and
+    // part numbers would otherwise add — see the fixture-corpus measurement referenced in the
+    // same doc section.
+    proceduralMaxGradeLevel: 7,
+    descriptiveMaxGradeLevel: 8,
+    sentenceReadabilityFloorWords: 20,
+    // NOTE: procedural (7) is intentionally the lower/stricter of the two, mirroring the old
+    // 20-vs-25-word split -- instructions are expected to read a little more simply than
+    // description at the same length.
     maxNounClusterLength: 3,
     maxSentencesPerProceduralStep: 1,
     maxParagraphSentences: 6,

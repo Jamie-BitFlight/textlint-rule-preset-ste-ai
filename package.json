@@ -6,7 +6,7 @@
   "author": "Jamie Nelson",
   "type": "module",
   "engines": {
-    "node": ">=20.11"
+    "node": ">=24"
   },
   "main": "./dist/textlint/preset.js",
   "types": "./dist/textlint/preset.d.ts",
@@ -103,6 +103,7 @@
     "@textlint/ast-node-types": "^15.7.1",
     "@textlint/markdown-to-ast": "^15.7.1",
     "sentence-splitter": "^5.0.1",
+    "text-readability": "^1.1.1",
     "zod": "^4.1.10"
   },
   "devDependencies": {

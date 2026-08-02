@@ -16,7 +16,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24 is Node's current Active LTS and the floor advertised in package.json's
+          # `engines.node`. Node 20 reached end-of-life on 2026-04-30; Node 22 is Maintenance LTS,
+          # not Active — neither is a version this project should advertise support for.
+          node-version: 24
           cache: npm
 
       - name: Install dependencies

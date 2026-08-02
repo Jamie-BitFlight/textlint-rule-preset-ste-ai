@@ -25,8 +25,8 @@ found, and the whole configuration silently loads no rules at all.
 {
   "rules": {
     "preset-ste-ai": {
-      "sentence-length-procedural": { "maxWords": 18 },
-      "sentence-length-descriptive": { "maxWords": 22 },
+      "sentence-length-procedural": { "maxGradeLevel": 6 },
+      "sentence-length-descriptive": { "maxGradeLevel": 7 },
       "no-contractions": true,
       "abbreviation-introduction": {
         "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL"]
@@ -186,8 +186,8 @@ npx ste-ai lint docs/**/*.md --deterministic-only
 
 | Rule                           | Options                                                                                                                           |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `sentence-length-procedural`   | `maxWords`, `includeHeadings`, `includeTableCells`                                                                                |
-| `sentence-length-descriptive`  | `maxWords`, `includeHeadings`, `includeTableCells`                                                                                |
+| `sentence-length-procedural`   | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                             |
+| `sentence-length-descriptive`  | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                             |
 | `unapproved-vocabulary`        | `additional` (`{term: [alternatives]}`), `allow`, `adjudicateSense`                                                               |
 | `preferred-terminology`        | `additional` (`{from: to}`), `allow`                                                                                              |
 | `no-contractions`              | `allow`                                                                                                                           |

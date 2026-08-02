@@ -19,26 +19,112 @@ These have an exact, reproducible trigger and emit `deterministic-violation`.
 
 ### sentence-length-procedural
 
-**Triggers** when a sentence classified as an instruction has more words than
-`limits.proceduralSentenceMaxWords` (bundled default 20).
+**Triggers** when a sentence classified as an instruction is at least
+`limits.sentenceReadabilityFloorWords` words long (bundled default 20) **and** its Flesch-Kincaid
+grade level exceeds `limits.proceduralMaxGradeLevel` (bundled default 7).
 
-**Rationale** Long instructions are the single most reliable predictor of misreading in procedural
-text. A word limit is objective and reproducible.
+**History** This rule used to trigger on raw word count alone (bundled default 20 words). It was
+replaced with the mechanism below on the maintainer's explicit instruction, on the understanding
+that it trades one documented failure mode for a different one — see "Known failure modes" below
+for both directions of that trade. The `maxGradeLevel`/`floorWords` per-rule options replace the
+old `maxWords` option; a pack or config still setting `maxWords` is silently ignored by the schema
+(unknown keys are dropped), not rejected — see `docs/configuration.md`.
 
-**Counting** Protected content-bearing tokens count as one word each — a reader still has to read
-`25 Nm` or `--max-retries`. Structural markup (list markers, table pipes, fences) counts as nothing.
+**Why a readability formula, and why Flesch-Kincaid** A word limit is objective and reproducible,
+but it cannot tell a genuinely hard-to-parse sentence (nested clauses, low-frequency vocabulary)
+from a long-but-simple one, and it cannot catch a short sentence that is hard to read for reasons
+word count does not see. [`text-readability`](https://www.npmjs.com/package/text-readability)
+exposes several formulas (Flesch-Kincaid grade, Gunning Fog, SMOG, Dale-Chall, and others).
+Flesch-Kincaid grade level was chosen over Gunning Fog specifically because Gunning Fog counts any
+word of 3+ syllables not on a fixed 3000-word "easy" list as fully "difficult" (a binary
+per-word threshold), while Flesch-Kincaid only averages syllables per word — a smoother, less
+binary penalty that was measurably gentler on the identifier-heavy sentences this project's
+`hard-negative` fixtures are built around, in a hand comparison run before committing to it.
+
+**Why the sentences are scored on masked text, not raw text** The rule feeds `sentence.masked` (not
+`sentence.raw`) to `fleschKincaidGrade()`. Protected identifiers, part numbers and other opaque
+protected regions are already replaced there with equal-length runs of U+FFFD before the sentence
+reaches the formula. This matters a great deal in practice: a syllable-counting formula run against
+the _literal spelling_ of a snake_case or CamelCase identifier (`wal_autocheckpoint`,
+`legacy_alter_table`) treats it as a very long, high-syllable English word and inflates the grade
+sharply — a hand comparison on a 21-word identifier-enumerating sentence measured a masked-text
+grade of 2.0 against a raw-text grade of 17 on the same sentence. Masking removes that effect while
+leaving ordinary prose (which contains no protected regions) untouched. Protected tokens still count
+towards the word-count floor, exactly as they did towards the old word limit — a reader still has to
+read them, even if their internal spelling should not be scored as if it were English prose.
+
+**Why there is a word-count floor at all (the granularity problem)** Readability formulas are
+normed on paragraph-or-longer passages, not single sentences, and `text-readability`'s own
+`sentenceCount()` always treats a lone sentence as exactly one sentence — there is no
+division-by-near-zero crash, but the score is still frequently meaningless on short input. Measured
+directly against every non-heading, non-table sentence in this project's fixture corpus: single-word
+or few-word sentences (markdown link-text fragments, section anchors, terse labels like
+`Application.`) produced Flesch-Kincaid grades as high as 79 — nonsense for a two- or three-word
+"sentence". The instability is concentrated below roughly a dozen words, essentially because the
+formula's `11.8 × syllablesPerWord` term dominates whenever `sentenceLength` (word count) is small.
+Below the floor, the grade is never computed and the sentence is presumed simple regardless of
+vocabulary. The bundled floor (20) was chosen to equal the old bundled `proceduralSentenceMaxWords`
+word limit, which both keeps the floor comfortably clear of the observed instability region and
+keeps a recognisable anchor to the value this replaced.
+
+**Why the bundled threshold (grade 7) is lower than the "grade 8-10" starting hypothesis** A
+Flesch-Kincaid target of grade 8-10 is a reasonable starting point for technical writing in general,
+but it does not hold up once the formula is run against real technical prose in this corpus: at
+grade 8-10 on raw text, the rule flagged several multiples of what the old word-count rule flagged,
+overwhelmingly driven by ordinary jargon (`configuration`, `installation`, `PostgreSQL`) rather than
+genuine syntactic complexity — the exact syllable-weighting risk this rule was warned about before
+implementation. Masking protected regions removes part of that effect but not all of it: ordinary
+prose words that merely happen to be long and technical (not protected identifiers) still count
+fully. The bundled thresholds (7 procedural / 8 descriptive) were set empirically, as the tightest
+values that still reproduce every sentence-length finding in this project's own fixture-corpus
+ground truth (18 reviewer-confirmed findings across 14 real documents); they are lower than the
+"grade 8-10" hypothesis because they are calibrated against masked text, not raw text, and masking
+already lowers most genuine sentences' scores relative to a raw-text baseline.
 
 **Known failure modes**
 
 - Depends on the procedural/descriptive classifier, which has no part-of-speech model (below).
-- A sentence listing many identifiers can exceed the limit without being hard to read. The
-  `hard-negative` fixtures exist to keep this visible.
-- Headings and table cells are excluded by default; a genuinely over-long heading is missed.
+- **Ordinary long technical vocabulary still inflates the score.** Masking removes syllable
+  inflation from _protected_ tokens (identifiers, part numbers, quantities), but an everyday
+  technical word that is not auto-detected as a protected region — `configuration`,
+  `authentication`, `installation`, `synchronization` — is still scored as prose and still adds
+  syllables the reader does not actually find difficult, because they are common, well-known terms
+  in their domain. Measured across every non-heading, non-table-cell sentence in this project's 18
+  original fixture documents (215 sentences total), this rule fires on 39 sentences where the old
+  word-count rule fired on 18 — the 18 old findings are a strict subset of the 39, so nothing the
+  old rule caught was lost, but 21 sentences are newly flagged. Reading those 21 by hand, most read
+  as ordinary, well-edited technical prose (curl option reference text, Kubernetes audit-log
+  description, SQLite CLI documentation) whose Flesch-Kincaid grade is inflated mainly by
+  domain-standard vocabulary length rather than by genuinely tangled sentence structure. This is a
+  real regression relative to the old rule's much smaller false-positive surface, not a hypothetical
+  one, and it is the main reason this change is not an unqualified improvement.
+- **Rewriting to satisfy word count does not reliably satisfy this rule, and vice versa.** Several
+  of this project's `compliant/` fixture counterparts were written to bring a sentence under the old
+  word limit, typically by splitting a long sentence into two. Measured against those same
+  counterparts, splitting does not reliably lower the Flesch-Kincaid grade of the resulting
+  sentences — legalistic or jargon-dense source prose (OSHA safety language, Node.js module
+  resolution semantics) can produce split sentences whose _individual_ grade levels are unchanged or
+  higher than the original's, even though the total number of words dropped in each half. The
+  project-wide total count of deterministic-violation diagnostics still decreases on every
+  fixture's compliant counterpart (other rules' fixes outweigh this), but the sentence-length count
+  specifically increases on at least two fixtures (`node-cli-hard-negative`,
+  `osha-lockout-tagout-warning`) after their word-count-motivated rewrite.
+- A sentence listing many identifiers is now measurably **less** likely to be falsely flagged than
+  under pure word count, specifically because of the masked-text scoring above — this is the
+  `hard-negative` fixtures' original concern, and it measurably improved. See
+  `docs/DISCLAIMER.md` and the hard-negative fixtures themselves for what "measurably" means here:
+  spot checks against constructed long, identifier-enumerating sentences (21-26 words, comfortably
+  over the old word limit) scored Flesch-Kincaid grades of 2-3 on masked text, well under the
+  bundled thresholds, where the old rule would have flagged them unconditionally.
+- Headings and table cells are excluded by default; a genuinely over-long or complex heading is
+  missed.
+- A sentence shorter than the floor is never flagged, however genuinely hard to parse its vocabulary
+  is. This is a deliberate trade against the granularity problem above, not an oversight.
 
 ### sentence-length-descriptive
 
-As above with `limits.descriptiveSentenceMaxWords` (bundled default 25), applied to descriptive
-sentences.
+As above with `limits.descriptiveMaxGradeLevel` (bundled default 8) and the same
+`limits.sentenceReadabilityFloorWords` floor, applied to descriptive sentences.
 
 ### unapproved-vocabulary
 

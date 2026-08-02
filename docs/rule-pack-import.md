@@ -55,8 +55,12 @@ falls back to the provisional pack silently.
   },
 
   "limits": {
-    "proceduralSentenceMaxWords": 20,
-    "descriptiveSentenceMaxWords": 25,
+    // Flesch-Kincaid US grade level, applied to sentences at or above the word-count floor.
+    "proceduralMaxGradeLevel": 7,
+    "descriptiveMaxGradeLevel": 8,
+    // Sentences shorter than this are never scored: readability formulas are unstable on very
+    // short input. See docs/provisional-rules.md#sentence-length-procedural.
+    "sentenceReadabilityFloorWords": 20,
     "maxNounClusterLength": 3,
     "maxSentencesPerProceduralStep": 1,
     "maxParagraphSentences": 6,
@@ -101,7 +105,7 @@ falls back to the provisional pack silently.
       "sourceRef": "ASD-STE100 Issue 8, Writing Rule 3.1 (licence AC-2026-004)",
       "enabled": true,
       "severity": "error",
-      "options": { "maxWords": 20 },
+      "options": { "maxGradeLevel": 7 },
     },
   ],
 }

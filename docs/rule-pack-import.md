@@ -63,7 +63,6 @@ falls back to the provisional pack silently.
     "sentenceReadabilityFloorWords": 20,
     "maxNounClusterLength": 3,
     "maxSentencesPerProceduralStep": 1,
-    "maxParagraphSentences": 6,
   },
 
   "dictionary": {

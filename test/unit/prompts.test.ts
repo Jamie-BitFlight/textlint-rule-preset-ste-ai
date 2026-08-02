@@ -149,7 +149,7 @@ describe('request construction', () => {
       expect(request.messages[1]?.role).toBe('user');
       expect(request.evaluatorId).toBe(definition.id);
       expect(request.promptVersion).toBe('v1');
-      expect(request.contentHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(request.contentHash).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 

@@ -249,7 +249,7 @@ describe('SemanticBroker — evaluator selection and tracing', () => {
     const [outcome] = await broker.adjudicate([candidate('a')]);
     expect(outcome?.trace.promptVersion).toBe('v1');
     expect(outcome?.trace.modelId).toBe('m1');
-    expect(outcome?.trace.contentHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(outcome?.trace.contentHash).toMatch(/^[0-9a-f]{64}$/);
     expect(traces).toHaveLength(1);
   });
 

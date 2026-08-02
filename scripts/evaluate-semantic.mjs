@@ -14,6 +14,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 if (!existsSync(join(root, 'dist', 'evaluation', 'evaluate.js'))) {
@@ -26,23 +27,37 @@ const { evaluateSemanticEvaluators, formatEvaluationReport } = await import(
 );
 const { LlamaCppClient } = await import(join(root, 'dist', 'model-client', 'llama-client.js'));
 
-const argv = process.argv.slice(2);
-const flag = (name, fallback) => {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback;
-};
-const has = (name) => argv.includes(`--${name}`);
+let values;
+try {
+  ({ values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      split: { type: 'string', default: 'heldout' },
+      endpoint: { type: 'string', default: 'http://127.0.0.1:8080' },
+      model: { type: 'string', default: 'local-ste-adjudicator' },
+      timeout: { type: 'string', default: '30000' },
+      concurrency: { type: 'string', default: '2' },
+      out: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    },
+    strict: true,
+    allowPositionals: false,
+  }));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
+}
 
-const split = flag('split', 'heldout');
+const split = values.split;
 if (!['dev', 'heldout', 'all'].includes(split)) {
   console.error(`--split must be dev, heldout or all (got "${split}")`);
   process.exit(2);
 }
-const endpoint = flag('endpoint', 'http://127.0.0.1:8080');
-const model = flag('model', 'local-ste-adjudicator');
-const timeout = Number(flag('timeout', '30000'));
-const concurrency = Number(flag('concurrency', '2'));
-const out = flag('out', undefined);
+const endpoint = values.endpoint;
+const model = values.model;
+const timeout = Number(values.timeout);
+const concurrency = Number(values.concurrency);
+const out = values.out;
 
 const transport = new LlamaCppClient({ endpoint, requestTimeoutMs: timeout });
 
@@ -63,7 +78,7 @@ const report = await evaluateSemanticEvaluators({
   },
 });
 
-if (has('json')) {
+if (values.json) {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 } else {
   process.stdout.write(`${formatEvaluationReport(report)}\n`);

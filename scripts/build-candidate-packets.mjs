@@ -16,21 +16,33 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 import { resolveConfig } from '../dist/core/config.js';
 import { analyseDocument } from '../dist/core/document.js';
 import { runDeterministicRules } from '../dist/core/runner.js';
 import { deterministicRules } from '../dist/deterministic/index.js';
 import { resolveRulePack } from '../dist/rule-pack/loader.js';
 
-const args = process.argv.slice(2);
-function flag(name, fallback) {
-  const index = args.indexOf(name);
-  return index === -1 ? fallback : args[index + 1];
+let values;
+try {
+  ({ values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      fixtures: { type: 'string', default: 'fixtures' },
+      split: { type: 'string', default: 'all' },
+      out: { type: 'string' },
+    },
+    strict: true,
+    allowPositionals: false,
+  }));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
 }
 
-const fixturesDir = resolve(flag('--fixtures', 'fixtures'));
-const split = flag('--split', 'all');
-const outDir = flag('--out', undefined);
+const fixturesDir = resolve(values.fixtures);
+const split = values.split;
+const outDir = values.out;
 
 const manifest = JSON.parse(readFileSync(join(fixturesDir, 'manifest.json'), 'utf8'));
 const config = resolveConfig({});

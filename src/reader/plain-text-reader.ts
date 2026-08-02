@@ -1,25 +1,17 @@
 import { defaultStructureOptions, detectMode } from '../core/structure.js';
 import { computeLineStarts, trimRange } from '../core/text.js';
 import type { SourceDocument } from '../core/types.js';
-import type { DocumentReader, TextUnit } from './types.js';
+import type { TextUnit } from './types.js';
 
 /**
- * The simplest reader that satisfies {@link DocumentReader}: `format: 'text'` has no structure
- * beyond blank-line-separated paragraphs, which is exactly what `src/core/structure.ts`'s
- * `format === 'text'` branch already does. No parser dependency, because plain text has nothing
- * for a parser to recover that a blank-line scan does not already give exactly.
+ * The simplest reader for `format: 'text'`, which has no structure beyond blank-line-separated
+ * paragraphs — exactly what `src/core/structure.ts`'s `format === 'text'` branch already does. No
+ * parser dependency, because plain text has nothing for a parser to recover that a blank-line scan
+ * does not already give exactly.
+ *
+ * Synchronous — see `readMarkdownUnitsSync`'s doc comment (`src/reader/markdown-reader.ts`) for why
+ * this reader has no async wrapper.
  */
-export class PlainTextReader implements DocumentReader {
-  readonly mediaType = 'text' as const;
-
-  /** `async` to satisfy {@link DocumentReader}; the blank-line scan underneath is synchronous. See
-   * `MarkdownReader.read()`'s doc for why a synchronous core is exported alongside this. */
-  async *read(doc: SourceDocument): AsyncIterable<TextUnit> {
-    for (const unit of readPlainTextUnitsSync(doc)) yield unit;
-  }
-}
-
-/** The synchronous core `PlainTextReader.read()` wraps. */
 export function readPlainTextUnitsSync(doc: SourceDocument): TextUnit[] {
   return splitParagraphs(doc.text);
 }

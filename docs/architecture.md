@@ -234,12 +234,34 @@ autofix policy, protected terminology) is read from a shared file — see
 file, `shared` override, the rule's own textlint options. Replacing an object wholesale would drop an
 `enabled: false` set by a lower layer; there is a test for that.
 
-## Document reader — design note (pending review, not yet implemented)
+## Document reader — design note (implemented; the async `DocumentReader` interface below since removed)
 
-**Status.** Nothing in this section is built. No code under `src/` or `test/` has changed for it. It
-is written to be read, argued with, and either approved or sent back — see the gate at the end. The
-section above this one already states the motivation (issue #25, issue #11's measured 0/35 result on
-`noun-cluster-candidate`) and is not repeated here.
+**Status.** The note below predates implementation and was never updated once the work landed (PR
+#32, then a follow-on stage that wired the reader into `analysis`) — read it as a historical record
+of the reasoning, not as a description of today's `src/reader/` module. Three things it proposed did
+not survive contact with the constraints §3 and the code itself already state:
+
+- The `DocumentReader` interface and its `read(): AsyncIterable<TextUnit>` method (§1) were built
+  exactly as drafted, on `MarkdownReader`/`PlainTextReader`, but never gained a production caller.
+  `analyseTextDeterministic` documents itself as performing no I/O — a contract existing callers
+  rely on — and `analysis`'s other entry point, `analyseText`, called the reader's own synchronous
+  core (`readMarkdownUnitsSync`/`readPlainTextUnitsSync`, added specifically so a synchronous caller
+  had something to call) rather than `read()`, for no reason particular to it being async; it simply
+  never needed to be. With zero callers actually awaiting the interface, "every caller already
+  awaits" (§1's stated reason for making `read()` async ahead of any reader that needed it) turned
+  out not to hold, so the `DocumentReader` interface and the two wrapper classes were removed
+  (ponytail-audit yagni finding), leaving `readMarkdownUnitsSync`/`readPlainTextUnitsSync` as the
+  real, and only, public reader API. Reintroduce an async seam when a reader that genuinely needs
+  real I/O — docx, a remotely-fetched document — actually lands; at that point `analyseTextDeterministic`'s
+  "no I/O" contract, not this note, is what should drive the interface's shape.
+- §7 lists "`analysis` wired to select a reader by `DocumentFormat` and iterate its units" as in
+  scope; what was actually built has `src/analysis/analyse.ts` call the synchronous functions above
+  directly and build blocks from their output (see that file's own `readerBlocksFor` and its doc
+  comment), not iterate an `AsyncIterable`.
+
+The rest of this section — the parser choice (§2), the module-boundary reasoning (§3), the offset
+contract demonstration (§4) and everything after — is otherwise still accurate: it was implemented as
+described and is not repeated or corrected again below.
 
 ### 1. The `DocumentReader` interface and the text unit
 

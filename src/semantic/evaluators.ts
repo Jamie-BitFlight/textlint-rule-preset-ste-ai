@@ -2,7 +2,7 @@ import type { SemanticConfig } from '../core/config.js';
 import { contentHash } from '../core/text.js';
 import type { CandidatePassage, SemanticEvaluatorId } from '../core/types.js';
 import type { ChatMessage } from '../model-client/types.js';
-import { formatValue, renderTemplate, type PromptProvider } from './prompt-loader.js';
+import { formatValue, renderTemplate, type FilePromptProvider } from './prompt-loader.js';
 
 /**
  * Evaluator definitions.
@@ -121,7 +121,7 @@ export class EvaluatorError extends Error {
 export function buildEvaluatorRequest(
   candidate: CandidatePassage,
   config: SemanticConfig,
-  prompts: PromptProvider,
+  prompts: FilePromptProvider,
 ): EvaluatorRequest {
   const definition = findEvaluator(candidate.evaluatorId);
   if (definition === undefined) {

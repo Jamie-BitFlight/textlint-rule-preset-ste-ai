@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { SourcePosition, SourceRange, Word } from './types.js';
 
 /** The character opaque protected regions are masked with. Never appears in real prose. */
@@ -122,11 +124,6 @@ export function tokenizeWords(masked: string, offset = 0): Word[] {
   return out;
 }
 
-/** Count words, which is what every sentence-length limit is expressed in. */
-export function countWords(words: readonly Word[]): number {
-  return words.length;
-}
-
 /** Trim a range so it excludes leading/trailing whitespace in `text`. */
 export function trimRange(text: string, range: SourceRange): SourceRange {
   let { start, end } = range;
@@ -135,17 +132,20 @@ export function trimRange(text: string, range: SourceRange): SourceRange {
   return { start, end };
 }
 
-/** Stable content hash (FNV-1a 64-bit, hex). Deterministic across processes and platforms. */
+/**
+ * Stable content hash (SHA-256, hex). Deterministic across processes and platforms.
+ *
+ * Used only as a cache/dedup key (`SemanticTrace.contentHash`, `SemanticBroker`'s request cache,
+ * `textlint/adapter.ts`'s config-fingerprint) — an opaque, collision-resistant string, never parsed
+ * or compared to a fixed length by any caller. Each part is hashed with a trailing separator so
+ * `contentHash('ab', 'c')` and `contentHash('a', 'bc')` cannot collide by concatenation alone, the
+ * same property the previous FNV-1a implementation preserved by mixing a delimiter after every part.
+ */
 export function contentHash(...parts: readonly string[]): string {
-  let hash = 0xcbf29ce484222325n;
-  const prime = 0x100000001b3n;
-  const mask = 0xffffffffffffffffn;
-  const encoder = new TextEncoder();
+  const hash = createHash('sha256');
   for (const part of parts) {
-    for (const byte of encoder.encode(part)) {
-      hash = ((hash ^ BigInt(byte)) * prime) & mask;
-    }
-    hash = ((hash ^ 0x1fn) * prime) & mask;
+    hash.update(part);
+    hash.update('\x1f');
   }
-  return hash.toString(16).padStart(16, '0');
+  return hash.digest('hex');
 }

@@ -167,11 +167,26 @@ export interface AnalysisResult {
   readonly config: SteAiConfig;
 }
 
-/** Deterministic-only analysis. Never performs I/O beyond reading the rule pack. */
-export function analyseTextDeterministic(
+/**
+ * Shared setup for both production entry points below: resolve config and rule pack, build the
+ * source document, run structural analysis over the reader's blocks, run the deterministic rules,
+ * and filter candidates through any inline suppression directives.
+ *
+ * {@link analyseTextDeterministic} and {@link analyseText} differ only in what they do with the
+ * result — the deterministic path turns leftover candidates into `review-required` diagnostics
+ * itself, while the full path hands them to semantic adjudication — so everything up to and
+ * including `suppressCandidates` is identical between them and lives here once.
+ */
+function prepareRun(
   text: string,
-  options: AnalyseTextOptions = {},
-): AnalysisResult {
+  options: AnalyseTextOptions,
+): {
+  readonly config: SteAiConfig;
+  readonly pack: RulePack;
+  readonly document: AnalysedDocument;
+  readonly run: ReturnType<typeof runDeterministicRules>;
+  readonly pass: CandidateSuppressionPass;
+} {
   const config = resolveConfig(options.config ?? {});
   const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
   const format = options.format ?? 'markdown';
@@ -192,8 +207,8 @@ export function analyseTextDeterministic(
     blocks: readerBlocksFor(sourceDoc, structureOptions),
   });
 
-  // Fix conflicts are resolved below instead, once the suppressed findings are out of the list: a
-  // finding nobody will be shown must not be able to veto another finding's fix.
+  // Fix conflicts are resolved by each caller instead, once the suppressed findings are out of the
+  // list: a finding nobody will be shown must not be able to veto another finding's fix.
   const run = runDeterministicRules({
     doc: document,
     rules: deterministicRules,
@@ -203,6 +218,16 @@ export function analyseTextDeterministic(
   });
 
   const pass = suppressCandidates(document, run.candidates, config);
+
+  return { config, pack, document, run, pass };
+}
+
+/** Deterministic-only analysis. Never performs I/O beyond reading the rule pack. */
+export function analyseTextDeterministic(
+  text: string,
+  options: AnalyseTextOptions = {},
+): AnalysisResult {
+  const { config, pack, document, run, pass } = prepareRun(text, options);
 
   // Candidates are passages no deterministic rule could decide. Returning only `run.diagnostics`
   // discarded them, so a document whose only findings needed adjudication reported clean — the
@@ -502,38 +527,10 @@ export async function analyseText(
   text: string,
   options: AnalyseTextOptions = {},
 ): Promise<AnalysisResult> {
-  const config = resolveConfig(options.config ?? {});
-  const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
-  const format = options.format ?? 'markdown';
-
-  const sourceDoc: SourceDocument = {
-    id: options.id ?? options.path ?? 'document',
-    format,
-    text,
-    ...(options.path === undefined ? {} : { path: options.path }),
-  };
-  const structureOptions = structureOptionsFor(format, config);
-  const document = analyseDocument(sourceDoc, {
-    protectedRegions: {
-      approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
-      extraPatterns: config.extraProtectedPatterns,
-    },
-    structure: structureOptions,
-    blocks: readerBlocksFor(sourceDoc, structureOptions),
-  });
+  const { config, pack, document, run, pass } = prepareRun(text, options);
 
   // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the
   // semantic fixes anyway, and a withheld finding must not veto a surviving finding's fix.
-  const run = runDeterministicRules({
-    doc: document,
-    rules: deterministicRules,
-    config,
-    pack,
-    resolveFixes: false,
-  });
-
-  const pass = suppressCandidates(document, run.candidates, config);
-
   const transport: ModelTransport =
     options.transport ??
     new LlamaCppClient({

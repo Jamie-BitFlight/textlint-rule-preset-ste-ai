@@ -1,21 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { PlainTextReader, readPlainTextUnitsSync } from '../../../src/reader/plain-text-reader.js';
+import { readPlainTextUnitsSync } from '../../../src/reader/plain-text-reader.js';
 import type { TextUnit } from '../../../src/reader/types.js';
 
 /**
- * `PlainTextReader` — the "simplest reader that satisfies the interface", per the design note.
- * No parser: `format: 'text'` has no structure beyond blank-line-separated paragraphs, which is
- * exactly what `src/core/structure.ts`'s `format === 'text'` branch already does.
+ * `readPlainTextUnitsSync` — the simplest reader for `format: 'text'`. No parser: `format: 'text'`
+ * has no structure beyond blank-line-separated paragraphs, which is exactly what
+ * `src/core/structure.ts`'s `format === 'text'` branch already does.
  */
 
-const reader = new PlainTextReader();
-
-async function read(text: string): Promise<TextUnit[]> {
-  const units: TextUnit[] = [];
-  for await (const unit of reader.read({ id: 't', format: 'text', text })) {
-    units.push(unit);
-  }
-  return units;
+function read(text: string): TextUnit[] {
+  return readPlainTextUnitsSync({ id: 't', format: 'text', text });
 }
 
 function assertRoundTrips(text: string, units: readonly TextUnit[]): void {
@@ -24,14 +18,10 @@ function assertRoundTrips(text: string, units: readonly TextUnit[]): void {
   }
 }
 
-describe('PlainTextReader', () => {
-  it('reports the mediaType it reads', () => {
-    expect(reader.mediaType).toBe('text');
-  });
-
-  it('yields one unit for a single paragraph', async () => {
+describe('readPlainTextUnitsSync', () => {
+  it('yields one unit for a single paragraph', () => {
     const text = 'Prior to installation, remove the bracket.\n';
-    const units = await read(text);
+    const units = read(text);
     assertRoundTrips(text, units);
     expect(units).toHaveLength(1);
     expect(units[0]?.kind).toBe('paragraph');
@@ -40,56 +30,44 @@ describe('PlainTextReader', () => {
     expect(units[0]?.admonition).toBe('none');
   });
 
-  it('splits on a blank line into two units with real offsets', async () => {
+  it('splits on a blank line into two units with real offsets', () => {
     const text = ['First paragraph.', '', 'Second paragraph.', ''].join('\n');
-    const units = await read(text);
+    const units = read(text);
     assertRoundTrips(text, units);
     expect(units.map((u) => u.text)).toEqual(['First paragraph.', 'Second paragraph.']);
     expect(units[1]?.range.start).toBe(text.indexOf('Second paragraph.'));
   });
 
-  it('skips multiple consecutive blank lines without producing an empty unit', async () => {
+  it('skips multiple consecutive blank lines without producing an empty unit', () => {
     const text = ['First paragraph.', '', '', '', 'Second paragraph.', ''].join('\n');
-    const units = await read(text);
+    const units = read(text);
     assertRoundTrips(text, units);
     expect(units.map((u) => u.text)).toEqual(['First paragraph.', 'Second paragraph.']);
   });
 
-  it('classifies mode the same way the markdown reader does', async () => {
+  it('classifies mode the same way the markdown reader does', () => {
     const text = ['Remove the bracket.', '', 'The bracket is removed by the technician.', ''].join(
       '\n',
     );
-    const units = await read(text);
+    const units = read(text);
     expect(units[0]?.mode).toBe('procedural');
     expect(units[1]?.mode).toBe('descriptive');
   });
 
-  it('gives every unit a distinct id', async () => {
+  it('gives every unit a distinct id', () => {
     const text = ['One.', '', 'Two.', '', 'Three.', ''].join('\n');
-    const units = await read(text);
+    const units = read(text);
     expect(new Set(units.map((u) => u.id)).size).toBe(units.length);
   });
 
-  it('is async-iterable', () => {
-    const iterable = reader.read({ id: 't', format: 'text', text: 'Prose.\n' });
-    expect(typeof iterable[Symbol.asyncIterator]).toBe('function');
-  });
-
-  it('produces nothing for a blank document', async () => {
-    const units = await read('\n\n\n');
+  it('produces nothing for a blank document', () => {
+    const units = read('\n\n\n');
     expect(units).toEqual([]);
   });
 
-  it('has `masked` equal to `text`: plain text has no per-line markup to mask', async () => {
+  it('has `masked` equal to `text`: plain text has no per-line markup to mask', () => {
     const text = 'Prose.\n';
-    const units = await read(text);
+    const units = read(text);
     expect(units[0]?.masked).toBe(units[0]?.text);
-  });
-
-  it('exposes a synchronous core the async `read()` is a thin wrapper over', async () => {
-    const text = ['First paragraph.', '', 'Second paragraph.', ''].join('\n');
-    const sync = readPlainTextUnitsSync({ id: 't', format: 'text', text });
-    const asynchronous = await read(text);
-    expect(JSON.stringify(sync)).toBe(JSON.stringify(asynchronous));
   });
 });

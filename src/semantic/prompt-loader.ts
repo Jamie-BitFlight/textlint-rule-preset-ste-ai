@@ -26,10 +26,6 @@ export interface PromptTemplate {
   readonly variables: readonly string[];
 }
 
-export interface PromptProvider {
-  get(version: string, evaluatorId: string): PromptTemplate;
-}
-
 export class PromptError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -72,7 +68,7 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   return { id, version, system, user, meta, variables };
 }
 
-export class FilePromptProvider implements PromptProvider {
+export class FilePromptProvider {
   readonly #root: string;
   readonly #cache = new Map<string, PromptTemplate>();
 

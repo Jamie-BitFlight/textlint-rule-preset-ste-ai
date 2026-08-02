@@ -55,10 +55,12 @@ all. Un-draft, then wait a real interval before merging, even on a change that l
 
 ## Local verification tools
 
-Use `tsx` (or the compiled `dist/` only via `npm run build` immediately beforehand) to run or
+Use `npx tsx` (or the compiled `dist/` only via `npm run build` immediately beforehand) to run or
 reproduce TypeScript behavior ad hoc — never invoke stale `dist/` output with plain `node` without
 rebuilding first; this project's own history includes a real bug investigation that went sideways
-from exactly that stale-build confusion.
+from exactly that stale-build confusion. `tsx` is deliberately not a project dependency, so `npx`
+(which fetches it on demand) is the form that actually works in a clean checkout — plain `tsx`
+assumes a global install that may not exist.
 
 ## `send_later` (self-scheduled check-ins)
 

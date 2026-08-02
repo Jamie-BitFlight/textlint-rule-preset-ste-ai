@@ -33,16 +33,6 @@
         "reviewerConfidence": 0.6
       },
       {
-        "passageId": "noun-cluster-candidate:s3:436",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "leaves behind empty space",
-        "span": { "start": 436, "end": 461 },
-        "verdict": "non-violation",
-        "reason": "This is a verb plus particle plus adjective plus noun, not a noun run at all; there is nothing for a reader to group wrongly. The heuristic's content-word counter has misfired on ordinary predicate structure.",
-        "reviewerConfidence": 0.95
-      },
-      {
         "passageId": "ambiguous-pronoun-candidate:s4:489",
         "ruleId": "ambiguous-pronoun-candidate",
         "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -71,16 +61,6 @@
         "verdict": "non-violation",
         "reason": "Descriptive statement of the guarantee VACUUM provides about on-disk layout; the storing agent is the database engine and is both obvious and beside the point. Not an instruction to the reader.",
         "reviewerConfidence": 0.85
-      },
-      {
-        "passageId": "noun-cluster-candidate:s7:883",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "largely stored contiguously within",
-        "span": { "start": 883, "end": 917 },
-        "verdict": "non-violation",
-        "reason": "Adverb, participle, adverb and preposition — a normal verb phrase, not a noun pile, and it ends on a preposition that binds to the following noun phrase. There is no grouping ambiguity for a reader to resolve.",
-        "reviewerConfidence": 0.95
       },
       {
         "passageId": "passive-voice-candidate:s9:1092",
@@ -299,16 +279,6 @@
     ],
     "django-settings-configuration": [
       {
-        "passageId": "noun-cluster-candidate:s2:256",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "Django settings file contains",
-        "span": { "start": 256, "end": 285 },
-        "verdict": "non-violation",
-        "reason": "The run swallows the main verb \"contains\"; the actual noun group is \"Django settings file\", a product-specific term used throughout the Django documentation. Component identity outranks simplification.",
-        "reviewerConfidence": 0.9
-      },
-      {
         "passageId": "ambiguous-pronoun-candidate:s10:853",
         "ruleId": "ambiguous-pronoun-candidate",
         "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -329,13 +299,13 @@
         "reviewerConfidence": 0.85
       },
       {
-        "passageId": "noun-cluster-candidate:s11:905",
+        "passageId": "noun-cluster-candidate:s9:912",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
-        "quote": "assign settings dynamically using normal Python syntax",
-        "span": { "start": 905, "end": 959 },
+        "quote": "settings dynamically using normal Python syntax",
+        "span": { "start": 912, "end": 959 },
         "verdict": "non-violation",
-        "reason": "A verb, object, adverb and a gerund phrase — normal clause structure, not a stack of nouns. \"normal Python syntax\" is the only noun group and it is transparent.",
+        "reason": "This is the object-and-manner tail of \"It can assign settings dynamically using normal Python syntax\": a direct object ('settings'), an adverb ('dynamically'), and a gerund phrase with its own object ('using normal Python syntax'). It is ordinary clause structure, not a stacked noun run, and the only real noun group in it, 'normal Python syntax', is a transparent adjective-adjective-noun phrase with one obvious reading. The heuristic's word count triggered on a verb phrase, not a noun pile.",
         "reviewerConfidence": 0.9
       },
       {

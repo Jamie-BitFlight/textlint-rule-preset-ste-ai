@@ -94,19 +94,6 @@
         "reviewerConfidence": 0.9
       },
       {
-        "passageId": "passive-voice-candidate:s6:633",
-        "ruleId": "passive-voice-candidate",
-        "evaluatorId": "passive-voice-adjudication",
-        "quote": "is\ndisabled",
-        "span": {
-          "start": 633,
-          "end": 644
-        },
-        "verdict": "non-violation",
-        "reason": "'By default the ... Engine is disabled' states a configuration state, adjectival rather than a passive action, and describes the shipped default where no actor performed anything.",
-        "reviewerConfidence": 0.9
-      },
-      {
         "passageId": "noun-cluster-candidate:s9:777",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
@@ -144,19 +131,6 @@
         "verdict": "non-violation",
         "reason": "The passive states a placement constraint on the directive (where it must appear), not an action assigned to an actor; who edits the configuration file is immaterial to the constraint.",
         "reviewerConfidence": 0.6
-      },
-      {
-        "passageId": "passive-voice-candidate:s11:997",
-        "ruleId": "passive-voice-candidate",
-        "evaluatorId": "passive-voice-adjudication",
-        "quote": "be configured",
-        "span": {
-          "start": 997,
-          "end": 1010
-        },
-        "verdict": "non-violation",
-        "reason": "'cannot be configured with conflicting settings' is a stated property/limitation of the directive in reference prose, not an instruction whose actor matters.",
-        "reviewerConfidence": 0.75
       },
       {
         "passageId": "passive-voice-candidate:s13:1144",
@@ -239,19 +213,6 @@
         "reviewerConfidence": 0.9
       },
       {
-        "passageId": "noun-cluster-candidate:s7:859",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "accessing SQLite database files interactively",
-        "span": {
-          "start": 859,
-          "end": 904
-        },
-        "verdict": "non-violation",
-        "reason": "'accessing SQLite database files interactively' is a gerund phrase with an object and an adverb, not a noun pile; the grouping is fixed by the verb and needs no guessing.",
-        "reviewerConfidence": 0.85
-      },
-      {
         "passageId": "noun-cluster-candidate:s8:941",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
@@ -266,19 +227,6 @@
       }
     ],
     "llvm-getting-started-build": [
-      {
-        "passageId": "noun-cluster-candidate:s2:286",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "LLVM (including subprojects like Clang",
-        "span": {
-          "start": 286,
-          "end": 324
-        },
-        "verdict": "non-violation",
-        "reason": "The span is 'LLVM (including subprojects like Clang' — two product names separated by an ordinary parenthetical phrase that the heuristic failed to treat as function words. There is no noun run to disambiguate.",
-        "reviewerConfidence": 0.9
-      },
       {
         "passageId": "ambiguous-pronoun-candidate:s6:946",
         "ruleId": "ambiguous-pronoun-candidate",

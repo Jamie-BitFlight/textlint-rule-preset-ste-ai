@@ -1,3 +1,4 @@
+import nlp from 'compromise';
 import { describe, expect, it } from 'vitest';
 import {
   isBareVerbTagSet,
@@ -58,6 +59,33 @@ describe('sentenceOpensImperative', () => {
   it('does not let one call’s extraVerbs leak into a later call with a different configuration', () => {
     expect(sentenceOpensImperative('Cache the response before returning.', ['cache'])).toBe(true);
     expect(sentenceOpensImperative('Cache the response before returning.')).toBe(false);
+  });
+
+  // Regression: `compromise` is imported as a module-global singleton (`import nlp from
+  // 'compromise'`), shared by the whole Node process. If this package is used as a library inside
+  // a larger application that also calls `nlp.addWords()` directly, the fix above (restore a
+  // whole-object snapshot taken once, back when `ensureExtraLexicon` first ran) deletes every
+  // lexicon/`_multiCache` key that consumer added *after* that snapshot was captured, the next
+  // time `ensureExtraLexicon` runs with a different configuration -- silently destroying another
+  // consumer's vocabulary this module never taught and has no business touching.
+  //
+  // "gizmo" (not "cache", not "reticulate", not in `IMPERATIVE_VERBS`): confirmed directly that
+  // `compromise` tags it `Noun Singular` on its own and does not guess it as a verb, so — like
+  // "cache" above — it only reads as an imperative opener here because something taught it to.
+  it('leaves a word added by another compromise consumer sharing this process intact across a restore/reteach cycle', () => {
+    // Simulate a host application (or another package) that shares this process's one
+    // `compromise` singleton and calls `addWords` directly, bypassing this module entirely.
+    nlp.addWords({ gizmo: 'Verb' });
+    expect(sentenceOpensImperative('Gizmo the widget before shipping.')).toBe(true);
+
+    // Force `ensureExtraLexicon`'s restore/reteach cycle to run twice, by switching this module's
+    // own `extraImperativeVerbs` configuration.
+    sentenceOpensImperative('Torque the bolt.', ['reticulate']);
+    sentenceOpensImperative('Torque the bolt.', ['cache']);
+
+    // The other consumer's word must still be known: this module's own restore must never delete
+    // a key it did not itself add.
+    expect(sentenceOpensImperative('Gizmo the widget before shipping.')).toBe(true);
   });
 
   it('does not misfire on a passive-voice sentence opener', () => {

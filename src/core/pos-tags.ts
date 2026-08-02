@@ -89,33 +89,66 @@ function lexiconStore(): LexiconStore {
   return nlp.world() as unknown as LexiconStore;
 }
 
-/** Mutate `target` in place so its own contents exactly match `snapshot` — add, overwrite, delete. */
-function restoreLexiconInPlace(
-  target: Record<string, unknown>,
-  snapshot: Readonly<Record<string, unknown>>,
-): void {
-  for (const key of Object.keys(target)) {
-    if (!Object.prototype.hasOwnProperty.call(snapshot, key)) delete target[key];
-  }
-  Object.assign(target, snapshot);
+/**
+ * Sentinel meaning "this key was absent from the store", distinct from a key present with value
+ * `undefined` (which `addWords` never actually writes, but the distinction is cheap to keep
+ * correct rather than assume).
+ */
+const ABSENT: unique symbol = Symbol('lexicon key absent');
+/** A captured lexicon/`_multiCache` value, or {@link ABSENT} if the key did not exist. */
+type KeyValue = unknown;
+
+function readKey(store: Record<string, unknown>, key: string): KeyValue {
+  return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : ABSENT;
+}
+
+/** Restore `store[key]` to a value previously captured by {@link readKey} — delete if it was absent. */
+function writeKey(store: Record<string, unknown>, key: string, value: KeyValue): void {
+  if (value === ABSENT) delete store[key];
+  else store[key] = value;
 }
 
 /**
- * A snapshot of `compromise`'s shared lexicon taken right after the permanent domain lexicon
- * (`IMPERATIVE_VERBS`, above) is loaded and before any *per-configuration* word is ever taught.
- * {@link ensureExtraLexicon} restores to this baseline before teaching each call's own
- * `extraVerbs`, which is what stops one call's configuration from surviving into the next.
+ * Exactly which `lexicon`/`_multiCache` keys {@link ensureExtraLexicon}'s own most recent
+ * `addWords` call actually changed, and what was in each one immediately before that call —
+ * `ABSENT` if the key did not exist yet.
+ *
+ * PROVENANCE: an earlier version of this fix instead restored a whole-object snapshot of the
+ * shared lexicon/`_multiCache` taken once, right after the permanent domain lexicon loaded.
+ * `compromise` is imported as a module-global singleton (`import nlp from 'compromise'`), shared
+ * by the entire Node process — a host application embedding this package as a library, or another
+ * package doing the same thing, can call `nlp.addWords()` directly on that same singleton. A
+ * whole-object restore has no way to distinguish "a key this module itself taught for the
+ * previous configuration" from "a key some other consumer of the shared singleton wrote, before
+ * or after this module's baseline snapshot was captured" — it silently deletes the latter (or
+ * stomps it back to a stale value) the next time a configuration switch runs a restore. Found by
+ * `chatgpt-codex-connector` review against that version; reproduced directly in
+ * `test/unit/pos-tags.test.ts` ("leaves a word added by another compromise consumer...") before
+ * this fix, using `nlp.addWords()` from the test itself to stand in for the other consumer.
+ *
+ * Fixed by tracking only the specific keys this module itself last wrote, key-by-key, instead of
+ * a snapshot of the whole shared object: before teaching a new configuration's words,
+ * {@link ensureExtraLexicon} puts back exactly what was at each of *its own* previously-touched
+ * keys (deleting a key that did not exist before, restoring one that did) and leaves every other
+ * key in the shared lexicon/`_multiCache` — whoever wrote it, whenever — completely untouched.
+ * The "before" value for each key is captured immediately before that key's own `addWords` call
+ * (not once, globally), so it reflects whatever was really there at that moment, including a
+ * value some other consumer had already written by then.
+ *
+ * Populated by diffing a small set of *candidate* keys (the words just taught, plus the first
+ * token of any multi-word entry among them, which is `compromise`'s own `_multiCache` key scheme
+ * — confirmed directly against `expandLexicon` in
+ * `node_modules/compromise/src/1-one/lexicon/methods/expand.js` and
+ * `.../2-two/preTagger/methods/expand/index.js`) before and after the `addWords` call, rather than
+ * by re-implementing `addWords`'s own internal decision of which keys it touches: for a
+ * single-word `'Verb'` entry (the only shape this module ever teaches — no tag in `byTag.js`
+ * handles a bare `'Verb'` tag, so no conjugation/expansion runs) `addWords` only ever writes
+ * `lexicon[word]`, never `_multiCache`, confirmed directly; the `_multiCache` bookkeeping here
+ * exists defensively, for a hypothetical multi-word `extraImperativeVerbs` entry, since nothing in
+ * `SteAiConfig` forbids one.
  */
-const extraLexiconBaseline: {
-  lexicon: Record<string, unknown>;
-  multiCache: Record<string, unknown>;
-} = (() => {
-  const store = lexiconStore();
-  return {
-    lexicon: { ...store.model.one.lexicon },
-    multiCache: { ...store.model.one._multiCache },
-  };
-})();
+let taughtLexiconKeys = new Map<string, KeyValue>();
+let taughtMultiCacheKeys = new Map<string, KeyValue>();
 
 /** Canonical identity of an `extraVerbs` list — same words, any order or case, same identity. */
 function extraVerbsKey(extraVerbs: readonly string[]): string {
@@ -129,39 +162,76 @@ let activeExtraKey = '';
 
 /**
  * Make `compromise`'s shared lexicon reflect exactly this call's `extraVerbs` and nothing another
- * call taught it.
+ * call taught it — without touching any lexicon/`_multiCache` key this module itself did not add.
  *
  * `addWords` mutates a lexicon that is `compromise`'s own module-global singleton (see
  * {@link LexiconStore}), not scoped to a document or a configuration. Left as a one-way ratchet —
- * teach and never untach, the previous design — a word from one document's
+ * teach and never untach, the original design — a word from one document's
  * `extraImperativeVerbs` stayed "known" as a verb for every later document analysed in the same
  * process, including one with a different configuration or none at all: which rule fired, and
  * which limit applied, then depended on analysis order rather than on that run's own
  * configuration (found via `test/integration/reader-wiring.test.ts` and
  * `test/unit/pos-tags.test.ts`, both reproducing it directly).
  *
- * Fixed by resynchronising on every call instead: restore the pre-extra-vocabulary baseline, then
- * teach only the words this call actually asked for. Safe to do unconditionally because every
- * call site in this codebase now passes its own `extraImperativeVerbs` explicitly
- * (`RuleInput.extraImperativeVerbs`, threaded from `SteAiConfig`) rather than relying on an
- * earlier, unrelated call having taught the word. A call requesting the same configuration as the
- * one currently active is a no-op, so repeated calls for one document (the common case — most
- * sentences in most documents configure no extra verbs at all) do not pay a restore/reteach cost.
+ * Fixed by resynchronising on every call instead: undo exactly what the *previous* call taught
+ * (see {@link taughtLexiconKeys}), then teach only the words this call actually asked for. Safe
+ * to do unconditionally because every call site in this codebase now passes its own
+ * `extraImperativeVerbs` explicitly (`RuleInput.extraImperativeVerbs`, threaded from
+ * `SteAiConfig`) rather than relying on an earlier, unrelated call having taught the word. A call
+ * requesting the same configuration as the one currently active is a no-op, so repeated calls for
+ * one document (the common case — most sentences in most documents configure no extra verbs at
+ * all) do not pay a restore/reteach cost.
  */
 function ensureExtraLexicon(extraVerbs: readonly string[]): void {
   const key = extraVerbsKey(extraVerbs);
   if (key === activeExtraKey) return;
 
   const store = lexiconStore();
-  restoreLexiconInPlace(store.model.one.lexicon, extraLexiconBaseline.lexicon);
-  restoreLexiconInPlace(store.model.one._multiCache, extraLexiconBaseline.multiCache);
+
+  // Undo exactly what the previous call taught: put each touched key back to what compromise
+  // itself had there before that call, or delete it if it had nothing. Every other key in the
+  // shared lexicon/`_multiCache` — including any another consumer of this shared `compromise`
+  // instance wrote, before or after this module last ran — is left untouched.
+  for (const [k, prev] of taughtLexiconKeys) writeKey(store.model.one.lexicon, k, prev);
+  for (const [k, prev] of taughtMultiCacheKeys) writeKey(store.model.one._multiCache, k, prev);
+  taughtLexiconKeys = new Map();
+  taughtMultiCacheKeys = new Map();
 
   if (key.length > 0) {
     const lexicon: Record<string, string> = {};
     for (const verb of key.split(' ')) {
       if (!alreadyKnownAsVerb(verb)) lexicon[verb] = 'Verb';
     }
-    if (Object.keys(lexicon).length > 0) nlp.addWords(lexicon);
+    if (Object.keys(lexicon).length > 0) {
+      // Candidate keys this call's `addWords` might touch: the words themselves, plus the first
+      // token of any multi-word entry among them (see {@link taughtLexiconKeys} for why). Captured
+      // before the call and diffed after, rather than assumed, so exactly what `addWords` actually
+      // changed is recorded — no more, no less.
+      const candidateLexiconKeys = Object.keys(lexicon);
+      const candidateMultiCacheKeys = [
+        ...new Set(
+          candidateLexiconKeys
+            .map((word) => word.split(/\s+/)[0])
+            .filter((first): first is string => first !== undefined && first.length > 0),
+        ),
+      ];
+
+      const beforeLexicon = candidateLexiconKeys.map(
+        (k) => [k, readKey(store.model.one.lexicon, k)] as const,
+      );
+      const beforeMultiCache = candidateMultiCacheKeys.map(
+        (k) => [k, readKey(store.model.one._multiCache, k)] as const,
+      );
+
+      nlp.addWords(lexicon);
+
+      for (const [k, prev] of beforeLexicon) {
+        if (readKey(store.model.one.lexicon, k) !== prev) taughtLexiconKeys.set(k, prev);
+      }
+      for (const [k, prev] of beforeMultiCache) {
+        if (readKey(store.model.one._multiCache, k) !== prev) taughtMultiCacheKeys.set(k, prev);
+      }
+    }
   }
   activeExtraKey = key;
 }

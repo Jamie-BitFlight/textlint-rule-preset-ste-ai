@@ -1,0 +1,28 @@
+# Dependabot version updates. Vulnerability alerts and security-update PRs are a separate,
+# repository-level setting (Settings > Code security > Dependabot) and are not controlled by this
+# file — they already fire independently of the schedule below (see the moderate advisory GitHub
+# reports on this repo's Dependabot alerts page).
+#
+# Both ecosystems are grouped into a single weekly PR each, rather than one PR per outdated
+# dependency, so routine bumps do not create a flood of individual reviews.
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 10
+    groups:
+      npm-dependencies:
+        patterns:
+          - '*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - '*'

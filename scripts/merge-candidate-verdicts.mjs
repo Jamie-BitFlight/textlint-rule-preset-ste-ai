@@ -27,17 +27,30 @@
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 
-const args = process.argv.slice(2);
-function flag(name, fallback) {
-  const index = args.indexOf(name);
-  return index === -1 ? fallback : args[index + 1];
+let values;
+try {
+  ({ values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      verdicts: { type: 'string', default: 'fixtures/verdicts' },
+      packets: { type: 'string', default: 'fixtures/packets' },
+      fixtures: { type: 'string', default: 'fixtures' },
+      check: { type: 'boolean', default: false },
+    },
+    strict: true,
+    allowPositionals: false,
+  }));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
 }
 
-const verdictsDir = resolve(flag('--verdicts', 'fixtures/verdicts'));
-const packetsDir = resolve(flag('--packets', 'fixtures/packets'));
-const fixturesDir = resolve(flag('--fixtures', 'fixtures'));
-const checkOnly = args.includes('--check');
+const verdictsDir = resolve(values.verdicts);
+const packetsDir = resolve(values.packets);
+const fixturesDir = resolve(values.fixtures);
+const checkOnly = values.check;
 
 const jsonFiles = (dir) => readdirSync(dir).filter((f) => f.endsWith('.json'));
 

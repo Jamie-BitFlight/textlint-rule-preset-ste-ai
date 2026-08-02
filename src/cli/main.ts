@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseArgs as parseArgsNode, type ParseArgsOptionsConfig } from 'node:util';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
 import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from '../core/types.js';
@@ -44,20 +45,6 @@ interface Args {
   readonly flags: Map<string, string | boolean>;
 }
 
-/**
- * Recognised boolean options. An unknown `--flag` is a usage error rather than an ignored token:
- * a typo such as `--semantci` used to fall through silently to deterministic-only mode, producing
- * a clean-looking report for a run the operator believed was using a model.
- */
-const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
-  'json',
-  'deterministic-only',
-  'semantic',
-  'trace',
-  'fail-on-review',
-  'help',
-]);
-
 export class UsageError extends Error {
   constructor(message: string) {
     super(message);
@@ -65,37 +52,49 @@ export class UsageError extends Error {
   }
 }
 
-function parseArgs(argv: readonly string[]): Args {
-  const flags = new Map<string, string | boolean>();
-  const files: string[] = [];
-  let command = '';
-  const valued = new Set(['endpoint', 'model', 'config', 'format', 'min-severity']);
+/**
+ * Recognised options. An unknown `--flag` is a usage error rather than an ignored token: a typo such
+ * as `--semantci` used to fall through silently to deterministic-only mode, producing a clean-looking
+ * report for a run the operator believed was using a model. `strict: true` below (`node:util`'s own
+ * default) is what still enforces that, now via the standard library instead of a hand-rolled set
+ * membership check.
+ */
+const OPTIONS: ParseArgsOptionsConfig = {
+  json: { type: 'boolean' },
+  'deterministic-only': { type: 'boolean' },
+  semantic: { type: 'boolean' },
+  trace: { type: 'boolean' },
+  'fail-on-review': { type: 'boolean' },
+  help: { type: 'boolean', short: 'h' },
+  endpoint: { type: 'string' },
+  model: { type: 'string' },
+  config: { type: 'string' },
+  format: { type: 'string' },
+  'min-severity': { type: 'string' },
+};
 
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === undefined) continue;
-    if (arg === '-h' || arg === '--help') {
-      flags.set('help', true);
-      continue;
-    }
-    if (arg.startsWith('--')) {
-      const name = arg.slice(2);
-      if (valued.has(name)) {
-        const value = argv[i + 1];
-        if (value === undefined) throw new UsageError(`--${name} needs a value`);
-        flags.set(name, value);
-        i += 1;
-      } else {
-        if (!BOOLEAN_FLAGS.has(name)) {
-          throw new UsageError(`Unknown option --${name}`);
-        }
-        flags.set(name, true);
-      }
-      continue;
-    }
-    if (command === '') command = arg;
-    else files.push(arg);
+function parseArgs(argv: readonly string[]): Args {
+  let parsed: ReturnType<typeof parseArgsNode>;
+  try {
+    parsed = parseArgsNode({
+      args: [...argv],
+      options: OPTIONS,
+      strict: true,
+      allowPositionals: true,
+    });
+  } catch (error) {
+    // `node:util.parseArgs` throws a `TypeError` (`ERR_PARSE_ARGS_UNKNOWN_OPTION`,
+    // `ERR_PARSE_ARGS_INVALID_OPTION_VALUE`, …) for exactly the same input shapes the previous
+    // hand-rolled parser rejected: an unknown `--flag`, or a valued flag given no value. Recast as
+    // `UsageError` so `main()`'s existing catch — print `USAGE`, exit 2 — still fires unchanged.
+    throw new UsageError(error instanceof Error ? error.message : String(error));
   }
+
+  const flags = new Map<string, string | boolean>();
+  for (const [name, value] of Object.entries(parsed.values)) {
+    if (typeof value === 'string' || typeof value === 'boolean') flags.set(name, value);
+  }
+  const [command = '', ...files] = parsed.positionals;
   return { command, files, flags };
 }
 

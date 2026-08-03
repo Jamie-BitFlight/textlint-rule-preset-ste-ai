@@ -112,13 +112,22 @@ export function getAnalysis(
   filePath: string | undefined,
   baseDir: string | undefined,
   /**
-   * Deliberately typed as an unvalidated plain object, not `SteAiConfigInput`: this function's own
-   * merge below (`{ ...sharedFile.config, ...shared, rules: mergedRules }`) is what has to run
-   * before `resolveConfig`/`steAiConfigSchema` can validate the result, so `shared` cannot honestly
-   * carry a validated type yet — see `isPlainObject`'s doc comment in this file for why validating
-   * it earlier would be actively wrong, not just redundant.
+   * PROVENANCE (`chatgpt-codex-connector`, P2, `discussion_r3707847136`): typed `Record<string,
+   * unknown>` for one revision, to make the runtime-unvalidated status below honest at the type
+   * level too — but `getAnalysis` is re-exported through the public `./textlint` entry point, and
+   * `Record<string, unknown>` requires an index signature that an ordinary external caller's own
+   * config interface (e.g. `interface Shared { approvedTerms: string[] }`, structurally compatible
+   * with `SteAiConfigInput` since every one of its fields is optional) does not have, rejecting
+   * valid callers. Restored to `SteAiConfigInput | undefined`, the public contract — the *value* is
+   * still just as unvalidated as before this note: this function's own merge below
+   * (`{ ...sharedFile.config, ...shared, rules: mergedRules }`) is what has to run before
+   * `resolveConfig`/`steAiConfigSchema` can validate the result, so `shared` cannot honestly be
+   * *parsed* through that schema this early — see `isPlainObject`'s doc comment in this file for why
+   * doing so would be actively wrong, not just redundant. The type says "shaped like a config"; nothing
+   * here proves that shape is real, which is exactly why {@link validRulesOf} still validates
+   * `shared.rules` at runtime rather than trusting this static type.
    */
-  shared: Record<string, unknown> | undefined,
+  shared: SteAiConfigInput | undefined,
   perRuleOptions: ReadonlyMap<string, Record<string, unknown>>,
 ): Promise<AnalysisResult> {
   const resolvedBaseDir = baseDir ?? process.cwd();
@@ -128,7 +137,7 @@ export function getAnalysis(
   // textlint options, then the rule's own textlint options. Each layer is merged key by key —
   // replacing the object wholesale would silently drop an `enabled: false` set by a lower layer.
   const fileRules = sharedFile.config.rules as Record<string, Record<string, unknown>>;
-  const sharedRules = validRulesOf(shared?.['rules']);
+  const sharedRules = validRulesOf(shared?.rules);
   const mergedRules: Record<string, Record<string, unknown>> = {};
   for (const id of new Set([
     ...Object.keys(fileRules),
@@ -229,6 +238,16 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
     // exactly as much as either `rawOptions` or its nested `shared` field can be honestly narrowed
     // before `getAnalysis`'s own config resolution does the real, deep validation downstream.
     const { shared, ...ownOptions } = isPlainObject(rawOptions) ? rawOptions : {};
+    // `shared` is confirmed a plain object above, never blindly trusted from `rawOptions` — but
+    // nothing short of `resolveConfig`/`steAiConfigSchema` downstream (see `getAnalysis`'s own doc
+    // comment) can confirm it actually has `SteAiConfigInput`'s shape, which is unprovable for
+    // arbitrary end-user `.textlintrc.json` content. `getAnalysis`'s parameter is `SteAiConfigInput`
+    // to preserve its public contract for external callers (see its own doc comment), so this one
+    // narrow assertion — of an already-real-object value, not the untouched `rawOptions` blob — is
+    // what bridges the two, same as the pre-existing gap `getAnalysis`'s own body already accounts
+    // for by never parsing `shared` through the schema this early.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const sharedConfig = isPlainObject(shared) ? (shared as SteAiConfigInput) : undefined;
 
     return {
       [Syntax.Document]: async (node) => {
@@ -238,7 +257,7 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
           text,
           context.getFilePath(),
           context.getConfigBaseDir(),
-          isPlainObject(shared) ? shared : undefined,
+          sharedConfig,
           new Map([[ruleId, ownOptions]]),
         );
 

@@ -70,16 +70,24 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
    * including an explicit `enabled: false` the user had set for an unrelated rule.
    */
   it('keeps a valid shared.rules entry when a sibling entry is malformed', async () => {
+    // `getAnalysis`'s `shared` parameter is typed `SteAiConfigInput` for its public contract (see
+    // its own doc comment), but the value behind it is never actually validated against that type
+    // before this point — this simulates a real external caller (or a malformed `.textlintrc.json`)
+    // whose `rules` entry does not match the type at runtime, which is exactly the case this test
+    // exists to prove `getAnalysis` handles without discarding valid sibling entries.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const shared = {
+      rules: {
+        'no-contractions': { enabled: false },
+        'misspelled-rule': false,
+      },
+    } as unknown as Parameters<typeof getAnalysis>[3];
+
     const result = await getAnalysis(
       'Utilise the bracket.\n',
       undefined,
       baseDir,
-      {
-        rules: {
-          'no-contractions': { enabled: false },
-          'misspelled-rule': false,
-        },
-      },
+      shared,
       new Map(),
     );
 

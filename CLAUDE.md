@@ -2,68 +2,70 @@
 
 ## Documentation stays in sync with code — no confirmation needed
 
-Standing pre-approval: whenever a task changes functionality, update the documentation that
-describes it as part of the same task, without asking first. Stale documentation is never
-acceptable output. A task that changes behavior but leaves the docs describing the old behavior is
-an incomplete task, not a finished one with a follow-up.
-
-This covers `README.md`, everything under `docs/`, doc comments on changed code, and any other
-file whose job is to describe current behavior to a human or an agent reading it later. It does not
-require a separate confirmation step, a separate PR, or asking whether documentation should be
-updated — that question is already answered.
-
-## Repo name
-
-This repo was renamed on GitHub from `textlint-ASD-ai` to `textlint-rule-preset-ste-ai`. Git-level
-operations (`git push`, `git fetch`) and most REST-backed GitHub tool calls redirect transparently
-under the old name. GraphQL-backed calls do not — a review-thread node ID fetched under one repo
-name will be rejected by a mutation declared under the other (`resolve_review_thread` specifically:
-the old name gets "does not belong to the declared repo," the new name gets "not configured for this
-session"). If a GraphQL-shaped call fails on a repo-identity error, that is very likely this, not a
-real permissions problem — try the other name before concluding the operation is blocked.
+Update whichever of `README.md`, `docs/`, or doc comments actually describe the changed behavior, in
+the same task, without asking first — not every file in those locations regardless of relevance.
+Stale documentation is never acceptable output; a task that changes behavior but leaves the docs
+describing the old behavior is incomplete, not finished-with-a-follow-up.
 
 ## Agents share this session's rate limit — retry, don't substitute
 
-A subagent that fails with a session/token-limit error is not reporting a real task failure. It
-shares the same underlying budget as the orchestrating session; if the orchestrator is still able to
-run tool calls, the budget has recovered and the agent should be resumed (`SendMessage` to its
-agent id) to pick back up from its own transcript, not re-done directly by the orchestrator. Doing
-the work directly "to save time" defeats the reason agents were delegated to in the first place —
-the orchestrator has no capability advantage over an agent, only a higher cost per action, so
-absorbing an agent's work is strictly worse than retrying it.
+A subagent's session/token-limit failure is retryable, not a real task failure — it shares this
+session's budget. If the orchestrator can still run tool calls, resume the agent (`SendMessage` to
+its agent id) rather than redoing the work directly. The orchestrator has no capability advantage
+over an agent, only a higher cost per action — absorbing an agent's work is strictly worse than
+retrying it.
 
-## Parallel agents need real isolation, not just a promise not to collide
+## Parallel agents: use `isolation: "worktree"`, never a manually-managed directory
 
-Running two agents against this repo at once is only safe if they cannot both mutate the same
-working tree at the same time. `git checkout`/`git checkout -b` in the shared clone changes what is
-on disk out from under any other agent still reading or writing there — including the orchestrator
-itself. Use `git worktree add` (a separate branch, a separate directory) for anything that runs
-concurrently with other in-progress work in the shared clone, and reserve the shared clone itself for
-whichever single task currently owns it. Claude Code's own subagent `isolation: "worktree"` creates
-these under `.claude/worktrees/<name>/` inside the repo by default (documented at
-https://code.claude.com/docs/en/worktrees.md) — that's expected, not a mistake to work around; the
-docs' own fix is exactly what `.gitignore` does here (`.claude/worktrees/`), not relocating the
-worktree elsewhere.
+Dispatch every `Agent`-tool call with `isolation: "worktree"`. Do not manually `git worktree add` a
+directory and reuse it across separate dispatches — that caused a real incident (misattributed
+agent behavior, a wrongful `TaskStop`, real work destroyed by a reset while another agent was still
+active in the same directory). `isolation: "worktree"` makes that failure class structurally
+impossible, since each dispatch gets its own directory. Reserve manual `git worktree add` for work
+the orchestrator does directly, not through `Agent`.
+
+Exception: if the agent needs to see the orchestrator's own current uncommitted (staged or unstaged)
+changes, commit them (or otherwise transfer them) before dispatching — an isolated worktree is built
+from a real ref, so uncommitted state does not travel into it on its own, and the agent would
+silently evaluate stale code.
+
+A fresh worktree does not necessarily already sit on the branch or commit the work is meant to build
+on — it can default to the repository's default branch. Unless the agent is meant to work directly
+off the default branch, its first instruction must be to check out the specific source commit the
+task is being distributed from — in detached-HEAD state, or on a new branch created at that commit.
+Do not tell it to switch to the source branch by name: Git refuses to check out a branch that is
+already checked out in another worktree (including the orchestrator's own), which is the common
+case when work is being distributed off a branch the orchestrator is actively using.
+
+## Verifying what an agent did: query its session log, not git state
+
+When a decision depends on knowing exactly what an agent did (stop it? discard its work? believe a
+disputed claim?), check its session transcript (the `.output` JSONL path from its dispatch/notification
+result), not git state — a diff shows only the end result, not the sequence. The "don't read/tail
+this file" warning on that path is about full-file ingestion overflowing context, not the file being
+off-limits: query it with `Grep` (pattern match) or `jq` (structured fields — `.type`/`.name`/`.input`)
+instead of reading it whole.
+
+A positive match is strong evidence (the literal input string is right there). An absent match is
+not proof of a negative: indirect access — a shell variable, a glob, a helper script, a child
+process — may never put the literal filename in the recorded tool input. Treating "no match" as "did
+not happen" can reproduce the same false-negative mistake this section exists to prevent. If a
+negative claim actually matters, read the relevant tool calls in full rather than trusting an absent
+pattern match.
 
 ## Draft PRs and automated review
 
-Taking a PR out of draft is what makes it visible to automated review (this repo has picked up
-`chatgpt-codex-connector` review comments on past PRs, sometimes with real, correct findings — see
-PR #32's history). CI passing and no requested human reviewers is not the same as "nothing left to
-wait for" — un-drafting and merging in the same action gives automated review no window to run at
-all. Un-draft, then wait a real interval before merging, even on a change that looks obviously safe.
+Un-drafting a PR is what makes it visible to automated review (`chatgpt-codex-connector` on this
+repo — see PR #32). Un-draft, then wait a real interval before merging — never merge in the same
+action as un-drafting, even on a change that looks obviously safe.
 
 ## Local verification tools
 
-Use `npx tsx` (or the compiled `dist/` only via `npm run build` immediately beforehand) to run or
-reproduce TypeScript behavior ad hoc — never invoke stale `dist/` output with plain `node` without
-rebuilding first; this project's own history includes a real bug investigation that went sideways
-from exactly that stale-build confusion. `tsx` is deliberately not a project dependency, so `npx`
-(which fetches it on demand) is the form that actually works in a clean checkout — plain `tsx`
-assumes a global install that may not exist.
+Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScript checks, or rebuild
+`dist/` immediately before using it. Never run stale `dist/` output with plain `node`.
 
 ## `send_later` (self-scheduled check-ins)
 
-The `send_later` MCP tool has required manual approval in this environment and cannot be relied on
-for unattended PR check-ins here. Don't assume it will silently succeed; if scheduling a check-in
-matters, confirm it actually registered.
+Works without approval friction in this environment — verified: a call this session registered
+immediately, confirmed via `list_triggers`. Confirm registration via `list_triggers` whenever a
+schedule matters, regardless.

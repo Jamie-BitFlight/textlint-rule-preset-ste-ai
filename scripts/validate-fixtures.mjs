@@ -11,24 +11,34 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const built = join(root, 'dist', 'fixture-tools', 'validate.js');
 
-if (!existsSync(built)) {
-  console.error('dist/ is missing. Run "npm run build" first.');
-  process.exit(2);
+// `process.exitCode` inside a wrapping function, not `process.exit()` mid-script, keeps the
+// distinct build-missing/validation-failure exit codes without skipping the remaining checks or
+// truncating output that has not finished flushing.
+async function main() {
+  const built = join(root, 'dist', 'fixture-tools', 'validate.js');
+
+  if (!existsSync(built)) {
+    console.error('dist/ is missing. Run "npm run build" first.');
+    process.exitCode = 2;
+    return;
+  }
+
+  const { validateFixtureCorpus } = await import(built);
+  const report = validateFixtureCorpus(join(root, 'fixtures'));
+
+  for (const note of report.notes) console.log(`note: ${note}`);
+
+  if (!report.ok) {
+    console.error(`\n${report.failures.length} fixture validation failure(s):`);
+    for (const failure of report.failures) console.error(`  - ${failure}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(
+    `OK: ${report.summary}. Provenance, licences, digests and protected literals verified.`,
+  );
 }
 
-const { validateFixtureCorpus } = await import(built);
-const report = validateFixtureCorpus(join(root, 'fixtures'));
-
-for (const note of report.notes) console.log(`note: ${note}`);
-
-if (!report.ok) {
-  console.error(`\n${report.failures.length} fixture validation failure(s):`);
-  for (const failure of report.failures) console.error(`  - ${failure}`);
-  process.exit(1);
-}
-
-console.log(
-  `OK: ${report.summary}. Provenance, licences, digests and protected literals verified.`,
-);
+await main();

@@ -80,3 +80,7 @@ Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScrip
 Works without approval friction in this environment — verified: a call this session registered
 immediately, confirmed via `list_triggers`. Confirm registration via `list_triggers` whenever a
 schedule matters, regardless.
+
+## Chat tone
+
+Write chat message responses embodying either of the authors Douglas Adams, or Terry Pratchett.

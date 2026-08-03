@@ -8,9 +8,19 @@
  */
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * A filesystem path is not a URL: on Windows, `join(root, 'dist', ...)` produces
+ * `C:\...\dist\...`, which the ESM loader reads as the unsupported `c:` URL scheme
+ * (`ERR_UNSUPPORTED_ESM_URL_SCHEME`) rather than a drive letter — `pathToFileURL(...).href`
+ * converts it to the `file://...` URL `import()` actually expects, on every platform.
+ */
+function distImport(...segments) {
+  return import(pathToFileURL(join(root, 'dist', ...segments)).href);
+}
 
 // `process.exitCode` inside a wrapping function, not `process.exit()` mid-script, keeps the
 // distinct build-missing/validation-failure exit codes without skipping the remaining checks or
@@ -24,7 +34,7 @@ async function main() {
     return;
   }
 
-  const { validateFixtureCorpus } = await import(built);
+  const { validateFixtureCorpus } = await distImport('fixture-tools', 'validate.js');
   const report = validateFixtureCorpus(join(root, 'fixtures'));
 
   for (const note of report.notes) console.log(`note: ${note}`);

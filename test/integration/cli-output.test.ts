@@ -2,7 +2,23 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { main } from '../../src/cli/main.js';
+
+/** The subset of `--json`'s real output shape this test itself inspects. */
+const jsonOutputSchema = z.object({
+  results: z.array(
+    z.object({
+      suppressions: z.array(
+        z.object({
+          ruleId: z.string(),
+          reason: z.string(),
+          range: z.object({ start: z.number() }),
+        }),
+      ),
+    }),
+  ),
+});
 
 /**
  * What the CLI prints, as a reader sees it.
@@ -56,12 +72,7 @@ describe('ste-ai lint output', () => {
 
   it('carries the withheld findings in --json', async () => {
     const output = await lint('suppressed.md', DOC, '--json');
-    // The cast gives a shape to check `.results[0]?.suppressions[0]` against; the `expect()`s
-    // right below are what actually verify the values this test cares about are present.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const parsed = JSON.parse(output) as {
-      results: { suppressions: { ruleId: string; reason: string; range: { start: number } }[] }[];
-    };
+    const parsed = jsonOutputSchema.parse(JSON.parse(output));
     const record = parsed.results[0]?.suppressions[0];
     expect(record?.ruleId).toBe('unapproved-vocabulary');
     expect(record?.reason).toBe('Vendor spelling fixed by contract.');

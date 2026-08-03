@@ -51,6 +51,42 @@ function cacheKey(text: string, ruleId: string, options: unknown, baseDir: strin
 }
 
 /**
+ * Whether `value` is a plain object — not `null`, not an array, not some other JS object subtype.
+ *
+ * This is the only structural fact the reporter below can honestly assert about `rawOptions` (the
+ * end user's own `.textlintrc.json` rule config) and its nested `shared` field before
+ * `getAnalysis`'s own config resolution (`resolveConfig`/`steAiConfigSchema`, `src/core/config.ts`)
+ * does the real, deep validation downstream. That validation is deliberately not duplicated here:
+ * `steAiConfigSchema`'s fields carry defaults (`.default()`/`.prefault()`), so parsing `shared`
+ * through it this early — before the merge with `sharedFile.config` inside `getAnalysis` — would
+ * silently invent a default for every field the user's inline `shared` option left unmentioned,
+ * overriding whatever `sharedFile.config` (the `.ste-ai.json` shared-config file) actually set for
+ * that field (verified directly: a minimal repro of the same `.prefault({})`-wrapped-sub-schema
+ * shape shows a field the shared-config file sets non-default gets silently reset to the schema's
+ * own default the moment `shared` omits it and is parsed before the merge). Deferring full
+ * validation to the merged result, as this code already did before this fix, is what keeps a
+ * malformed `shared` failing once, in one place, with one error shape — the same one a malformed
+ * `.ste-ai.json` file produces — rather than earlier and differently here.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A plain object whose own values are themselves plain objects — the shallow shape
+ * `sharedFile.config.rules`/`shared.rules`/`perRuleOptions` all share (a per-rule-id map of
+ * per-rule option bags) before {@link getAnalysis} merges the three together below. One level
+ * deeper than {@link isPlainObject} for the same reason: spreading a non-object value found at
+ * `sharedRules[id]` into `mergedRules[id]` would silently produce nonsense (per-character keys
+ * for a string, a no-op for `null`/`undefined`) rather than fail loudly. What each rule's own
+ * options actually mean is still validated later, per rule, by that rule's own `optionsSchema` in
+ * `src/core/runner.ts` — this only rules out shapes that could not possibly merge sensibly.
+ */
+function isRecordOfRecords(value: unknown): value is Record<string, Record<string, unknown>> {
+  return isPlainObject(value) && Object.values(value).every(isPlainObject);
+}
+
+/**
  * Analyse the document once per (text, shared configuration) pair.
  *
  * Rules within one textlint run share the entry, so a 14-rule preset performs one analysis and, at
@@ -60,7 +96,14 @@ export function getAnalysis(
   text: string,
   filePath: string | undefined,
   baseDir: string | undefined,
-  shared: SteAiConfigInput | undefined,
+  /**
+   * Deliberately typed as an unvalidated plain object, not `SteAiConfigInput`: this function's own
+   * merge below (`{ ...sharedFile.config, ...shared, rules: mergedRules }`) is what has to run
+   * before `resolveConfig`/`steAiConfigSchema` can validate the result, so `shared` cannot honestly
+   * carry a validated type yet — see `isPlainObject`'s doc comment in this file for why validating
+   * it earlier would be actively wrong, not just redundant.
+   */
+  shared: Record<string, unknown> | undefined,
   perRuleOptions: ReadonlyMap<string, Record<string, unknown>>,
 ): Promise<AnalysisResult> {
   const resolvedBaseDir = baseDir ?? process.cwd();
@@ -70,7 +113,7 @@ export function getAnalysis(
   // textlint options, then the rule's own textlint options. Each layer is merged key by key —
   // replacing the object wholesale would silently drop an `enabled: false` set by a lower layer.
   const fileRules = sharedFile.config.rules as Record<string, Record<string, unknown>>;
-  const sharedRules = (shared?.rules ?? {}) as Record<string, Record<string, unknown>>;
+  const sharedRules = isRecordOfRecords(shared?.['rules']) ? shared['rules'] : {};
   const mergedRules: Record<string, Record<string, unknown>> = {};
   for (const id of new Set([
     ...Object.keys(fileRules),
@@ -167,12 +210,10 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
   ): TextlintRuleReportHandler => {
     const { Syntax, report, fixer, locator, getSource } = context;
     // `rawOptions` is the end user's own `.textlintrc.json` rule config, typed by textlint itself
-    // only as a bare `object` — genuinely unknown until read. `SteRuleOptions`'s index signature
-    // already treats every key but `shared` as `unknown`, so this narrows only `shared`'s presence,
-    // not its shape; a wrongly-shaped `shared` still fails later, at `getAnalysis`'s own config
-    // resolution, the same as a malformed shared-config file does.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const { shared, ...ownOptions } = (rawOptions ?? {}) as SteRuleOptions;
+    // only as a bare `object` — genuinely unknown until read, and `isPlainObject` (this file) is
+    // exactly as much as either `rawOptions` or its nested `shared` field can be honestly narrowed
+    // before `getAnalysis`'s own config resolution does the real, deep validation downstream.
+    const { shared, ...ownOptions } = isPlainObject(rawOptions) ? rawOptions : {};
 
     return {
       [Syntax.Document]: async (node) => {
@@ -182,7 +223,7 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
           text,
           context.getFilePath(),
           context.getConfigBaseDir(),
-          shared,
+          isPlainObject(shared) ? shared : undefined,
           new Map([[ruleId, ownOptions]]),
         );
 

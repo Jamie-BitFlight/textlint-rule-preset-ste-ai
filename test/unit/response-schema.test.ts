@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   extractJson,
   semanticVerdictJsonSchema,
   validateSemanticResponse,
 } from '../../src/semantic/response-schema.js';
+
+/** The subset of `semanticVerdictJsonSchema`'s real shape this test itself inspects. */
+const jsonSchemaShape = z.object({
+  additionalProperties: z.boolean().optional(),
+  required: z.array(z.string()).optional(),
+});
 
 const ctx = { expectedRuleId: 'r1', passageLength: 40 };
 
@@ -85,11 +92,7 @@ describe('validateSemanticResponse', () => {
   for (const [label, raw, kind] of rejections) {
     it(`rejects ${label} as ${kind}`, () => {
       const result = validateSemanticResponse(raw, ctx);
-      expect(result.ok).toBe(false);
-      // The `if` is a discriminated-union type guard, not real branching: the previous line
-      // already throws unless `result.ok` is false, so this always runs.
-      // oxlint-disable-next-line vitest/no-conditional-expect
-      if (!result.ok) expect(result.kind).toBe(kind);
+      expect(result).toMatchObject({ ok: false, kind });
     });
   }
 
@@ -124,13 +127,9 @@ describe('extractJson', () => {
 describe('semanticVerdictJsonSchema', () => {
   it('forbids additional properties so grammar-constrained decoding matches the validator', () => {
     // `semanticVerdictJsonSchema` is declared `unknown` at its own source (JSON Schema's shape
-    // varies by what zod emits) — the cast gives this one test a shape to check against, and the
-    // `expect()`s below are what actually verify the values.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const schema = semanticVerdictJsonSchema as {
-      additionalProperties?: boolean;
-      required?: string[];
-    };
+    // varies by what zod emits) — `jsonSchemaShape.parse` gives this one test a real, verified
+    // shape to check against instead of asserting one.
+    const schema = jsonSchemaShape.parse(semanticVerdictJsonSchema);
     expect(schema.additionalProperties).toBe(false);
     expect(schema.required).toEqual(
       expect.arrayContaining([

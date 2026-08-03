@@ -1,0 +1,64 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { clearAnalysisCache, getAnalysis } from '../../src/textlint/adapter.js';
+import { clearSharedConfigCache } from '../../src/textlint/shared-config.js';
+
+/**
+ * Regression: `getAnalysis` merges `sharedFile.config` (the `.ste-ai.json` on disk) with `shared`
+ * (a rule's own inline `shared` textlint option) via a shallow, top-level-key spread — the last
+ * write for a given top-level key (`diagnostics`, `autofix`, …) wins, the same way a plain
+ * `{ ...a, ...b }` always does. `steAiConfigSchema`'s fields carry defaults
+ * (`.default()`/`.prefault()`, see `src/core/config.ts`), so a `shared` value that has already been
+ * validated through that schema — even one the caller never explicitly set most fields on — carries
+ * every field, each either the caller's real value or the schema's own default. Merged on top of
+ * `sharedFile.config` that way, an unrelated field the shared-config *file* set to something
+ * non-default would be silently overwritten by the schema's default the moment `shared` merely
+ * *omitted* that field, even though the inline rule option never meant to touch it at all.
+ *
+ * `getAnalysis`'s `shared` parameter is therefore deliberately typed and treated as an
+ * *unvalidated* plain object, never parsed through `steAiConfigSchema` before this merge — only the
+ * merge's own result is validated, once, downstream. This test proves that discipline holds: a
+ * `.ste-ai.json` file's non-default setting for one field survives an inline `shared` option that
+ * sets a completely different field and never mentions the first.
+ */
+describe('getAnalysis merges a shared-config file with an inline shared option', () => {
+  let baseDir: string;
+
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), 'ste-ai-shared-config-'));
+    clearSharedConfigCache();
+    clearAnalysisCache();
+  });
+
+  afterEach(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+    clearSharedConfigCache();
+    clearAnalysisCache();
+  });
+
+  it('keeps the config file’s setting for a field the inline shared option never mentions', async () => {
+    // The file sets a non-default value for one field, `diagnostics.reportSuppressed`.
+    writeFileSync(
+      join(baseDir, '.ste-ai.json'),
+      JSON.stringify({ diagnostics: { reportSuppressed: true } }),
+    );
+
+    // The inline `shared` option (what a rule receives from its own textlint options) sets a
+    // different field, `approvedTerms`, and says nothing about `diagnostics` at all.
+    const result = await getAnalysis(
+      'Utilise the bracket.\n',
+      undefined,
+      baseDir,
+      { approvedTerms: ['Utilise'] },
+      new Map(),
+    );
+
+    // Both settings must hold: the inline option's own field, and the file's field it never
+    // mentioned. Losing the second to the schema's own default (`reportSuppressed: false`) is
+    // exactly the regression this test guards against.
+    expect(result.config.approvedTerms).toContain('Utilise');
+    expect(result.config.diagnostics.reportSuppressed).toBe(true);
+  });
+});

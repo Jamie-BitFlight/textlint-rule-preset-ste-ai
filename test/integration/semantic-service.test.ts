@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { analyseText, analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { LlamaCppClient } from '../../src/model-client/llama-client.js';
 import {
@@ -6,6 +7,13 @@ import {
   verdictJson,
   type FakeService,
 } from '../helpers/fake-semantic-service.js';
+
+/** The subset of the real request body this test itself inspects. */
+const seenBodySchema = z.object({
+  model: z.string(),
+  messages: z.array(z.unknown()),
+  response_format: z.object({ type: z.string() }).optional(),
+});
 
 /**
  * Integration tests against a real HTTP server that speaks the llama.cpp OpenAI-compatible route.
@@ -90,10 +98,7 @@ describe('llama.cpp client against a real server', () => {
     });
     expect(response.modelId).toBe('fake-model');
     expect(response.text).toContain('"status"');
-    // The cast gives a shape to check against; the `expect()`s below are what actually verify the
-    // real HTTP client sent the fields this test cares about.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const body = seen as { model: string; messages: unknown[]; response_format?: { type: string } };
+    const body = seenBodySchema.parse(seen);
     expect(body.model).toBe('fake-model');
     expect(body.messages).toHaveLength(1);
     expect(body.response_format?.type).toBe('json_schema');

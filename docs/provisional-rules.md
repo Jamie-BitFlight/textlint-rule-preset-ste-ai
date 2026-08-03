@@ -536,8 +536,8 @@ independent one-word verbs.
 | ------------------------------ | -----: | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list-instruction-structure`   |      3 |     3 | Unaffected — does not depend on imperative/function-word detection.                                                                                                                            |
 | `one-instruction-per-sentence` |      6 |     6 | Same count; composition unchanged after the auxiliary-verb fix above.                                                                                                                          |
-| `noun-cluster-candidate`       |     70 |    48 | −22. This rule has **zero** confirmed true positives in 24 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
-| `ambiguous-pronoun-candidate`  |     68 |    60 | −8. Both of the rule's 2 confirmed true positives (`httpd-mod-ssl-directive-config`, `postgres-vacuum-overview`) were checked directly and are still generated as candidates.                  |
+| `noun-cluster-candidate`       |     35 |    24 | −11. This rule has **zero** confirmed true positives in 24 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
+| `ambiguous-pronoun-candidate`  |     34 |    30 | −4. Both of the rule's 2 confirmed true positives (`httpd-mod-ssl-directive-config`, `postgres-vacuum-overview`) were checked directly and are still generated as candidates.                  |
 
 The one confirmed `one-instruction-per-sentence` true positive (`osha-ppe-requirements`) was also
 checked directly and is still generated as a candidate, not a hard violation.

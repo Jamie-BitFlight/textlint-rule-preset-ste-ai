@@ -1,3 +1,4 @@
+import type { TextlintRuleModule } from '@textlint/types';
 import TextLintTesterModule from 'textlint-tester';
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
 import { rules } from '../../src/textlint/preset.js';
@@ -58,7 +59,7 @@ const tester = new TextLintTester();
 // `undefined`); each call below pins a single rule under test by its known id, so a missing entry
 // is a real bug in the test itself (a typo'd id, or a rule renamed without updating callers), not a
 // case to paper over with a non-null assertion.
-function mustGetRule(id: string): unknown {
+function mustGetRule(id: string): TextlintRuleModule {
   const rule = rules[id];
   if (rule === undefined) {
     throw new Error(`preset does not define a rule named "${id}"`);

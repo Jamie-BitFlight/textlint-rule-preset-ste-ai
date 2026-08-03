@@ -36,8 +36,13 @@ jobs:
 
       # The default suite must never need a model service. If this step starts requiring network
       # access, that is a regression in the deterministic-only guarantee.
-      - name: Unit, integration, fixture and e2e tests
-        run: npm test
+      #
+      # Runs `test:coverage`, not plain `test`: vitest.config.ts's coverage `thresholds` are only
+      # evaluated when coverage collection is enabled (`--coverage`), so this is the step that
+      # actually enforces them — running the plain suite here would let a coverage regression pass
+      # CI silently despite the thresholds existing in config.
+      - name: Unit, integration, fixture and e2e tests (with coverage enforcement)
+        run: npm run test:coverage
 
       - name: Fixture provenance and corpus integrity
         run: node scripts/validate-fixtures.mjs

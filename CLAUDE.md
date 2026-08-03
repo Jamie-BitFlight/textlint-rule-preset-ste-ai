@@ -1,11 +1,22 @@
 # Working on this repo
 
-## Documentation stays in sync with code — no confirmation needed
+## Discover docs and tests before a functional change; reconcile both after — no confirmation needed
 
-Update whichever of `README.md`, `docs/`, or doc comments actually describe the changed behavior, in
-the same task, without asking first — not every file in those locations regardless of relevance.
-Stale documentation is never acceptable output; a task that changes behavior but leaves the docs
-describing the old behavior is incomplete, not finished-with-a-follow-up.
+Before changing behavior, find what already describes or covers the system being touched: search
+`README.md`, `docs/`, and doc comments for references, and search `test/` **and `scripts/ci/`** for
+coverage of the same code paths — `.github/workflows/ci.yml` runs `scripts/ci/*.sh` as assertions
+separate from `npm test` (e.g. `check-rules-provisional.sh` hard-codes the expected rule count), so
+a change that only reconciles `test/` can still leave one of those scripts stale and fail CI. Do
+this before writing the change, not after — the discovery is what the post-change reconciliation
+checks against.
+
+After the change, treat that discovery list as part of the work, not a follow-up: update or remove
+whichever of those docs actually describe the changed behavior, and update or remove whichever of
+those tests or CI assertion scripts now assert the old behavior — not every file discovery turned up
+regardless of relevance. Definition of done includes removing or updating stale tests, CI assertion
+scripts, and documentation, not just adding new ones; a task that changes behavior but leaves a doc,
+a test, or a `scripts/ci/*.sh` check describing the old behavior in place is incomplete, not
+finished-with-a-follow-up.
 
 ## Agents share this session's rate limit — retry, don't substitute
 

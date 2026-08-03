@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 export const licenceEvidenceSchema = z.object({
   /** Where the licence statement is published. */
-  url: z.string().url(),
+  url: z.url(),
   /** Verbatim licence statement, or the path of the licence file in the upstream repository. */
   quote: z.string().min(10),
   /** How the evidence was obtained. */
@@ -33,7 +33,7 @@ export const fixtureEntrySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,60}$/, 'ids are lower-case kebab-case'),
   title: z.string().min(3),
   sourceOrganisation: z.string().min(2),
-  sourceUrl: z.string().url(),
+  sourceUrl: z.url(),
   /** ISO-8601 date the source was retrieved. */
   retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   /** SPDX identifier where one exists, otherwise the licence's published name. */
@@ -101,7 +101,7 @@ export const fixtureManifestSchema = z.object({
 });
 
 export const provenanceRecordSchema = z.object({
-  url: z.string().url(),
+  url: z.url(),
   httpStatus: z.number().int(),
   fetchedAt: z.string().min(4),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),

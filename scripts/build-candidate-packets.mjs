@@ -15,10 +15,20 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * A filesystem path is not a URL: on Windows, `join(root, 'dist', ...)` produces
+ * `C:\...\dist\...`, which Node's ESM loader reads as the unsupported `c:` URL scheme
+ * (`ERR_UNSUPPORTED_ESM_URL_SCHEME`) rather than a drive letter — `pathToFileURL(...).href`
+ * converts it to the `file://...` URL `import()` actually expects, on every platform.
+ */
+function distImport(...segments) {
+  return import(pathToFileURL(join(root, 'dist', ...segments)).href);
+}
 
 // Statically importing from `../dist/...` (as this file used to) only resolves once `npm run
 // build` has produced it, and CI's own lint step runs before its build step (see
@@ -34,11 +44,11 @@ async function main() {
     return;
   }
 
-  const { resolveConfig } = await import(join(root, 'dist', 'core', 'config.js'));
-  const { analyseDocument } = await import(join(root, 'dist', 'core', 'document.js'));
-  const { runDeterministicRules } = await import(join(root, 'dist', 'core', 'runner.js'));
-  const { deterministicRules } = await import(join(root, 'dist', 'deterministic', 'index.js'));
-  const { resolveRulePack } = await import(join(root, 'dist', 'rule-pack', 'loader.js'));
+  const { resolveConfig } = await distImport('core', 'config.js');
+  const { analyseDocument } = await distImport('core', 'document.js');
+  const { runDeterministicRules } = await distImport('core', 'runner.js');
+  const { deterministicRules } = await distImport('deterministic', 'index.js');
+  const { resolveRulePack } = await distImport('rule-pack', 'loader.js');
 
   let values;
   try {

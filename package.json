@@ -100,22 +100,25 @@
     }
   },
   "dependencies": {
-    "@textlint/ast-node-types": "^15.7.1",
-    "@textlint/markdown-to-ast": "^15.7.1",
+    "@textlint/ast-node-types": "^15.8.0",
+    "@textlint/markdown-to-ast": "^15.8.0",
     "sentence-splitter": "^5.0.1",
     "text-readability": "^1.1.1",
-    "zod": "^4.1.10"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@textlint/types": "^15.7.1",
+    "@textlint/kernel": "^15.8.0",
+    "@textlint/textlint-plugin-markdown": "^15.8.0",
+    "@textlint/textlint-plugin-text": "^15.8.0",
+    "@textlint/types": "^15.8.0",
     "@types/node": "^26.1.2",
-    "@vitest/coverage-v8": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "oxlint": "^1.76.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "prettier": "^3.6.2",
-    "textlint": "^15.7.1",
-    "textlint-tester": "^15.7.1",
+    "prettier": "^3.9.6",
+    "textlint": "^15.8.0",
+    "textlint-tester": "^15.8.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.10"
   }
 }

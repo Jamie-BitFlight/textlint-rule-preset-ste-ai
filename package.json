@@ -67,7 +67,7 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist .tsbuildinfo coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint . && prettier --check .",
+    "lint": "oxlint && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
@@ -107,16 +107,15 @@
     "zod": "^4.1.10"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@textlint/types": "^15.7.1",
     "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.0.0",
-    "eslint": "^10.8.0",
+    "oxlint": "^1.76.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.6.2",
     "textlint": "^15.7.1",
     "textlint-tester": "^15.7.1",
-    "typescript": "^5.9.0",
-    "typescript-eslint": "^8.46.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.0"
   }
 }

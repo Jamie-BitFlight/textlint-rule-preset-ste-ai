@@ -251,7 +251,7 @@ export function analyseTextDeterministic(
     document,
     candidates: pass.candidates,
     suppressions: suppressed.suppressions,
-    diagnostics: [...resolved.diagnostics].sort(
+    diagnostics: resolved.diagnostics.toSorted(
       (a, b) =>
         a.range.start - b.range.start ||
         a.range.end - b.range.end ||
@@ -439,9 +439,9 @@ function suppressDiagnostics(
     alreadyRefused: pass.refused,
   });
 
-  const suppressions = [...pass.records, ...applied.suppressions].sort(
-    (a, b) => a.range.start - b.range.start || a.ruleId.localeCompare(b.ruleId),
-  );
+  const suppressions = pass.records
+    .concat(applied.suppressions)
+    .toSorted((a, b) => a.range.start - b.range.start || a.ruleId.localeCompare(b.ruleId));
 
   return {
     diagnostics: applied.diagnostics,
@@ -564,7 +564,7 @@ export async function analyseText(
   // Overlap resolution must see deterministic and semantic fixes together, and must see only the
   // findings that survived suppression.
   const merged = resolveOverlappingFixes(suppressed.diagnostics);
-  const diagnostics = [...merged.diagnostics].sort(
+  const diagnostics = merged.diagnostics.toSorted(
     (a, b) =>
       a.range.start - b.range.start ||
       a.range.end - b.range.end ||

@@ -78,15 +78,18 @@ export function getAnalysis(
     ...perRuleOptions.keys(),
   ])) {
     mergedRules[id] = {
-      ...(fileRules[id] ?? {}),
-      ...(sharedRules[id] ?? {}),
-      ...(perRuleOptions.get(id) ?? {}),
+      ...fileRules[id],
+      ...sharedRules[id],
+      ...perRuleOptions.get(id),
     };
   }
 
   const config: SteAiConfigInput = {
-    ...(sharedFile.config as unknown as SteAiConfigInput),
-    ...(shared ?? {}),
+    // `sharedFile.config` is already a validated `SteAiConfig` (every field present, via
+    // `resolveConfig` in `shared-config.ts`) — a strict subtype of the more-optional
+    // `SteAiConfigInput`, so no assertion is needed to spread it here.
+    ...sharedFile.config,
+    ...shared,
     rules: mergedRules,
   };
 
@@ -163,6 +166,12 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
     rawOptions?: object,
   ): TextlintRuleReportHandler => {
     const { Syntax, report, fixer, locator, getSource } = context;
+    // `rawOptions` is the end user's own `.textlintrc.json` rule config, typed by textlint itself
+    // only as a bare `object` — genuinely unknown until read. `SteRuleOptions`'s index signature
+    // already treats every key but `shared` as `unknown`, so this narrows only `shared`'s presence,
+    // not its shape; a wrongly-shaped `shared` still fails later, at `getAnalysis`'s own config
+    // resolution, the same as a malformed shared-config file does.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const { shared, ...ownOptions } = (rawOptions ?? {}) as SteRuleOptions;
 
     return {

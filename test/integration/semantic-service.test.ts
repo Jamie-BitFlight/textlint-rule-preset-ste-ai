@@ -38,6 +38,32 @@ function semanticConfig(endpoint: string, overrides: Record<string, unknown> = {
   };
 }
 
+/** Rule ids of a diagnostic set's deterministic-only findings, sorted for order-independent comparison. */
+function deterministicIds(ds: readonly { ruleId: string; producedBy: string }[]): string[] {
+  return ds
+    .filter((d) => d.producedBy === 'deterministic')
+    .map((d) => d.ruleId)
+    .toSorted();
+}
+
+/** Reports a weak-confidence violation for whatever rule id the prompt asked about. */
+function weakSignalHandler(body: { messages?: { role: string; content: string }[] }) {
+  const user = body.messages?.find((m) => m.role === 'user')?.content ?? '';
+  const ruleId = /ruleId:\s*(\S+)/.exec(user)?.[1] ?? 'unknown';
+  return {
+    content: verdictJson({
+      ruleId,
+      status: 'violation',
+      confidence: 0.4,
+      evidenceStart: 0,
+      evidenceEnd: 6,
+      explanation: 'Weak signal.',
+      suggestedReplacements: [],
+      meaningPreserved: false,
+    }),
+  };
+}
+
 describe('llama.cpp client against a real server', () => {
   it('sends an OpenAI-shaped body and parses the reply', async () => {
     let seen: unknown;
@@ -64,6 +90,9 @@ describe('llama.cpp client against a real server', () => {
     });
     expect(response.modelId).toBe('fake-model');
     expect(response.text).toContain('"status"');
+    // The cast gives a shape to check against; the `expect()`s below are what actually verify the
+    // real HTTP client sent the fields this test cares about.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const body = seen as { model: string; messages: unknown[]; response_format?: { type: string } };
     expect(body.model).toBe('fake-model');
     expect(body.messages).toHaveLength(1);
@@ -177,23 +206,7 @@ describe('end-to-end semantic analysis via HTTP', () => {
   });
 
   it('suppresses a violation below the configured threshold and reports it when asked', async () => {
-    const handler = (body: { messages?: { role: string; content: string }[] }) => {
-      const user = body.messages?.find((m) => m.role === 'user')?.content ?? '';
-      const ruleId = /ruleId:\s*(\S+)/.exec(user)?.[1] ?? 'unknown';
-      return {
-        content: verdictJson({
-          ruleId,
-          status: 'violation',
-          confidence: 0.4,
-          evidenceStart: 0,
-          evidenceEnd: 6,
-          explanation: 'Weak signal.',
-          suggestedReplacements: [],
-          meaningPreserved: false,
-        }),
-      };
-    };
-    service = await startFakeSemanticService({ handler });
+    service = await startFakeSemanticService({ handler: weakSignalHandler });
 
     const quiet = await analyseText(TWO_ACTIONS, { config: semanticConfig(service.url) });
     expect(quiet.diagnostics.filter((d) => d.category === 'suppressed-low-confidence')).toEqual([]);
@@ -324,11 +337,6 @@ describe('service-outage policy', () => {
     const text = "Utilise the bracket. Don't touch the busbar.\n";
     const withOutage = await analyseText(text, { config: semanticConfig(service.url) });
     const offline = analyseTextDeterministic(text);
-    const deterministicIds = (ds: readonly { ruleId: string; producedBy: string }[]) =>
-      ds
-        .filter((d) => d.producedBy === 'deterministic')
-        .map((d) => d.ruleId)
-        .sort();
     expect(deterministicIds(withOutage.diagnostics)).toEqual(deterministicIds(offline.diagnostics));
   });
 

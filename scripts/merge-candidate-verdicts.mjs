@@ -67,7 +67,7 @@ const problems = [];
 /** fixtureId -> passageId -> adjudication record */
 const merged = new Map();
 
-for (const file of jsonFiles(verdictsDir).sort()) {
+for (const file of jsonFiles(verdictsDir).toSorted()) {
   const doc = JSON.parse(readFileSync(join(verdictsDir, file), 'utf8'));
   const reviewer = doc.reviewer;
   if (typeof reviewer !== 'string' || reviewer.length === 0) {
@@ -144,7 +144,7 @@ for (const fixture of manifest.fixtures) {
   const judged = merged.get(fixture.id);
   if (judged === undefined) continue;
   // Sort by span so the file is stable regardless of which reviewer produced which row.
-  const records = [...judged.values()].sort(
+  const records = [...judged.values()].toSorted(
     (a, b) =>
       a.span.start - b.span.start || a.span.end - b.span.end || a.ruleId.localeCompare(b.ruleId),
   );
@@ -154,7 +154,10 @@ for (const fixture of manifest.fixtures) {
   const annotation = JSON.parse(readFileSync(path, 'utf8'));
   annotation.candidateAdjudications = records;
   const reviewers = new Set([...(annotation.reviewers ?? []), ...records.map((r) => r.reviewer)]);
-  annotation.reviewers = [...reviewers].sort();
+  // `annotation` comes from `JSON.parse`, so its element types are unresolved (`any`) to the
+  // type checker even though every reviewer id is a string at runtime; give an explicit compare
+  // instead of relying on the (unprovable-here) string-array default.
+  annotation.reviewers = [...reviewers].toSorted((a, b) => String(a).localeCompare(String(b)));
   writeFileSync(path, `${JSON.stringify(annotation, null, 2)}\n`);
   written += 1;
 }

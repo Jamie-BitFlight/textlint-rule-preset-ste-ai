@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgsNode, type ParseArgsOptionsConfig } from 'node:util';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
+import { steAiConfigSchema } from '../core/config.js';
 import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
@@ -100,11 +101,21 @@ function parseArgs(argv: readonly string[]): Args {
 
 const SEVERITY_ORDER = { info: 0, warning: 1, error: 2 } as const;
 
+/** Real type guard rather than a cast: `in` alone narrows `SEVERITY_ORDER`, not `value`. */
+function isSeverityKey(value: string): value is keyof typeof SEVERITY_ORDER {
+  return value in SEVERITY_ORDER;
+}
+
 function buildConfig(args: Args): SteAiConfigInput {
   const configPath = args.flags.get('config');
   const base: SteAiConfigInput =
     typeof configPath === 'string'
-      ? (JSON.parse(readFileSync(configPath, 'utf8')) as SteAiConfigInput)
+      ? // The file's shape is genuinely unknown until validated — `JSON.parse` returns `any`, and
+        // an assertion would only assume correctness, not check it. `steAiConfigSchema.parse`
+        // validates the same boundary `resolveConfig` validates elsewhere, so a malformed
+        // `--config` file fails loudly here instead of producing a wrongly-shaped config that only
+        // breaks later, confusingly, downstream.
+        steAiConfigSchema.parse(JSON.parse(readFileSync(configPath, 'utf8')))
       : {};
   const semanticEnabled = args.flags.get('semantic') === true;
   const endpoint = args.flags.get('endpoint');
@@ -112,7 +123,7 @@ function buildConfig(args: Args): SteAiConfigInput {
   return {
     ...base,
     semantic: {
-      ...(base.semantic ?? {}),
+      ...base.semantic,
       enabled: semanticEnabled,
       ...(typeof endpoint === 'string' ? { endpoint } : {}),
       ...(typeof model === 'string' ? { model } : {}),
@@ -132,9 +143,7 @@ async function lint(args: Args): Promise<number> {
   const formatFlag = args.flags.get('format');
   const minSeverity = args.flags.get('min-severity');
   const threshold =
-    typeof minSeverity === 'string' && minSeverity in SEVERITY_ORDER
-      ? SEVERITY_ORDER[minSeverity as keyof typeof SEVERITY_ORDER]
-      : 0;
+    typeof minSeverity === 'string' && isSeverityKey(minSeverity) ? SEVERITY_ORDER[minSeverity] : 0;
 
   const results: {
     file: string;

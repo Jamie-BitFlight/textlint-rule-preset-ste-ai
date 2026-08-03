@@ -86,6 +86,9 @@ describe('validateSemanticResponse', () => {
     it(`rejects ${label} as ${kind}`, () => {
       const result = validateSemanticResponse(raw, ctx);
       expect(result.ok).toBe(false);
+      // The `if` is a discriminated-union type guard, not real branching: the previous line
+      // already throws unless `result.ok` is false, so this always runs.
+      // oxlint-disable-next-line vitest/no-conditional-expect
       if (!result.ok) expect(result.kind).toBe(kind);
     });
   }
@@ -120,6 +123,10 @@ describe('extractJson', () => {
 
 describe('semanticVerdictJsonSchema', () => {
   it('forbids additional properties so grammar-constrained decoding matches the validator', () => {
+    // `semanticVerdictJsonSchema` is declared `unknown` at its own source (JSON Schema's shape
+    // varies by what zod emits) — the cast gives this one test a shape to check against, and the
+    // `expect()`s below are what actually verify the values.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const schema = semanticVerdictJsonSchema as {
       additionalProperties?: boolean;
       required?: string[];

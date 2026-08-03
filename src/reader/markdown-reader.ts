@@ -125,10 +125,17 @@ interface WalkContext {
  * whole line to be nothing else — so it falls through to the ordinary branch and reports its own
  * admonition directly, with nothing left to propagate.
  */
+// Every `child as TxtXNode` cast below is verified by the immediately preceding `case 'X':` on
+// `child.type`, but TypeScript cannot narrow on it: `@textlint/ast-node-types` exports
+// `AnyTxtNode` as `TxtNode | TxtTextNode | TxtParentNode` (see `NodeType.d.ts`), a structural
+// three-way split, not a union discriminated per node tag, so `switch (child.type)` narrows only
+// within those three shapes, never down to the exact node interface a specific `case` implies.
+// The runtime tag is authoritative; the cast just restates what the `case` already guarantees.
 function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Generator<TextUnit> {
   for (const child of children) {
     switch (child.type) {
       case 'Header': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const header = child as TxtHeaderNode;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
@@ -149,6 +156,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'Paragraph': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const paragraph = child as TxtParagraphNode;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
@@ -238,6 +246,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'BlockQuote': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const blockQuote = child as TxtBlockQuoteNode;
         yield* walkChildren(blockQuote.children, {
           ...ctx,
@@ -255,6 +264,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'List': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const list = child as TxtListNode;
         // Only a list nested inside another list's item is genuinely one level deeper; a list found
         // directly under the document (or a blockquote) is the outermost list and stays at 0.
@@ -278,24 +288,28 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // Reached only if a `ListItem` is ever encountered somewhere other than as a direct child of
         // a `List` (the `List` case above handles the normal path itself, so it can assign each
         // item's own ordinal) — defensive, not the primary path.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const listItem = child as TxtListItemNode;
         yield* walkChildren(listItem.children, { ...ctx, containerKind: 'list-item' });
         break;
       }
 
       case 'Table': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const table = child as TxtTableNode;
         yield* walkChildren(table.children, ctx);
         break;
       }
 
       case 'TableRow': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const row = child as TxtTableRowNode;
         yield* walkChildren(row.children, ctx);
         break;
       }
 
       case 'TableCell': {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const cell = child as TxtTableCellNode;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
@@ -326,6 +340,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // code regardless of what precedes it. An indented code block with neither condition met
         // (the ordinary case: no admonition opener before it at all) is left alone, exactly as
         // before.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
         const codeBlock = child as TxtCodeBlockNode;
         const pending = ctx.pending.value;
         const active = pending !== 'none' ? pending : ctx.containerAdmonition.value;

@@ -144,7 +144,7 @@ export function goldLabelFor(
 
 function percentile(values: readonly number[], p: number): number {
   if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = values.toSorted((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
   return sorted[index] ?? 0;
 }
@@ -292,7 +292,7 @@ export async function evaluateSemanticEvaluators(
     }
   }
 
-  const evaluatorIds = [...new Set(cases.map((c) => c.evaluatorId))].sort();
+  const evaluatorIds = [...new Set(cases.map((c) => c.evaluatorId))].toSorted();
   return {
     split: options.split,
     model: config.semantic.model,
@@ -334,7 +334,7 @@ export function formatEvaluationReport(report: EvaluationReport): string {
     `${m.uncertainRate.toFixed(3).padStart(9)}  ${m.failureRate.toFixed(3).padStart(6)}  ` +
     `${String(m.goldPositives).padStart(5)}  ${String(m.goldNegatives).padStart(5)}  ` +
     `${String(Math.round(m.latencyMs.p50)).padStart(5)}  ` +
-    `${String(Math.round(m.latencyMs.p90)).padStart(5)}`;
+    String(Math.round(m.latencyMs.p90)).padStart(5);
   for (const m of report.perEvaluator) lines.push(row(m));
   lines.push('');
   lines.push(row(report.overall));

@@ -56,6 +56,9 @@ describe('ste-ai lint output', () => {
 
   it('carries the withheld findings in --json', async () => {
     const output = await lint('suppressed.md', DOC, '--json');
+    // The cast gives a shape to check `.results[0]?.suppressions[0]` against; the `expect()`s
+    // right below are what actually verify the values this test cares about are present.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const parsed = JSON.parse(output) as {
       results: { suppressions: { ruleId: string; reason: string; range: { start: number } }[] }[];
     };

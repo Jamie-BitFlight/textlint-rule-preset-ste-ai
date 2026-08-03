@@ -193,6 +193,10 @@ describe('request construction', () => {
     );
     expect(() =>
       buildEvaluatorRequest(
+        // Deliberately not a real id — this test exists to prove the *runtime* check catches
+        // exactly what the cast bypasses statically. A type guard here would reject the value
+        // before it could reach the function under test, defeating the test's purpose.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         { ...candidate, evaluatorId: 'nope' as SemanticEvaluatorId },
         config,
         provider,

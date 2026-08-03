@@ -117,6 +117,24 @@ describe('the reader is wired into analyseTextDeterministic for markdown', () =>
       'descriptive',
     );
   });
+
+  // Regression: Codex review on PR #39 (discussion_r3698570726). `unitToBlock` classified a
+  // block's mode from `unit.masked`, which only masks the reader's own blockquote continuation
+  // markers — not protected content (code spans, URLs, …). `analyseDocument`'s real
+  // protected-region mask is built later and only feeds `sentence.masked`, never fed back to
+  // reclassify the block mode `sentence.mode` was copied from. A sentence whose only
+  // "imperative opener" was a word sitting inside a code span was misclassified `procedural`.
+  it('does not classify a sentence as procedural just because a protected code span opens with a verb-like word', () => {
+    const text = '`Install the driver` is the section title.\n';
+    const result = analyseTextDeterministic(text);
+    expect(result.document.blocks[0]?.mode).toBe('descriptive');
+  });
+
+  it('still classifies a genuine, unprotected imperative opener as procedural', () => {
+    const text = 'Install the driver before continuing.\n';
+    const result = analyseTextDeterministic(text);
+    expect(result.document.blocks[0]?.mode).toBe('procedural');
+  });
 });
 
 describe('the reader is wired into analyseText for markdown', () => {

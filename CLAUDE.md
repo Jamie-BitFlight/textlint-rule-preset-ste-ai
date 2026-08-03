@@ -2,9 +2,10 @@
 
 ## Documentation stays in sync with code — no confirmation needed
 
-Update `README.md`, everything under `docs/`, and doc comments in the same task as any functional
-change, without asking first. Stale documentation is never acceptable output — a task that changes
-behavior but leaves the docs describing the old behavior is incomplete, not finished-with-a-follow-up.
+Update whichever of `README.md`, `docs/`, or doc comments actually describe the changed behavior, in
+the same task, without asking first — not every file in those locations regardless of relevance.
+Stale documentation is never acceptable output; a task that changes behavior but leaves the docs
+describing the old behavior is incomplete, not finished-with-a-follow-up.
 
 ## Agents share this session's rate limit — retry, don't substitute
 
@@ -23,19 +24,34 @@ active in the same directory). `isolation: "worktree"` makes that failure class 
 impossible, since each dispatch gets its own directory. Reserve manual `git worktree add` for work
 the orchestrator does directly, not through `Agent`.
 
+Exception: if the agent needs to see the orchestrator's own current uncommitted (staged or unstaged)
+changes, commit them (or otherwise transfer them) before dispatching — an isolated worktree is built
+from a real ref, so uncommitted state does not travel into it on its own, and the agent would
+silently evaluate stale code.
+
 A fresh worktree does not necessarily already sit on the branch or commit the work is meant to build
 on — it can default to the repository's default branch. Unless the agent is meant to work directly
-off the default branch, its first instruction must be to check out or switch to the specific
-commit/branch the task is actually being distributed from.
+off the default branch, its first instruction must be to check out the specific source commit the
+task is being distributed from — in detached-HEAD state, or on a new branch created at that commit.
+Do not tell it to switch to the source branch by name: Git refuses to check out a branch that is
+already checked out in another worktree (including the orchestrator's own), which is the common
+case when work is being distributed off a branch the orchestrator is actively using.
 
 ## Verifying what an agent did: query its session log, not git state
 
 When a decision depends on knowing exactly what an agent did (stop it? discard its work? believe a
 disputed claim?), check its session transcript (the `.output` JSONL path from its dispatch/notification
-result), not git state — a diff shows only the end result, not the sequence, and can't prove a
-negative. The "don't read/tail this file" warning on that path is about full-file ingestion
-overflowing context, not the file being off-limits: query it with `Grep` (pattern match) or `jq`
-(structured fields — `.type`/`.name`/`.input`) instead of reading it whole.
+result), not git state — a diff shows only the end result, not the sequence. The "don't read/tail
+this file" warning on that path is about full-file ingestion overflowing context, not the file being
+off-limits: query it with `Grep` (pattern match) or `jq` (structured fields — `.type`/`.name`/`.input`)
+instead of reading it whole.
+
+A positive match is strong evidence (the literal input string is right there). An absent match is
+not proof of a negative: indirect access — a shell variable, a glob, a helper script, a child
+process — may never put the literal filename in the recorded tool input. Treating "no match" as "did
+not happen" can reproduce the same false-negative mistake this section exists to prevent. If a
+negative claim actually matters, read the relevant tool calls in full rather than trusting an absent
+pattern match.
 
 ## Draft PRs and automated review
 

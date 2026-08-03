@@ -1,8 +1,5 @@
 # Working on this repo
 
-Operational corrections for this repo, each established from a real incident this session, not
-generic advice.
-
 ## Documentation stays in sync with code — no confirmation needed
 
 Update `README.md`, everything under `docs/`, and doc comments in the same task as any functional

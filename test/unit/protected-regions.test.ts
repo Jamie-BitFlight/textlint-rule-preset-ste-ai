@@ -48,6 +48,28 @@ describe('protected-region extraction', () => {
     expect(doc.positionAt(text.indexOf('Prose.')).line).toBe(6);
   });
 
+  it('finds newline positions correctly even when the text has an astral character before them', () => {
+    // Regression: an earlier version of this test located newlines by spreading the string
+    // (`[...text]`), which walks Unicode code points. A code point outside the BMP (like an emoji)
+    // is one JS array element from `[...text]` but two UTF-16 code units in the plain string
+    // `text.length`/`text[i]` indexes -- the same indexing `doc.maskedText` and `positionAt` use.
+    // Past that character, a code-point index and a code-unit index diverge, so `doc.maskedText[i]`
+    // (code-unit indexed) would be checked against the wrong `i` (code-point indexed). This fixture
+    // puts a surrogate-pair emoji before a newline specifically to catch that class of bug again.
+    const text = 'Prose with an emoji \u{1F389}\nmore prose.\n';
+    const doc = analyse(text);
+    const newlinePositions: number[] = [];
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === '\n') newlinePositions.push(i);
+    }
+    // Two UTF-16 code units for the emoji push the first newline's code-unit index one past where a
+    // naive code-point count would land.
+    expect(newlinePositions[0]).toBe(text.indexOf('\n'));
+    for (const i of newlinePositions) {
+      expect(doc.maskedText[i]).toBe('\n');
+    }
+  });
+
   const cases: readonly [string, string, ProtectedRegionKind][] = [
     ['fenced code', '```bash\nrm -rf /tmp/x\n```\n', 'fenced-code'],
     ['inline code', 'Set `MAX_RETRIES` now.\n', 'inline-code'],

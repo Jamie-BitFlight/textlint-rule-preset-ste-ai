@@ -36,9 +36,21 @@ const TextLintTester = TextLintTesterModule as unknown as new () => Tester;
 
 const tester = new TextLintTester();
 
+// `rules` is indexed by rule id (`noUncheckedIndexedAccess` types the lookup as possibly
+// `undefined`); each call below pins a single rule under test by its known id, so a missing entry
+// is a real bug in the test itself (a typo'd id, or a rule renamed without updating callers), not a
+// case to paper over with a non-null assertion.
+function mustGetRule(id: string): unknown {
+  const rule = rules[id];
+  if (rule === undefined) {
+    throw new Error(`preset does not define a rule named "${id}"`);
+  }
+  return rule;
+}
+
 clearAnalysisCache();
 
-tester.run('no-contractions', rules['no-contractions']!, {
+tester.run('no-contractions', mustGetRule('no-contractions'), {
   valid: [
     { text: 'Do not remove the cover.\n' },
     { text: 'The unit does not start.\n' },
@@ -81,7 +93,7 @@ tester.run('no-contractions', rules['no-contractions']!, {
   ],
 });
 
-tester.run('unapproved-vocabulary', rules['unapproved-vocabulary']!, {
+tester.run('unapproved-vocabulary', mustGetRule('unapproved-vocabulary'), {
   valid: [
     { text: 'Use the bracket.\n' },
     { text: 'Open the file at /opt/utilise/bin now.\n' },
@@ -121,7 +133,7 @@ tester.run('unapproved-vocabulary', rules['unapproved-vocabulary']!, {
   ],
 });
 
-tester.run('no-repeated-words', rules['no-repeated-words']!, {
+tester.run('no-repeated-words', mustGetRule('no-repeated-words'), {
   valid: [
     { text: 'Remove the cover.\n' },
     { text: 'The value that that follows is set.\n' },
@@ -151,7 +163,7 @@ tester.run('no-repeated-words', rules['no-repeated-words']!, {
   ],
 });
 
-tester.run('number-unit-format', rules['number-unit-format']!, {
+tester.run('number-unit-format', mustGetRule('number-unit-format'), {
   valid: [{ text: 'Torque the bolt to 25 Nm now.\n' }, { text: 'Charge to 80% now.\n' }],
   invalid: [
     {
@@ -167,7 +179,7 @@ tester.run('number-unit-format', rules['number-unit-format']!, {
   ],
 });
 
-tester.run('one-instruction-per-sentence', rules['one-instruction-per-sentence']!, {
+tester.run('one-instruction-per-sentence', mustGetRule('one-instruction-per-sentence'), {
   valid: [
     { text: 'Remove the cover and the filter.\n' },
     { text: 'The unit reads the sensor and writes the value.\n' },

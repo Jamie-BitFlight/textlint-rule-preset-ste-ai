@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-// Plain Node 22 ESM, no dependencies.
+// Plain Node ESM, no dependencies. Always invoked as `node scripts/fetch-sources.mjs` (see
+// `fixtures:fetch` in package.json), never executed directly, so this file carries no shebang.
 // Fetches raw bytes for each source descriptor, caches them under .cache/sources/<key>,
 // and writes fixtures/provenance.lock.json recording real HTTP status, sha256, timestamp.
 

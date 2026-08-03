@@ -388,16 +388,23 @@ export const numberUnitFormatRule: DeterministicRule<z.output<typeof numberUnitO
         const m = /^([+±-]?\d+(?:[.,]\d+)?)(\s*)([^\s\d].*)$/.exec(raw);
         const unit = m?.[3];
         const gap = m?.[2];
-        if (m !== undefined && m !== null && unit !== undefined && gap !== undefined) {
+        // Capture group 1 is not optional in the regex above, so it is always populated whenever `m`
+        // matches; the `string | undefined` type here is only `noUncheckedIndexedAccess` being unable
+        // to see that. `quantity` makes the always-true case explicit instead of leaving an unguarded
+        // `m[1]` that would silently interpolate as the literal text "undefined" if that invariant
+        // were ever broken by a future regex edit. `RegExp.exec` also returns `RegExpExecArray | null`,
+        // never `undefined`, so the guard below only checks against `null`.
+        const quantity = m?.[1];
+        if (m !== null && unit !== undefined && gap !== undefined && quantity !== undefined) {
           const exempt = noSpace.has(unit) || noSpace.has(unit.charAt(0));
           if (!exempt && options.unitSpacing === 'required' && gap.length === 0) {
             diagnostics.push(
               buildDiagnostic(numberUnitMeta, policy, {
                 category: 'deterministic-violation',
-                message: `Put a space between the number and the unit: "${m[1]} ${unit}".`,
+                message: `Put a space between the number and the unit: "${quantity} ${unit}".`,
                 range: region.range,
                 evidence: raw,
-                suggestions: [`${m[1] ?? ''} ${unit}`],
+                suggestions: [`${quantity} ${unit}`],
                 meta: { quantity: raw, expectedSpacing: 'required' },
               }),
             );
@@ -406,10 +413,10 @@ export const numberUnitFormatRule: DeterministicRule<z.output<typeof numberUnitO
             diagnostics.push(
               buildDiagnostic(numberUnitMeta, policy, {
                 category: 'deterministic-violation',
-                message: `Remove the space between the number and the unit: "${m[1]}${unit}".`,
+                message: `Remove the space between the number and the unit: "${quantity}${unit}".`,
                 range: region.range,
                 evidence: raw,
-                suggestions: [`${m[1] ?? ''}${unit}`],
+                suggestions: [`${quantity}${unit}`],
                 meta: { quantity: raw, expectedSpacing: 'forbidden' },
               }),
             );

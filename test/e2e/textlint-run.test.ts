@@ -4,13 +4,49 @@ import textPluginModule from '@textlint/textlint-plugin-text';
 import type { TextlintRuleModule } from '@textlint/types';
 import { describe, expect, it, beforeEach } from 'vitest';
 
-// The published typings for these plugins declare a default export whose shape TypeScript resolves
-// as the module namespace under NodeNext, so the `Processor` property is not visible to the
-// compiler even though it is present at run time. The casts are narrowed to exactly that gap.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-const markdownPlugin = markdownPluginModule as unknown as TextlintPluginCreator;
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-const textPlugin = textPluginModule as unknown as TextlintPluginCreator;
+/**
+ * Whether `value` is really `TextlintPluginCreator`-shaped: an object with a constructable
+ * `Processor`.
+ *
+ * Both plugin packages are published as CommonJS with a `.d.ts` written as
+ * `export default { Processor }` but no package.json `exports` map. Two *different* module
+ * systems disagree about what a bare default import of a package shaped like that actually is:
+ *
+ * - **TypeScript's static resolution**, under this project's `moduleResolution: nodenext`,
+ *   resolves it to the *module namespace* type, not the default export (confirmed directly:
+ *   assigning the bare import to an incompatible type surfaces `typeof import(".../index")` in
+ *   the error, not `TextlintPluginCreator`).
+ * - **This project's actual test runtime** (Vite, via vitest) does not share that mismatch — the
+ *   import binding already holds `{ Processor }` directly, with no nested `default` at all
+ *   (confirmed directly: `Object.keys(markdownPluginModule)` at runtime is `['Processor']`).
+ *
+ * Neither side is wrong about its own domain, they are just answering different questions — a
+ * static cast to `TextlintPluginCreator` would silently paper over *either* one going stale (a
+ * real interop fix upstream changing the runtime shape, or a `moduleResolution` change altering
+ * the static one), so this checks the shape that actually matters — the runtime one — for real,
+ * instead of asserting either.
+ */
+function isTextlintPluginCreator(value: unknown): value is TextlintPluginCreator {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'Processor' in value &&
+    typeof value.Processor === 'function'
+  );
+}
+
+function asTextlintPluginCreator(value: unknown, packageName: string): TextlintPluginCreator {
+  if (!isTextlintPluginCreator(value)) {
+    throw new Error(`${packageName}'s default export is not TextlintPluginCreator-shaped.`);
+  }
+  return value;
+}
+
+const markdownPlugin = asTextlintPluginCreator(
+  markdownPluginModule,
+  '@textlint/textlint-plugin-markdown',
+);
+const textPlugin = asTextlintPluginCreator(textPluginModule, '@textlint/textlint-plugin-text');
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
 import { rules, rulesConfig } from '../../src/textlint/preset.js';
 

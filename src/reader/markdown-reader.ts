@@ -105,6 +105,51 @@ interface WalkContext {
 }
 
 /**
+ * The node types `walkChildren` actually handles below, as a real discriminated union.
+ *
+ * `@textlint/ast-node-types` exports `AnyTxtNode` as `TxtNode | TxtTextNode | TxtParentNode` (see
+ * `NodeType.d.ts`) — a structural three-way split, not a union discriminated per node tag — so
+ * `switch (child.type)` on an `AnyTxtNode` narrows `child.type` to the matching literal but cannot
+ * narrow `child` itself down to the exact node interface a specific `case` implies. Every concrete
+ * interface below (`TxtHeaderNode`, `TxtParagraphNode`, …) does declare its own literal `type`
+ * field, though, so a union of exactly those interfaces *is* a genuine discriminated union — the
+ * three-way split only applies to `AnyTxtNode`'s own declared shape, not to what the node actually
+ * is once its concrete type is known.
+ */
+type ConcreteChildNode =
+  | TxtHeaderNode
+  | TxtParagraphNode
+  | TxtBlockQuoteNode
+  | TxtListNode
+  | TxtListItemNode
+  | TxtTableNode
+  | TxtTableRowNode
+  | TxtTableCellNode
+  | TxtCodeBlockNode;
+
+/**
+ * Narrows `node` to {@link ConcreteChildNode} by checking its real `.type` tag against every
+ * literal the union above declares — one `case` per member, so an interface added to (or removed
+ * from) the union without a matching `case` here is a type error, not a silent gap.
+ */
+function isConcreteChildNode(node: AnyTxtNode): node is ConcreteChildNode {
+  switch (node.type) {
+    case 'Header':
+    case 'Paragraph':
+    case 'BlockQuote':
+    case 'List':
+    case 'ListItem':
+    case 'Table':
+    case 'TableRow':
+    case 'TableCell':
+    case 'CodeBlock':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Walk one level of siblings, in source order, propagating an admonition register the way
  * `src/core/structure.ts`'s block scanner does — except `structure.ts` actually keeps *two*
  * distinct registers, and this walk has to as well:
@@ -125,18 +170,16 @@ interface WalkContext {
  * whole line to be nothing else — so it falls through to the ordinary branch and reports its own
  * admonition directly, with nothing left to propagate.
  */
-// Every `child as TxtXNode` cast below is verified by the immediately preceding `case 'X':` on
-// `child.type`, but TypeScript cannot narrow on it: `@textlint/ast-node-types` exports
-// `AnyTxtNode` as `TxtNode | TxtTextNode | TxtParentNode` (see `NodeType.d.ts`), a structural
-// three-way split, not a union discriminated per node tag, so `switch (child.type)` narrows only
-// within those three shapes, never down to the exact node interface a specific `case` implies.
-// The runtime tag is authoritative; the cast just restates what the `case` already guarantees.
 function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Generator<TextUnit> {
   for (const child of children) {
+    // Every node `walkChildren` produces a unit or recurses for is a `ConcreteChildNode`; anything
+    // else (raw HTML, front matter, reference definitions, thematic breaks, inline text nodes, …)
+    // falls through here exactly as it fell through the `switch`'s own `default:` case before this
+    // guard existed — no prose, no unit, nothing to recurse into.
+    if (!isConcreteChildNode(child)) continue;
     switch (child.type) {
       case 'Header': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const header = child as TxtHeaderNode;
+        const header = child;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
         const own = detectAdmonition(header.raw);
@@ -156,8 +199,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'Paragraph': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const paragraph = child as TxtParagraphNode;
+        const paragraph = child;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
         const raw = paragraph.raw;
@@ -246,8 +288,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'BlockQuote': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const blockQuote = child as TxtBlockQuoteNode;
+        const blockQuote = child;
         yield* walkChildren(blockQuote.children, {
           ...ctx,
           depth: ctx.depth + 1,
@@ -264,8 +305,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
       }
 
       case 'List': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const list = child as TxtListNode;
+        const list = child;
         // Only a list nested inside another list's item is genuinely one level deeper; a list found
         // directly under the document (or a blockquote) is the outermost list and stays at 0.
         const nextListDepth = ctx.containerKind === 'list-item' ? ctx.listDepth + 1 : ctx.listDepth;
@@ -288,29 +328,25 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // Reached only if a `ListItem` is ever encountered somewhere other than as a direct child of
         // a `List` (the `List` case above handles the normal path itself, so it can assign each
         // item's own ordinal) — defensive, not the primary path.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const listItem = child as TxtListItemNode;
+        const listItem = child;
         yield* walkChildren(listItem.children, { ...ctx, containerKind: 'list-item' });
         break;
       }
 
       case 'Table': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const table = child as TxtTableNode;
+        const table = child;
         yield* walkChildren(table.children, ctx);
         break;
       }
 
       case 'TableRow': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const row = child as TxtTableRowNode;
+        const row = child;
         yield* walkChildren(row.children, ctx);
         break;
       }
 
       case 'TableCell': {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const cell = child as TxtTableCellNode;
+        const cell = child;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
         const own = detectAdmonition(cell.raw);
@@ -340,8 +376,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // code regardless of what precedes it. An indented code block with neither condition met
         // (the ordinary case: no admonition opener before it at all) is left alone, exactly as
         // before.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see comment above walkChildren
-        const codeBlock = child as TxtCodeBlockNode;
+        const codeBlock = child;
         const pending = ctx.pending.value;
         const active = pending !== 'none' ? pending : ctx.containerAdmonition.value;
         const isFenced = /^[ \t]*(`{3,}|~{3,})/.test(codeBlock.raw);
@@ -364,12 +399,6 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         yield buildUnit(ctx, 'paragraph', range, depth, active);
         break;
       }
-
-      default:
-        // Raw HTML, front matter, reference definitions, thematic breaks, a fenced or unrelated
-        // indented code block, and any node this reader does not yet recognise: no prose, no unit,
-        // nothing to recurse into.
-        break;
     }
   }
 }

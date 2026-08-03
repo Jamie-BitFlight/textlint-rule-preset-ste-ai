@@ -12,7 +12,7 @@ import type {
   TextFix,
 } from './types.js';
 
-export interface RuleInput<TOptions> {
+export interface RuleInput<TOptions extends object = object> {
   readonly doc: AnalysedDocument;
   readonly options: TOptions;
   readonly pack: RulePack;

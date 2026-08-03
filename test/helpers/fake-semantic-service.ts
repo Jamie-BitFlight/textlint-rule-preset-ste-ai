@@ -1,9 +1,25 @@
 import { createServer, type Server } from 'node:http';
+import { z } from 'zod';
 import type {
   CompletionRequest,
   CompletionResponse,
   ModelTransport,
 } from '../../src/model-client/types.js';
+
+/**
+ * Matches `FakeServiceOptions['handler']`'s own parameter type for `model`/`messages` — the two
+ * fields this file's own code reads — and passes every other field of the real request body
+ * through untouched via `.catchall`, rather than stripping them: a caller's `handler` receives
+ * this same parsed object (see `options.handler(parsed)` below) and several tests inspect fields
+ * this schema does not itself model (`response_format`, for one) to verify what the real HTTP
+ * client actually sent.
+ */
+const requestBodySchema = z
+  .object({
+    model: z.string().optional(),
+    messages: z.array(z.object({ role: z.string(), content: z.string() })).optional(),
+  })
+  .catchall(z.unknown());
 
 /**
  * Test doubles for the semantic service.
@@ -114,15 +130,17 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       requests += 1;
-      let parsed: { model?: string; messages?: { role: string; content: string }[] } = {};
+      let parsed: z.output<typeof requestBodySchema> = {};
       try {
-        // Every field of `parsed` is already optional and every real consumer below reads it
-        // through `?.` (`body.messages?.find(...)`, `parsed.model ?? 'fake'`), so an unexpected
-        // request shape from this fake server's own tests degrades to a missing field, not a
-        // crash — the same tolerance a schema would buy here, without the machinery, for a
-        // test-only double that only ever receives bodies this file's own tests construct.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof parsed;
+        // `safeParse` (not `parse`) matches the same tolerance the old comment here described by
+        // hand: every field of `parsed` is already optional and every real consumer below reads
+        // it through `?.` (`body.messages?.find(...)`, `parsed.model ?? 'fake'`), so an
+        // unexpected-but-parseable request shape from this fake server's own tests degrades to a
+        // missing field via the `{}` fallback, not a crash. Only genuinely invalid JSON — caught
+        // below — is a hard failure.
+        const json: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const result = requestBodySchema.safeParse(json);
+        parsed = result.success ? result.data : {};
       } catch {
         res.writeHead(400, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'bad json' } }));

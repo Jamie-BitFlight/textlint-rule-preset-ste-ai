@@ -160,11 +160,7 @@ describe('SemanticBroker — retry policy', () => {
     });
     const [outcome] = await broker.adjudicate([candidate('a')]);
     expect(transport.requests).toHaveLength(1);
-    expect(outcome?.kind).toBe('failure');
-    // The `if` is a discriminated-union type guard, not real branching: the previous line
-    // already throws unless `outcome.kind` is 'failure', so this always runs.
-    // oxlint-disable-next-line vitest/no-conditional-expect
-    if (outcome?.kind === 'failure') expect(outcome.failure.kind).toBe('invalid-response');
+    expect(outcome).toMatchObject({ kind: 'failure', failure: { kind: 'invalid-response' } });
   });
 
   it('gives up after the configured retry budget', async () => {
@@ -215,11 +211,7 @@ describe('SemanticBroker — cancellation and timeout', () => {
     controller.abort();
     const [outcome] = await broker.adjudicate([candidate('a')], controller.signal);
     expect(transport.requests).toHaveLength(0);
-    expect(outcome?.kind).toBe('failure');
-    // The `if` is a discriminated-union type guard, not real branching: the previous line
-    // already throws unless `outcome.kind` is 'failure', so this always runs.
-    // oxlint-disable-next-line vitest/no-conditional-expect
-    if (outcome?.kind === 'failure') expect(outcome.failure.kind).toBe('cancelled');
+    expect(outcome).toMatchObject({ kind: 'failure', failure: { kind: 'cancelled' } });
   });
 
   it('classifies a timeout as a timeout, not as invalid output', async () => {
@@ -228,11 +220,7 @@ describe('SemanticBroker — cancellation and timeout', () => {
     });
     const broker = new SemanticBroker(config({ maxTransportRetries: 0 }), { transport });
     const [outcome] = await broker.adjudicate([candidate('a')]);
-    expect(outcome?.kind).toBe('failure');
-    // The `if` is a discriminated-union type guard, not real branching: the previous line
-    // already throws unless `outcome.kind` is 'failure', so this always runs.
-    // oxlint-disable-next-line vitest/no-conditional-expect
-    if (outcome?.kind === 'failure') expect(outcome.failure.kind).toBe('timeout');
+    expect(outcome).toMatchObject({ kind: 'failure', failure: { kind: 'timeout' } });
   });
 });
 
@@ -244,11 +232,7 @@ describe('SemanticBroker — evaluator selection and tracing', () => {
     });
     const [outcome] = await broker.adjudicate([candidate('a')]);
     expect(transport.requests).toHaveLength(0);
-    expect(outcome?.kind).toBe('failure');
-    // The `if` is a discriminated-union type guard, not real branching: the previous line
-    // already throws unless `outcome.kind` is 'failure', so this always runs.
-    // oxlint-disable-next-line vitest/no-conditional-expect
-    if (outcome?.kind === 'failure') expect(outcome.failure.kind).toBe('disabled');
+    expect(outcome).toMatchObject({ kind: 'failure', failure: { kind: 'disabled' } });
   });
 
   it('records prompt version, model id and content hash in the trace', async () => {

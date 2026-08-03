@@ -1,27 +1,46 @@
+import type { TextlintRuleModule } from '@textlint/types';
 import TextLintTesterModule from 'textlint-tester';
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
 import { rules } from '../../src/textlint/preset.js';
 
-interface TesterCase {
-  readonly text: string;
-  readonly options?: unknown;
-  readonly output?: string;
-  readonly errors?: readonly { readonly message: string }[];
+/**
+ * `textlint-tester`'s real class type, referenced without ever accessing `.default` at runtime:
+ * `typeof TextLintTesterModule.default` is a pure type query, resolved entirely from the package's
+ * own `.d.ts` (`export default TextLintTester`), so it costs nothing at run time and stays accurate
+ * even though `.default` is not where the real value actually lives (see the comment below).
+ */
+type TextLintTesterCtor = typeof TextLintTesterModule.default;
+
+/**
+ * `textlint-tester` is published as CommonJS with a `.d.ts` written as
+ * `export default TextLintTester` but no package.json `exports` map. Two *different* module
+ * systems disagree about what a bare default import of a package shaped like that actually is:
+ *
+ * - **TypeScript's static resolution**, under this project's `moduleResolution: nodenext`,
+ *   resolves it to the *module namespace* type, not the default export (confirmed directly:
+ *   assigning the bare import to an incompatible type surfaces `typeof import(".../index")` in
+ *   the error, not the `TextLintTester` class).
+ * - **This project's actual test runtime** (Vite, via vitest) does not share that mismatch — the
+ *   import binding already *is* the class directly (confirmed directly: `typeof
+ *   TextLintTesterModule === 'function'` at runtime, with no `default` property at all — a class
+ *   has no such own property).
+ *
+ * Neither side is wrong about its own domain; a static cast to `TextLintTesterCtor` would silently
+ * paper over either one going stale, so this checks the shape that actually matters — the runtime
+ * one — for real, instead of asserting either.
+ */
+function isTextLintTesterCtor(value: unknown): value is TextLintTesterCtor {
+  return typeof value === 'function';
 }
 
-interface Tester {
-  run(
-    name: string,
-    rule: unknown,
-    cases: { valid: readonly TesterCase[]; invalid: readonly TesterCase[] },
-  ): void;
+function asTextLintTesterCtor(value: unknown): TextLintTesterCtor {
+  if (!isTextLintTesterCtor(value)) {
+    throw new Error("textlint-tester's default export is not a constructor.");
+  }
+  return value;
 }
 
-// `textlint-tester` publishes a CommonJS default export that TypeScript resolves as the module
-// namespace under NodeNext, so the class is not constructable to the compiler even though it is at
-// run time. The cast is narrowed to exactly that gap, and gives the harness a typed surface.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-const TextLintTester = TextLintTesterModule as unknown as new () => Tester;
+const TextLintTester = asTextLintTesterCtor(TextLintTesterModule);
 
 /**
  * Rule-contract tests through `textlint-tester`, the ecosystem's own harness.
@@ -40,7 +59,7 @@ const tester = new TextLintTester();
 // `undefined`); each call below pins a single rule under test by its known id, so a missing entry
 // is a real bug in the test itself (a typo'd id, or a rule renamed without updating callers), not a
 // case to paper over with a non-null assertion.
-function mustGetRule(id: string): unknown {
+function mustGetRule(id: string): TextlintRuleModule {
   const rule = rules[id];
   if (rule === undefined) {
     throw new Error(`preset does not define a rule named "${id}"`);

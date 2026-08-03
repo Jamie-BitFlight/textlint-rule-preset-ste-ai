@@ -19,7 +19,7 @@ export interface DeterministicRunResult {
 
 export interface RunOptions {
   readonly doc: AnalysedDocument;
-  readonly rules: readonly DeterministicRule<never>[];
+  readonly rules: readonly DeterministicRule[];
   readonly config: SteAiConfig;
   readonly pack: RulePack;
   /** Restrict the run to a single rule id. Used by the per-rule textlint adapters. */
@@ -78,7 +78,7 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
 
     const severityOverride: Severity | undefined = userConfig.severity ?? packSpec?.severity;
 
-    const input: RuleInput<never> = {
+    const input: RuleInput = {
       doc,
       options: parsed.data,
       pack,
@@ -157,7 +157,7 @@ function stripControlKeys(userConfig: Record<string, unknown>): Record<string, u
  */
 function postProcess(
   diagnostic: Diagnostic,
-  rule: DeterministicRule<never>,
+  rule: DeterministicRule,
   doc: AnalysedDocument,
   config: SteAiConfig,
   blockById: ReadonlyMap<string, TextBlock>,

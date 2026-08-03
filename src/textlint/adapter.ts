@@ -73,17 +73,32 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * A plain object whose own values are themselves plain objects — the shallow shape
- * `sharedFile.config.rules`/`shared.rules`/`perRuleOptions` all share (a per-rule-id map of
- * per-rule option bags) before {@link getAnalysis} merges the three together below. One level
- * deeper than {@link isPlainObject} for the same reason: spreading a non-object value found at
- * `sharedRules[id]` into `mergedRules[id]` would silently produce nonsense (per-character keys
- * for a string, a no-op for `null`/`undefined`) rather than fail loudly. What each rule's own
- * options actually mean is still validated later, per rule, by that rule's own `optionsSchema` in
- * `src/core/runner.ts` — this only rules out shapes that could not possibly merge sensibly.
+ * `raw` (typically `shared['rules']`), kept as a per-rule-id map of per-rule option bags — the
+ * shallow shape `sharedFile.config.rules`/`shared.rules`/`perRuleOptions` all share — with any
+ * entry whose *value* is not itself a plain object dropped, entry by entry, rather than the whole
+ * map being replaced with `{}` because one entry is malformed.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, `discussion_r3707793537`): an earlier version of this
+ * function validated the whole map at once (`isPlainObject(value) &&
+ * Object.values(value).every(isPlainObject)`, returning `{}` on any failure) — so
+ * `{ 'no-contractions': { enabled: false }, 'misspelled-rule': false }` discarded the valid
+ * `no-contractions` entry along with the malformed one, silently re-enabling a rule the user had
+ * explicitly disabled, while also hiding which entry was actually malformed. Filtering per entry
+ * instead keeps every valid sibling; a malformed individual entry contributes nothing further down
+ * (spreading a non-object into `mergedRules[id]` is already a no-op, not a crash — see the merge
+ * loop below), the same silent-drop behaviour this function's very first version (before either
+ * fix, an unchecked cast) already had for a malformed entry, just without also destroying the
+ * entries around it. What each rule's own options actually mean is still validated later, per
+ * rule, by that rule's own `optionsSchema` in `src/core/runner.ts` — this only rules out shapes
+ * that could not possibly merge sensibly.
  */
-function isRecordOfRecords(value: unknown): value is Record<string, Record<string, unknown>> {
-  return isPlainObject(value) && Object.values(value).every(isPlainObject);
+function validRulesOf(raw: unknown): Record<string, Record<string, unknown>> {
+  if (!isPlainObject(raw)) return {};
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const [id, options] of Object.entries(raw)) {
+    if (isPlainObject(options)) result[id] = options;
+  }
+  return result;
 }
 
 /**
@@ -113,7 +128,7 @@ export function getAnalysis(
   // textlint options, then the rule's own textlint options. Each layer is merged key by key —
   // replacing the object wholesale would silently drop an `enabled: false` set by a lower layer.
   const fileRules = sharedFile.config.rules as Record<string, Record<string, unknown>>;
-  const sharedRules = isRecordOfRecords(shared?.['rules']) ? shared['rules'] : {};
+  const sharedRules = validRulesOf(shared?.['rules']);
   const mergedRules: Record<string, Record<string, unknown>> = {};
   for (const id of new Set([
     ...Object.keys(fileRules),

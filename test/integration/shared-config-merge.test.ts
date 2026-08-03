@@ -61,4 +61,29 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     expect(result.config.approvedTerms).toContain('Utilise');
     expect(result.config.diagnostics.reportSuppressed).toBe(true);
   });
+
+  /**
+   * Regression (`chatgpt-codex-connector`, P2, `discussion_r3707793537`): `shared.rules` is merged
+   * per rule id, but an earlier version validated the *whole* `shared.rules` map at once and
+   * dropped it entirely — `{}` — the moment any single entry's value was not itself a plain
+   * object. A malformed sibling entry therefore silently discarded every valid entry alongside it,
+   * including an explicit `enabled: false` the user had set for an unrelated rule.
+   */
+  it('keeps a valid shared.rules entry when a sibling entry is malformed', async () => {
+    const result = await getAnalysis(
+      'Utilise the bracket.\n',
+      undefined,
+      baseDir,
+      {
+        rules: {
+          'no-contractions': { enabled: false },
+          'misspelled-rule': false,
+        },
+      },
+      new Map(),
+    );
+
+    // The valid sibling entry must survive the malformed one, not be wiped out alongside it.
+    expect(result.config.rules['no-contractions']?.['enabled']).toBe(false);
+  });
 });

@@ -9,6 +9,9 @@ import {
 import { MASK_CHAR } from '../../src/core/text.js';
 
 function sharedLexicon(): Record<string, unknown> {
+  // Same untyped `nlp.world()` reach-into as `lexiconStore()` in `src/core/pos-tags.ts`, needed
+  // here to verify what that module actually wrote to (and restored in) the shared singleton.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model
     .one.lexicon;
 }
@@ -154,6 +157,7 @@ describe('sentenceOpensImperative', () => {
     // The host's newer write must survive: this module's restore must never overwrite a key whose
     // live value no longer matches what this module itself last wrote there.
     expect(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see sharedLexicon() above
       (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model.one
         .lexicon['sprocket'],
     ).toBe('Adjective');

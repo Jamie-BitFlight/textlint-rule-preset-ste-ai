@@ -40,14 +40,17 @@ export function buildWinkPosIndex(text: string): WinkPosIndex {
     // pass-through arrow) was found, by direct testing, to make `out()` silently fall back to the
     // token's raw text instead of running the tagger. That is also why these are referenced
     // in-line rather than hoisted to a module-level constant, which would trip
-    // `@typescript-eslint/unbound-method` for the same reason a hoisted reference to any other
-    // interface method would.
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- see comment above
+    // `typescript/unbound-method` for the same reason a hoisted reference to any other interface
+    // method would.
+    // oxlint-disable-next-line typescript/unbound-method -- see comment above
     const pre = token.out(nlp.its.precedingSpaces);
     if (typeof pre === 'string') offset += pre.length;
     const value = token.out();
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- see comment above
+    // oxlint-disable-next-line typescript/unbound-method -- see comment above
     const pos = token.out(nlp.its.pos);
+    // `token.out(nlp.its.pos)`'s typed return is a wider string type than `PartOfSpeech`; the
+    // model's own tagset guarantees this narrows correctly, but the type checker cannot verify it.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     if (typeof pos === 'string') map.set(offset, pos as PartOfSpeech);
     offset += value.length;
   });

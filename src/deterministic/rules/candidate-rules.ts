@@ -241,6 +241,10 @@ export const passiveVoiceCandidateRule: DeterministicRule<z.output<typeof passiv
       if (matches.length === 0) continue;
       const winkIndex = buildWinkPosIndex(sentence.masked);
       for (const m of matches) {
+        // `RegExpMatchArray.groups` is typed as a generic string-keyed record; `PassiveMatchGroups`
+        // names `PASSIVE_RE`'s actual named capture groups, which the type checker cannot derive
+        // from the regex literal itself.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         const groups = m.groups as PassiveMatchGroups | undefined;
         const participleRange = m.indices?.groups?.['participle'];
         if (groups === undefined || participleRange === undefined || m.index === undefined) {

@@ -50,6 +50,9 @@ interface CompromiseOffsetSentence {
 
 /** Tags of the first term of the first sentence `compromise` finds in `text`, if any. */
 function firstTermTags(text: string): readonly string[] | undefined {
+  // `compromise` ships no type declarations for `.json()`'s return shape; `CompromiseOffsetSentence`
+  // is this module's own, deliberately partial, description of the fields it actually reads.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const data = nlp(text).json() as readonly CompromiseOffsetSentence[];
   return data[0]?.terms?.[0]?.tags;
 }
@@ -102,6 +105,10 @@ interface LexiconStore {
 }
 
 function lexiconStore(): LexiconStore {
+  // `nlp.world()` is untyped (see the `LexiconStore` PROVENANCE note above) — the cast is this
+  // module's own confirmed-by-inspection description of the shape it reaches into, not something a
+  // type guard could verify from the outside.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return nlp.world() as unknown as LexiconStore;
 }
 
@@ -277,7 +284,7 @@ function normalizeExtraVerbs(extraVerbs: readonly string[]): string[] {
  * every call regardless of identity (see {@link withLexicons}).
  */
 function extraVerbsKey(extraVerbs: readonly string[]): string {
-  return normalizeExtraVerbs(extraVerbs).sort().join('\u0000');
+  return normalizeExtraVerbs(extraVerbs).toSorted().join('\u0000');
 }
 
 /**
@@ -444,7 +451,7 @@ export function sentenceOpensImperative(text: string, extraVerbs: readonly strin
   // control passes back to this function's own caller.
   return withLexicons(extraVerbs, () => {
     const first = nlp(stripped).terms().first();
-    if (first.found === false) return false;
+    if (!first.found) return false;
     const firstWord = /^[\p{L}]+/u.exec(stripped)?.[0]?.toLowerCase();
     if (firstWord !== undefined && FALSE_IMPERATIVE_OPENERS.has(firstWord)) return false;
     if (first.has('#Imperative')) return true;
@@ -489,6 +496,8 @@ export function tagByOffset(
   // passes back to this function's own caller.
   return withLexicons(extraVerbs, () => {
     const map = new Map<number, readonly string[]>();
+    // Same untyped-`.json()` cast as `firstTermTags` above; see its comment for provenance.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const data = nlp(text).json({ offset: true }) as readonly CompromiseOffsetSentence[];
     for (const sentence of data) {
       for (const term of sentence.terms ?? []) {

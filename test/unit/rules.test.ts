@@ -517,8 +517,8 @@ describe('candidate rules never assert violations', () => {
     // "is disabled" in this shape ("By default X is disabled") is the corpus's own example of a
     // configuration-state reading, not a passive action (httpd-mod-ssl-directive-config.json).
     // wink-nlp tags "disabled" ADJ here, so the tag-conditioned check does not generate a
-    // candidate for it at all — a real behaviour change from the old regex, which always matched
-    // it (any `-ed` word matched) and relied on semantic adjudication to call it a non-violation.
+    // candidate at all — a real behaviour change from the old regex, which matched any `-ed`
+    // word and relied on semantic adjudication to call it a non-violation.
     const result = run('By default the SSL Engine is disabled.\n', {
       rules: { 'passive-voice-candidate': { adjudicate: false } },
     });

@@ -1,6 +1,7 @@
 import { TextlintKernel, type TextlintPluginCreator } from '@textlint/kernel';
 import markdownPluginModule from '@textlint/textlint-plugin-markdown';
 import textPluginModule from '@textlint/textlint-plugin-text';
+import type { TextlintRuleModule } from '@textlint/types';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 // The published typings for these plugins declare a default export whose shape TypeScript resolves
@@ -23,6 +24,18 @@ import { rules, rulesConfig } from '../../src/textlint/preset.js';
  */
 
 const kernel = new TextlintKernel();
+
+// `rules` is indexed by rule id (`noUncheckedIndexedAccess` types the lookup as possibly
+// `undefined`); these tests deliberately pin a single rule under test by its known id, so a missing
+// entry is a real bug in the test itself (a typo'd id, or a rule renamed without updating callers),
+// not a case to paper over with a non-null assertion.
+function mustGetRule(id: string): TextlintRuleModule {
+  const rule = rules[id];
+  if (rule === undefined) {
+    throw new Error(`preset does not define a rule named "${id}"`);
+  }
+  return rule;
+}
 
 function presetRules(only?: readonly string[]) {
   return Object.entries(rules)
@@ -50,8 +63,8 @@ describe('textlint lint run', () => {
     expect(result.messages).toHaveLength(1);
     const message = result.messages[0];
     expect(message?.ruleId).toBe('unapproved-vocabulary');
-    expect(message?.line).toBe(3);
-    expect(message?.column).toBe(1);
+    expect(message?.loc.start.line).toBe(3);
+    expect(message?.loc.start.column).toBe(1);
     expect(message?.message).toContain('[deterministic-violation][provisional]');
     expect(message?.message).toContain('"Prior to" is not approved');
   });
@@ -59,8 +72,8 @@ describe('textlint lint run', () => {
   it('points at the right column mid-line', async () => {
     const text = 'Please utilise the bracket.\n';
     const result = await kernel.lintText(text, options(['unapproved-vocabulary']));
-    expect(result.messages[0]?.line).toBe(1);
-    expect(result.messages[0]?.column).toBe(text.indexOf('utilise') + 1);
+    expect(result.messages[0]?.loc.start.line).toBe(1);
+    expect(result.messages[0]?.loc.start.column).toBe(text.indexOf('utilise') + 1);
   });
 
   it('reports nothing inside a fenced code block', async () => {
@@ -68,7 +81,7 @@ describe('textlint lint run', () => {
       '\n',
     );
     const result = await kernel.lintText(text, options());
-    const inFence = result.messages.filter((m) => m.line === 4);
+    const inFence = result.messages.filter((m) => m.loc.start.line === 4);
     expect(inFence).toEqual([]);
   });
 
@@ -102,8 +115,8 @@ describe('textlint lint run', () => {
     expect(ruleIds).toContain('one-instruction-per-sentence');
     expect(ruleIds).toContain('number-unit-format');
     for (const message of result.messages) {
-      expect(message.line).toBeGreaterThan(0);
-      expect(message.column).toBeGreaterThan(0);
+      expect(message.loc.start.line).toBeGreaterThan(0);
+      expect(message.loc.start.column).toBeGreaterThan(0);
     }
   });
 
@@ -214,7 +227,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'sentence-length-procedural',
-          rule: rules['sentence-length-procedural']!,
+          rule: mustGetRule('sentence-length-procedural'),
           options: { floorWords: 1, maxGradeLevel: 3 },
         },
       ],
@@ -237,7 +250,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'number-unit-format',
-          rule: rules['number-unit-format']!,
+          rule: mustGetRule('number-unit-format'),
           options: {
             shared: { diagnostics: { severity: { 'deterministic-violation': 'info' } } },
           },
@@ -253,7 +266,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'number-unit-format',
-          rule: rules['number-unit-format']!,
+          rule: mustGetRule('number-unit-format'),
           options: { shared: { rules: { 'number-unit-format': { severity: 'warning' } } } },
         },
       ],
@@ -268,7 +281,7 @@ describe('per-rule textlint options', () => {
       rules: [
         {
           ruleId: 'unapproved-vocabulary',
-          rule: rules['unapproved-vocabulary']!,
+          rule: mustGetRule('unapproved-vocabulary'),
           options: { shared: { rules: { 'unapproved-vocabulary': { enabled: false } } } },
         },
       ],

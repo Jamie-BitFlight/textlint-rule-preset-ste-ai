@@ -454,6 +454,28 @@ describe('one-instruction-per-sentence', () => {
     });
     expect(result.forRule(id)).toHaveLength(0);
   });
+
+  it('flags two imperatives joined by "and" using a verb the old hardcoded list never enumerated', () => {
+    // Neither "wipe" nor "trim" is in `IMPERATIVE_VERBS` (src/core/imperative-verbs.ts) — this is
+    // real recall from `compromise`'s grammatical tagging, not just parity with the closed list.
+    const result = run('Wipe the sensor lens and trim the excess cable.\n');
+    expect(result.forRule(id)).toHaveLength(1);
+    expect(result.forRule(id)[0]?.category).toBe('deterministic-violation');
+  });
+
+  it('does not flag an inflected third-person verb inside a descriptive relative clause', () => {
+    // Regression (chatgpt-codex-connector, P1): `compromise` tags a finite third-person verb such
+    // as "sends" or "logs" as `Verb`+`PresentTense` without `Infinitive` — the same PresentTense
+    // tag a genuine bare/base-form command verb carries. The old "is this a bare verb" check
+    // accepted either signal alone, so the word after "and" in "which logs events and sends
+    // reports" (itself part of a descriptive relative clause, not a second instruction) satisfied
+    // it and this sentence was reported as containing two instructions, even though "sends" never
+    // opens an imperative clause — confirmed directly: `compromise` tags "sends" `Verb
+    // PresentTense` with no `Infinitive`, exactly like "logs", while a genuine second imperative
+    // ("...and format the disk.") keeps `Infinitive` in the same position.
+    const result = run('Install the agent, which logs events and sends reports.\n');
+    expect(result.forRule(id)).toHaveLength(0);
+  });
 });
 
 describe('candidate rules never assert violations', () => {
@@ -477,6 +499,32 @@ describe('candidate rules never assert violations', () => {
     expect(withoutAgent.forRule('passive-voice-candidate')).toHaveLength(0);
   });
 
+  it('passive-voice-candidate still catches an ordinary irregular participle from the old list', () => {
+    // "known" is in the old 70-entry `PARTICIPLES` list, and wink-nlp independently tags it VERB
+    // here — the wink-nlp check is a filter added on top of the unchanged shape gate (regular
+    // `-ed` word or `PARTICIPLES` membership), not a replacement for it: see the "Known gap found,
+    // not fixed here" note on `isPassiveParticiple` in candidate-rules.ts for why a genuinely novel
+    // irregular participle outside that list ("hewn", "forsaken" — wink-nlp tags both VERB, and
+    // neither is in `PARTICIPLES`) is deliberately not admitted by this prototype: it would emit a
+    // candidate span no reviewer has ever adjudicated.
+    const result = run('The value is known.\n', {
+      rules: { 'passive-voice-candidate': { adjudicate: false } },
+    });
+    expect(result.forRule('passive-voice-candidate').length).toBeGreaterThan(0);
+  });
+
+  it('passive-voice-candidate no longer flags the exact adjectival case the corpus reviewer named', () => {
+    // "is disabled" in this shape ("By default X is disabled") is the corpus's own example of a
+    // configuration-state reading, not a passive action (httpd-mod-ssl-directive-config.json).
+    // wink-nlp tags "disabled" ADJ here, so the tag-conditioned check does not generate a
+    // candidate at all — a real behaviour change from the old regex, which matched any `-ed`
+    // word and relied on semantic adjudication to call it a non-violation.
+    const result = run('By default the SSL Engine is disabled.\n', {
+      rules: { 'passive-voice-candidate': { adjudicate: false } },
+    });
+    expect(result.forRule('passive-voice-candidate')).toHaveLength(0);
+  });
+
   it('noun-cluster-candidate flags a long run of content words', () => {
     const result = run('Check the engine oil pressure warning lamp test procedure.\n', {
       rules: { 'noun-cluster-candidate': { adjudicate: false } },
@@ -494,6 +542,20 @@ describe('candidate rules never assert violations', () => {
         rules: { 'noun-cluster-candidate': { adjudicate: false } },
       }).forRule('noun-cluster-candidate'),
     ).toHaveLength(0);
+  });
+
+  it('noun-cluster-candidate still breaks a run on "no", which compromise mistags as Expression', () => {
+    // Regression guard: `compromise` tags "no" as `Expression` rather than `Determiner`/`Negative`
+    // in ordinary sentence context (confirmed directly against fixtures/original), so
+    // `isFunctionWord` must still catch it via the closed-class list, not rely on the tag alone.
+    const result = run('Check the engine has no oil pressure warning lamp fault today.\n', {
+      rules: { 'noun-cluster-candidate': { adjudicate: false } },
+    });
+    const clusters = result.forRule('noun-cluster-candidate');
+    for (const cluster of clusters) {
+      const text = result.text.slice(cluster.range.start, cluster.range.end);
+      expect(text.toLowerCase().split(/\s+/)).not.toContain('no');
+    }
   });
 
   it('ambiguous-pronoun-candidate flags a bare demonstrative subject', () => {

@@ -88,6 +88,53 @@ describe('the reader is wired into analyseTextDeterministic for markdown', () =>
     const block = result.document.blocks.find((b) => b.text.startsWith('Reticulate'));
     expect(block?.mode).toBe('procedural');
   });
+
+  // Regression: `src/core/pos-tags.ts` taught `extraImperativeVerbs` to `compromise`'s
+  // module-global lexicon via `addWords` and never untaught them. In a long-lived process, a
+  // document analysed with one configuration's extra vocabulary could leave a word "known" as a
+  // verb for every later analysis, including one with a different configuration or none at all —
+  // which rule fires and which limit applies then depended on analysis order, not on that run's
+  // own configuration.
+  //
+  // "Cache", not "Reticulate" (used above): `compromise`'s own unknown-word guesser already tags
+  // a capitalised sentence-initial nonsense or rare word as `Verb Imperative` with no lexicon
+  // entry at all (confirmed directly), so that word would read as procedural on the second run
+  // regardless of whether the leak is fixed, proving nothing. "Cache" is a real English noun
+  // `compromise` already recognises on its own and does not guess as a verb, so it only opens the
+  // sentence as an imperative here because this run's `extraImperativeVerbs` taught it to.
+  it('does not let one run’s extraImperativeVerbs leak into a later run with a different config', () => {
+    const text = 'Cache the response before returning it.\n';
+
+    const taught = analyseTextDeterministic(text, {
+      config: { extraImperativeVerbs: ['cache'] },
+    });
+    expect(taught.document.blocks.find((b) => b.text.startsWith('Cache'))?.mode).toBe('procedural');
+
+    // Same text, same process, but this run's own configuration never mentions "cache". It must
+    // not be classified as procedural just because an earlier, unrelated run taught the word.
+    const untaught = analyseTextDeterministic(text);
+    expect(untaught.document.blocks.find((b) => b.text.startsWith('Cache'))?.mode).toBe(
+      'descriptive',
+    );
+  });
+
+  // Regression: Codex review on PR #39 (discussion_r3698570726). `unitToBlock` classified a
+  // block's mode from `unit.masked`, which only masks the reader's own blockquote continuation
+  // markers — not protected content (code spans, URLs, …). `analyseDocument`'s real
+  // protected-region mask is built later and only feeds `sentence.masked`, never fed back to
+  // reclassify the block mode `sentence.mode` was copied from. A sentence whose only
+  // "imperative opener" was a word sitting inside a code span was misclassified `procedural`.
+  it('does not classify a sentence as procedural just because a protected code span opens with a verb-like word', () => {
+    const text = '`Install the driver` is the section title.\n';
+    const result = analyseTextDeterministic(text);
+    expect(result.document.blocks[0]?.mode).toBe('descriptive');
+  });
+
+  it('still classifies a genuine, unprotected imperative opener as procedural', () => {
+    const text = 'Install the driver before continuing.\n';
+    const result = analyseTextDeterministic(text);
+    expect(result.document.blocks[0]?.mode).toBe('procedural');
+  });
 });
 
 describe('the reader is wired into analyseText for markdown', () => {

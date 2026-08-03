@@ -24,6 +24,8 @@
     "promise/always-return": ["error", { "ignoreLastCallback": true }],
     // `__dirname` reconstructed via `dirname(fileURLToPath(import.meta.url))` is the standard
     // Node ESM idiom for the removed CommonJS global, not a private-by-convention identifier.
-    "eslint/no-underscore-dangle": ["error", { "allow": ["__dirname"] }]
+    // `_multiCache` is `compromise`'s own internal lexicon property name (`world.model.one._multiCache`,
+    // see `src/core/pos-tags.ts`), not a name this codebase chose.
+    "eslint/no-underscore-dangle": ["error", { "allow": ["__dirname", "_multiCache"] }]
   }
 }

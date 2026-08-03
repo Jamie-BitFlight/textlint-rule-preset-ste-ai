@@ -1,5 +1,10 @@
 import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
-import { analyseDocument } from '../core/document.js';
+import { analyseDocument, STRUCTURAL_MARKER_KINDS } from '../core/document.js';
+import {
+  defaultProtectedRegionOptions,
+  extractProtectedRegions,
+  type ProtectedRegionOptions,
+} from '../core/protected-regions.js';
 import { runDeterministicRules } from '../core/runner.js';
 import { defaultStructureOptions, detectMode, type StructureOptions } from '../core/structure.js';
 import {
@@ -9,7 +14,7 @@ import {
   refuseInAdmonition,
   scanSuppressions,
 } from '../core/suppressions.js';
-import { maskRanges } from '../core/text.js';
+import { maskRanges, mergeRanges, normalizeLineEndings } from '../core/text.js';
 import type {
   AnalysedDocument,
   BlockKind,
@@ -64,12 +69,29 @@ import { resolveOverlappingFixes } from '../core/runner.js';
 function readerBlocksFor(
   sourceDoc: SourceDocument,
   structureOptions: StructureOptions,
+  protectedRegionOptions: Partial<ProtectedRegionOptions>,
 ): readonly TextBlock[] {
   const units: readonly TextUnit[] =
     sourceDoc.format === 'markdown'
       ? readMarkdownUnitsSync(sourceDoc)
       : readPlainTextUnitsSync(sourceDoc);
-  return units.map((unit) => unitToBlock(unit, structureOptions));
+
+  // Same extraction `analyseDocument` runs for its own `fullMask`, computed here too because a
+  // unit's mode is decided before `analyseDocument` ever sees it (see `unitToBlock`). Only
+  // opaque, non-structural-marker regions are kept — the structural markers (list/heading/
+  // blockquote markers, table pipes, emphasis) stay visible, matching what `scanBlocks` does with
+  // `buildStructuralMask` for the exact same purpose on the non-reader path.
+  const detectionText = normalizeLineEndings(sourceDoc.text);
+  const regions = extractProtectedRegions(detectionText, {
+    ...defaultProtectedRegionOptions,
+    format: sourceDoc.format,
+    ...protectedRegionOptions,
+  });
+  const opaqueContentRanges = mergeRanges(
+    regions.filter((r) => r.opaque && !STRUCTURAL_MARKER_KINDS.has(r.kind)).map((r) => r.range),
+  );
+
+  return units.map((unit) => unitToBlock(unit, structureOptions, opaqueContentRanges));
 }
 
 /**
@@ -109,13 +131,29 @@ const UNIT_KIND_TO_BLOCK_KIND: Readonly<Record<string, BlockKind>> = {
  * would have decided for the same text. Headings are the one exception `scanBlocks()` carves out —
  * `detectMode` never runs on a heading's own text at all — and the reader already forces
  * `'descriptive'` for headings for the same reason, so `unit.mode` is left untouched there.
+ *
+ * `detectMode` runs on {@link maskUnitContent}'s output, not on `unit.masked` directly: `unit.masked`
+ * only masks the reader's own blockquote continuation markers, so an opening code span, URL, or
+ * other protected region was still visible verbatim at this point — `analyseDocument`'s real
+ * protected-region mask does not exist yet here, it is built later and only feeds `sentence.masked`,
+ * never fed back to reclassify the block mode it was copied from. A block whose only "imperative
+ * opener" is a word sitting inside protected markup — `` `Install the driver` is the section
+ * title.`` — was misclassified `procedural` as a result. Layering `opaqueContentRanges` on top of
+ * `unit.masked` fixes this without disturbing the blockquote-marker masking.
  */
-function unitToBlock(unit: TextUnit, structureOptions: StructureOptions): TextBlock {
+function unitToBlock(
+  unit: TextUnit,
+  structureOptions: StructureOptions,
+  opaqueContentRanges: readonly SourceRange[],
+): TextBlock {
   const kind = UNIT_KIND_TO_BLOCK_KIND[unit.kind];
   if (kind === undefined) {
     throw new Error(`No BlockKind mapping for reader unit kind "${unit.kind}" (unit ${unit.id}).`);
   }
-  const mode = kind === 'heading' ? unit.mode : detectMode(unit.masked, structureOptions);
+  const mode =
+    kind === 'heading'
+      ? unit.mode
+      : detectMode(maskUnitContent(unit, opaqueContentRanges), structureOptions);
   return {
     id: unit.id,
     kind,
@@ -127,6 +165,21 @@ function unitToBlock(unit: TextUnit, structureOptions: StructureOptions): TextBl
     inList: unit.kind === 'list-item',
     ...(unit.listOrdinal === undefined ? {} : { listOrdinal: unit.listOrdinal }),
   };
+}
+
+/**
+ * Layer document-level protected-content ranges onto a unit's own `masked` text.
+ *
+ * `opaqueContentRanges` are absolute offsets into the source document; `unit.masked` is indexed
+ * from 0 at `unit.range.start`. `maskRanges` is idempotent on characters `unit.masked` already
+ * masked, so this only ever adds masking, never removes the reader's own blockquote-marker mask.
+ */
+function maskUnitContent(unit: TextUnit, opaqueContentRanges: readonly SourceRange[]): string {
+  const local = opaqueContentRanges
+    .map((r) => ({ start: r.start - unit.range.start, end: r.end - unit.range.start }))
+    .filter((r) => r.end > 0 && r.start < unit.masked.length)
+    .map((r) => ({ start: Math.max(0, r.start), end: Math.min(unit.masked.length, r.end) }));
+  return maskRanges(unit.masked, local);
 }
 
 export interface AnalyseTextOptions {
@@ -198,13 +251,14 @@ function prepareRun(
     ...(options.path === undefined ? {} : { path: options.path }),
   };
   const structureOptions = structureOptionsFor(format, config);
+  const protectedRegionOptions: Partial<ProtectedRegionOptions> = {
+    approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
+    extraPatterns: config.extraProtectedPatterns,
+  };
   const document = analyseDocument(sourceDoc, {
-    protectedRegions: {
-      approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
-      extraPatterns: config.extraProtectedPatterns,
-    },
+    protectedRegions: protectedRegionOptions,
     structure: structureOptions,
-    blocks: readerBlocksFor(sourceDoc, structureOptions),
+    blocks: readerBlocksFor(sourceDoc, structureOptions, protectedRegionOptions),
   });
 
   // Fix conflicts are resolved by each caller instead, once the suppressed findings are out of the

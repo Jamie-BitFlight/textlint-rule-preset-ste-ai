@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { IMPERATIVE_VERBS } from '../../core/imperative-verbs.js';
+import {
+  buildSentencePosIndex,
+  isImperativeOpenerWord,
+  sentenceOpensImperative,
+} from '../../core/pos-tags.js';
 import { buildDiagnostic, type DeterministicRule, type RuleOutput } from '../../core/rule.js';
 import type { CandidatePassage, Diagnostic, RuleMetadata } from '../../core/types.js';
 import { excerpt, groupSiblingListItems } from '../helpers.js';
@@ -155,7 +159,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
 > = {
   meta: oneInstructionMeta,
   optionsSchema: oneInstructionOptionsSchema,
-  run({ doc, options, policy }): RuleOutput {
+  run({ doc, options, policy, extraImperativeVerbs }): RuleOutput {
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
     const conjunctions = new Set(options.conjunctions.map((c) => c.toLowerCase()));
@@ -165,9 +169,8 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const words = sentence.words.filter((w) => w.protectedKind === undefined);
       const first = words[0];
       if (first === undefined) continue;
-      const startsImperative =
-        IMPERATIVE_VERBS.has(first.lower) || /^(?:do|never|always)$/.test(first.lower);
-      if (!startsImperative) continue;
+      if (!sentenceOpensImperative(sentence.masked, extraImperativeVerbs)) continue;
+      const posIndex = buildSentencePosIndex(sentence, extraImperativeVerbs);
 
       let conjunctionHit: { index: number; verb: (typeof words)[number] } | null = null;
       for (let i = 1; i < words.length - 1; i += 1) {
@@ -178,7 +181,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
         // `and then install` — skip the adverb and look at the following word.
         const candidateVerb = next.lower === 'then' ? words[i + 2] : next;
         if (candidateVerb === undefined) continue;
-        if (!IMPERATIVE_VERBS.has(candidateVerb.lower)) continue;
+        if (!isImperativeOpenerWord(candidateVerb, posIndex)) continue;
         conjunctionHit = { index: i, verb: candidateVerb };
         break;
       }
@@ -202,7 +205,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const commaIndex = sentence.masked.indexOf(',');
       if (commaIndex < 0) continue;
       const afterComma = words.filter((w) => w.range.start > sentence.range.start + commaIndex);
-      const secondVerb = afterComma.find((w) => IMPERATIVE_VERBS.has(w.lower));
+      const secondVerb = afterComma.find((w) => isImperativeOpenerWord(w, posIndex));
       if (secondVerb === undefined) continue;
 
       if (!options.adjudicate) {

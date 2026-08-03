@@ -365,12 +365,12 @@ describe('candidate ground truth', () => {
     for (const { annotation } of runs) {
       for (const record of annotation?.candidateAdjudications ?? []) counts[record.verdict] += 1;
     }
-    // Four independent reviewers judged all 123 candidates and found 5 real defects. That is the
+    // Four independent reviewers judged all 105 candidates and found 5 real defects. That is the
     // headline result of this corpus: the three heuristic candidate rules have a very high false
     // positive rate on well-edited technical documentation, and `noun-cluster-candidate` has no
     // observed true positive at all. The numbers are asserted so that a rule change which alters
     // them cannot pass unnoticed — and so that nobody quotes a recall figure built on five cases.
-    expect(counts).toEqual({ violation: 5, 'non-violation': 118, undecidable: 0 });
+    expect(counts).toEqual({ violation: 5, 'non-violation': 100, undecidable: 0 });
   });
 
   it('no candidate rule is silently reclassified as reliable', () => {
@@ -383,8 +383,8 @@ describe('candidate ground truth', () => {
         perRule.set(record.ruleId, entry);
       }
     }
-    // `noun-cluster-candidate` fired 35 times with zero confirmed defects. Documented in
+    // `noun-cluster-candidate` fired 24 times with zero confirmed defects. Documented in
     // docs/provisional-rules.md as an observed limit, not hidden.
-    expect(perRule.get('noun-cluster-candidate')).toEqual({ violation: 0, total: 35 });
+    expect(perRule.get('noun-cluster-candidate')).toEqual({ violation: 0, total: 24 });
   });
 });

@@ -246,32 +246,32 @@ named semantic evaluator; with semantic analysis disabled they degrade to `revie
 
 ### Measured precision of the candidate heuristics
 
-Four independent reviewers adjudicated **all 123 candidate passages** the rule set emits across the
+Four independent reviewers adjudicated **all 105 candidate passages** the rule set emits across the
 18 fixtures, judging each against the rule intent stated below and nothing else. The verdicts are in
 `fixtures/verdicts/` and are merged into `candidateAdjudications` in each annotation record.
 
 | Rule                           | Candidates | Confirmed defects | Non-defects |
 | ------------------------------ | ---------: | ----------------: | ----------: |
-| `passive-voice-candidate`      |         53 |                 2 |          51 |
-| `noun-cluster-candidate`       |         35 |                 0 |          35 |
-| `ambiguous-pronoun-candidate`  |         34 |                 2 |          32 |
+| `passive-voice-candidate`      |         50 |                 2 |          48 |
+| `noun-cluster-candidate`       |         24 |                 0 |          24 |
+| `ambiguous-pronoun-candidate`  |         30 |                 2 |          28 |
 | `one-instruction-per-sentence` |          1 |                 1 |           0 |
-| **Total**                      |    **123** |             **5** |     **118** |
+| **Total**                      |    **105** |             **5** |     **100** |
 
-**Read this before quoting any figure from the semantic evaluation.** Five confirmed defects in 123
+**Read this before quoting any figure from the semantic evaluation.** Five confirmed defects in 105
 flagged passages is the headline result of this corpus, and it has three consequences:
 
 1. **These heuristics have a very high false-positive rate on well-edited technical documentation.**
    That is why they are candidate-only, why they default to `info` severity, and why they must never
    be promoted to hard violations on this evidence.
-2. **`noun-cluster-candidate` has no observed true positive at all.** It fired 35 times and every
+2. **`noun-cluster-candidate` has no observed true positive at all.** It fired 24 times and every
    verdict was a non-defect. Reviewers reported that most of its spans are not noun runs: they
    straddle a finite verb, a parenthetical, a table cell or a title line, or they name a real
    product (`SSL/TLS Protocol Engine`, `Graphical User Interface (GUI)`). This is a segmentation
    defect as much as a comprehension one, and the rule should be treated as unvalidated.
 3. **Recall is not measurable on this corpus.** With five positives, any recall or F1 number is
    noise. `formatEvaluationReport` therefore withholds recall and F1 below ten gold positives and
-   prints the positive count instead. Precision over 118 negatives is informative; recall is not.
+   prints the positive count instead. Precision over 100 negatives is informative; recall is not.
 
 The counts are asserted in `test/fixtures/corpus.test.ts` so that a rule change which moves them
 cannot pass unnoticed, and `scripts/ci/check-candidate-ground-truth.sh` fails the build if a change
@@ -284,11 +284,90 @@ are not a conformance measurement.**
 
 ### passive-voice-candidate
 
-**Detects** a `be`/`get` form followed by a past participle, optionally with a `by` agent.
+**Detects** a `be`/`get` form (`is|are|was|were|be|been|being|gets|get|got` — unchanged) followed
+by a past participle, optionally with a `by` agent.
 
 **Why candidate-only** The same string is a passive verb in "the filter must be replaced" and an
 adjectival state in "the drain valve is closed". Only the first is a defect, and only in an
 instruction. Deciding needs meaning, so `passive-voice-adjudication` decides.
+
+**Mechanism — a `wink-nlp` prototype (issue #35).** `compromise` (used elsewhere in this codebase
+for imperative/function-word detection, see "The procedural/descriptive classifier" below) has no
+passive-voice feature at all — confirmed directly, not an oversight. This rule instead adds
+[`wink-nlp`](https://www.npmjs.com/package/wink-nlp) plus the `wink-eng-lite-web-model` pretrained
+model as a POS-tag-conditioned filter **on top of** the original regex, which is otherwise kept
+unchanged: a match still requires the same auxiliary set and the same word shape (a regular
+`-ed` participle of at least 5 letters, or membership in the same 70-entry irregular `PARTICIPLES`
+list as before). The new step is that the matched word must also be tagged `VERB` by `wink-nlp`,
+not `ADJ` — this is real recall the old list-membership check could never distinguish, because a
+participle can be adjectival in one sentence and verbal in another regardless of its spelling.
+
+**Why the match shape was not loosened, even though `wink-nlp` could support it.** `wink-nlp`
+correctly tags genuinely novel irregular participles the old list never enumerated (`hewn` in "the
+gasket was hewn", `forsaken` in "the report has been forsaken" — both tag `VERB`, neither is in
+`PARTICIPLES`), and correctly tags an ordinary 4-letter regular participle the old regex's `[a-z]
+{3,}ed` shape has always been too strict to match at all ("that protocol **is used**",
+`curl-url-option-reference.md`; "…**be used** inside a `VirtualHost`",
+`httpd-mod-ssl-directive-config.md` — both genuine passives, both missed by the pre-existing
+regex). Neither improvement is exercised by this rule: doing so would emit candidate spans no
+reviewer has ever adjudicated, and this project's own candidate/ground-truth invariant
+(`test/fixtures/corpus.test.ts`) exists specifically to catch that. Reported here rather than
+silently worked around, as real, verified findings that need a human review pass before they can
+be admitted.
+
+**Measured effect on `fixtures/original/*.md`** (all 18 documents, before/after, both against the
+same fixed `fixtures/annotations/*.json` ground truth):
+
+|                                      | Old regex (list-membership) | New (`wink-nlp` tag-conditioned) |
+| ------------------------------------ | --------------------------: | -------------------------------: |
+| Total candidates                     |                          53 |                               50 |
+| Matched to a `violation` verdict     |                           2 |                                2 |
+| Matched to a `non-violation` verdict |                          51 |                               48 |
+| Candidate with no matching verdict   |                           0 |                                0 |
+
+Both of the corpus's 2 confirmed real defects are still caught (checked directly, not inferred from
+the count). All 3 removed candidates are documented `non-violation` in the ground truth, and for 2
+of the 3 the reviewer's own reasoning is an adjectival/state characterization that the `VERB`/`ADJ`
+tag distinction reproduces directly:
+
+- `httpd-mod-ssl-directive-config.json`, `"is\ndisabled"` (span 633–644): "states a configuration
+  state, adjectival rather than a passive action … describes the shipped default" — `wink-nlp` tags
+  `disabled` `ADJ` here.
+- `httpd-mod-ssl-directive-config.json`, `"be configured"` (span 997–1010): "a stated
+  property/limitation of the directive … not an instruction whose actor matters" — `wink-nlp` tags
+  `configured` `ADJ` here.
+- `httpd-mod-ssl-overview.json`, `"be configured"` (span 474–487): "a capability statement about
+  the module in descriptive overview prose, not an instruction" — `wink-nlp` tags `configured` `ADJ`
+  here too.
+
+**Known false positive introduced by the substrate, mitigated with a small override.** `wink-nlp`
+tags `code` as `VERB` immediately after a `be`-auxiliary with no article ("The SQLite library **is
+code** that implements…", `sqlite-cli-description.md`) regardless of surrounding context —
+confirmed directly, reproducible across several rewordings. `code` is verb/noun-ambiguous the way
+`record`/`file`/`access` are (see `imperative-verbs.ts`), and `wink-nlp`'s coarser universal tagset
+resolves the ambiguity the wrong way here where `compromise` resolves the equivalent case
+correctly elsewhere in this codebase. A single-word override (`WINK_FALSE_VERB_TAGS` in
+`candidate-rules.ts`) excludes it; found empirically, not enumerated in advance, and not
+exhaustive — a corpus this small cannot prove there are no others.
+
+**Known limitation the tag-conditioning does not fix.** `wink-nlp`'s universal POS tagset does not
+distinguish tense/aspect finely enough to separate a genuine passive from an active progressive
+("is running", "is installing" — both tag `VERB`); the regex's own `-ed`/`PARTICIPLES` shape gate
+already excludes `-ing` words entirely, so this never surfaces in practice, but it means the
+`VERB`/`ADJ` distinction is doing less grammatical work than it might appear to. It also still gets
+a real passive wrong in at least one case found during exploration: "The device **gets configured**
+automatically" tags `configured` `ADJ` (parallel to the "gets configured" ADJ-tagging seen with
+`is`/`be`), even though this is a genuine passive, not a stative description — the substrate cannot
+always tell the difference between "was configured [in the past]" and "is [currently] configured
+[state]" from tag alone.
+
+**Verdict: a real, measured but modest precision improvement (53 → 50 candidates, −5.7% on this
+corpus, 0 recall loss on the 2 known defects), with one substrate-introduced false positive found
+and mitigated, one known unfixed miscall, and one deliberately unexercised recall opportunity (the
+`used`/`hewn`/`forsaken` cases) that would need a human review pass before landing. This is not
+"delete the list, wink-nlp is better" — it is a plausible, defensible layer added on top of the
+list, worth a second opinion from the maintainer before treating it as the production mechanism
+rather than a prototype.**
 
 ### noun-cluster-candidate
 
@@ -300,7 +379,7 @@ conventional pair; `engine oil pressure warning lamp test procedure` is genuinel
 are identical. `noun-cluster-comprehension` decides, and is instructed that component identity
 outranks simplification.
 
-**Known failure modes — this rule is unvalidated.** Measured: **0 confirmed defects in 35
+**Known failure modes — this rule is unvalidated.** Measured: **0 confirmed defects in 24
 candidates.** Reviewers found that most spans are not noun runs at all — they cross a finite verb
 (`allows`, `include`, `named`), a parenthetical, a table cell, a `See [` link, or a title line
 immediately below a directive name — and that the remainder name real components. Treat any finding
@@ -319,7 +398,7 @@ antecedents.
 
 **Known failure modes** The antecedent count is a crude content-word count over the current and
 previous sentence. It over-triggers in dense technical prose; the default threshold of 2 is a
-compromise, and `info` severity reflects the uncertainty. Measured: 2 confirmed defects in 34
+compromise, and `info` severity reflects the uncertainty. Measured: 2 confirmed defects in 30
 candidates. Reviewers noted a specific failure — a list whose every item begins `it`, sharing one
 implied referent, produces one candidate per item, and "no explicit antecedent" is not the same
 defect as "more than one plausible antecedent". The proposed antecedents were also sometimes past
@@ -353,20 +432,112 @@ containing a link. See the regression test in `test/unit/protected-regions.test.
 
 ## The procedural/descriptive classifier
 
-Several rules depend on `detectMode()`, which decides whether a passage is an instruction. It has no
-part-of-speech model. It compares the first content word against a closed list of base-form action
-verbs (`src/core/imperative-verbs.ts`) and treats a leading `Do not` / `Never` / `Always` as
-imperative.
-
-Verbs whose base form is a common noun (`file`, `place`, `order`, `plan`, `state`, `test`, `mount`,
-`power`, `contact`, `access`, `report`, `label`, `mark`, `screen`) are **excluded** from the list,
-because including them misclassified large amounts of descriptive prose in the fixture corpus.
-
-Consequences:
+Several rules depend on `detectMode()`, which decides whether a passage is an instruction. As of the
+[`compromise`](https://www.npmjs.com/package/compromise) integration (issue #35), this asks a
+grammatical question — does the passage open with an imperative-mood verb? — via
+`sentenceOpensImperative()` in `src/core/pos-tags.ts`, rather than testing set membership against a
+closed word list. It still only looks at the sentence opener, so the classifier's oldest known limit
+is unchanged:
 
 - `Record the value.` → procedural (correct).
 - `Record the value is stored in flash.` → procedural (wrong; it is descriptive).
-- `Power the unit from the 24 V rail.` → descriptive (wrong; `power` is excluded on purpose).
 
-Where a misclassification would change a hard verdict, the affected rule emits a candidate rather
-than a violation. Add project verbs with `extraImperativeVerbs`.
+`src/core/imperative-verbs.ts` (`IMPERATIVE_VERBS`) survives, but its role changed. It is no longer
+consulted as `Set.has()` membership anywhere outside `pos-tags.ts`. It is now:
+
+1. A **domain lexicon** taught to `compromise` via `addWords`, so `compromise`'s own
+   context-sensitive tagger can recognise technical verbs it does not know out of the box —
+   confirmed directly: `torque`, `flash`, `mark` (as a verb), `source`, `sync`, `query`, `rebase`,
+   `unset` and `serialise`/`serialize` all default to a non-verb reading until taught this way.
+   Only words `compromise` does not already tag as a verb are taught — `addWords` was found, by
+   direct testing, to _replace_ `compromise`'s own richer conjugation-aware tag for a word it
+   already knows (`addWords({build: 'Verb'})` turns `Build` from `Verb·PresentTense·Infinitive`
+   into `Verb·PastTense` in "Build, flash, and run a sample application") rather than adding to it,
+   so every word is checked against a pristine tag lookup before ever being taught.
+2. A **fallback** for words `compromise`'s own tagging gets wrong even with full sentence context
+   (below), and for the rare case where `compromise`'s tokenisation of a sentence does not align
+   with this project's own word tokeniser.
+
+`src/deterministic/helpers.ts`'s old `FUNCTION_WORDS`/`isFunctionWord` moved into `pos-tags.ts` for
+the same reason, backing `noun-cluster-candidate` and `ambiguous-pronoun-candidate`. There,
+`compromise`'s tag and list membership are a **union**, not tag-first-list-as-fallback: corpus
+validation found `compromise` mistags unambiguous closed-class words even with full sentence
+context (`no` and `so` tag as `Expression`, `under` as `Adjective` in "is under the exclusive
+control of" — confirmed directly, not alignment misses). This is also this design's known
+limitation: a word the closed list wrongly treats as _always_ a function word — this issue's own
+motivating examples, `per` as a unit marker and `further` as a comparative adjective — is not fixed
+by adding `compromise`, because the list still fires unconditionally and `compromise`'s tag is
+exactly the thing just shown to be unreliable here.
+
+**Additional known failure modes, all found by corpus validation and fixed with small, documented
+overrides rather than silently accepted:**
+
+- `compromise` tags a capitalised sentence-initial word that collides with a common English verb as
+  imperative regardless of what it actually names — `VACUUM reclaims storage occupied by dead
+tuples.` (PostgreSQL's own command name) tags `VACUUM` as `Verb·Imperative`, which then cascades
+  into mistagging the real verb `reclaims` as a noun. `List Of PRAGMAs …`, a heading rendered as a
+  run-on Title Case line in `fixtures/original/sqlite-pragma-hard-negative.md` — a fixture named for
+  exactly this kind of trap — has the same failure with `List`. Both are excluded by a two-word
+  override list in `pos-tags.ts`, found empirically against this corpus, not enumerated in advance.
+- `compromise` does not tag `#Imperative` on any verb in a coordinated imperative list ("Build,
+  flash, and run a sample application.") — confirmed directly, none of the three verbs get the tag.
+  `sentenceOpensImperative` recovers this by also accepting a bare (infinitive, non-passive,
+  non-gerund) tag on the very first word of a sentence, which is otherwise a vanishingly rare shape
+  outside imperative mood — guarded against a word immediately followed by a colon (`Note:`,
+  `Exception:`), which is a label, not a verb taking an object.
+- `pos-tags.ts` has two "is this a bare verb" checks, not one, and they answer different questions:
+  `isBareVerbTagSet` (accepts `Infinitive` **or** `PresentTense`) asks "is this word functioning as
+  a verb at all right now?", the broad signal `noun-cluster-candidate` and
+  `ambiguous-pronoun-candidate` need. `isImperativeOpenerTagSet` (requires `Infinitive`) asks "does
+  this word open or continue an imperative _clause_?", used by `sentenceOpensImperative`'s
+  coordinated-list fallback above and by `one-instruction-per-sentence`'s conjunction/comma
+  detection. `compromise` tags an inflected third-person finite verb ("removes", "sends", "logs")
+  `Verb·PresentTense` with no `Infinitive` — the same tag shape a genuine bare command verb has
+  minus `Infinitive` — so the broad check alone previously misread the second one as a second
+  instruction: "Install the agent, which logs events and sends reports." (a single instruction
+  followed by a descriptive relative clause) was reported as containing two instructions, because
+  "sends" — sitting right after the conjunction "and" — satisfied the broad, `PresentTense`-only
+  check. Found by `chatgpt-codex-connector` (P1) against the single-predicate version.
+- `have`/`has`/`had`, `do`/`does`/`did`, `be`/`being`/`been`, `get`/`gets`/`got`, `go`/`goes` are
+  excluded from the tag-based "is this a bare action verb" signal used by
+  `one-instruction-per-sentence`'s conjunction/comma detection, even though `compromise` correctly
+  tags them as bare verbs. This was the one regression corpus validation found against the
+  annotated ground truth: without the exclusion, "Select, and have each affected employee use, the
+  types of PPE…" (`fixtures/annotations/osha-ppe-requirements.json`, a confirmed real defect) went
+  from a `one-instruction-per-sentence` **candidate** — this project's own candidate/adjudication
+  architecture working as intended — to an immediate `deterministic-violation`, skipping semantic
+  adjudication. The verdict was right; the architecture was bypassed for the wrong reason, and the
+  same tag would misfire on ordinary descriptive prose using "have" as an auxiliary near an
+  unrelated "and".
+- Protected content (an inline-code identifier, a URL, a quantity, …) is masked with a repeated
+  placeholder character before grammatical classification runs. `sentenceOpensImperative` does not
+  strip a leading run of that placeholder the way it strips leading whitespace or markup (`>`, `*`,
+  `_`, `-`): a masked run in subject position — "`workers` run the service and emit metrics." masks
+  to a placeholder run standing for "workers", then " run the service…" — is a real, unknown token
+  occupying the sentence's subject, not decoration to skip over. Skipping it unconditionally
+  previously let "run" read as a bare sentence-opening imperative on the direct
+  `analyseDocument`/`scanBlocks` path even though the masked identifier is the actual subject. A
+  masked _structural_ marker (a blockquote arrow, an emphasis marker) immediately, contiguously
+  adjacent to the verb it introduces — no separating space — is unaffected: `compromise`'s own
+  tokeniser folds that run into the following word's own token regardless. Found by
+  `chatgpt-codex-connector` (P2).
+
+Add project verbs with `extraImperativeVerbs`; they are taught to `compromise` the same way the
+built-in domain lexicon is (same already-known-as-verb guard), so a configured verb genuinely
+participates in mood detection. An entry may be a multi-word phrase (`"power cycle"`); it is taught
+and matched as that whole phrase, not as its individual words — `["power cycle"]` and
+`["power", "cycle"]` are different configurations with different effects, the former teaching only
+the two-word command "power cycle the device", the latter teaching "power" and "cycle" as
+independent one-word verbs.
+
+**Measured corpus effect** (`fixtures/original/*.md`, all 18 documents, before/after this change):
+
+| Rule                           | Before | After | Note                                                                                                                                                                                           |
+| ------------------------------ | -----: | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list-instruction-structure`   |      3 |     3 | Unaffected — does not depend on imperative/function-word detection.                                                                                                                            |
+| `one-instruction-per-sentence` |      6 |     6 | Same count; composition unchanged after the auxiliary-verb fix above.                                                                                                                          |
+| `noun-cluster-candidate`       |     35 |    24 | −11. This rule has **zero** confirmed true positives in 24 reviewed candidates (below); every removed candidate is a reduction of an already-100%-false-positive heuristic, not a recall loss. |
+| `ambiguous-pronoun-candidate`  |     34 |    30 | −4. Both of the rule's 2 confirmed true positives (`httpd-mod-ssl-directive-config`, `postgres-vacuum-overview`) were checked directly and are still generated as candidates.                  |
+
+The one confirmed `one-instruction-per-sentence` true positive (`osha-ppe-requirements`) was also
+checked directly and is still generated as a candidate, not a hard violation.

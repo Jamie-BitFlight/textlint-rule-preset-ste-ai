@@ -3,56 +3,6 @@
   "verdicts": {
     "k8s-audit-log-troubleshooting": [
       {
-        "passageId": "noun-cluster-candidate:s3:516",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "Auditing allows cluster administrators",
-        "span": { "start": 516, "end": 554 },
-        "verdict": "non-violation",
-        "reason": "This is not a noun run at all: the span straddles the finite verb 'allows', so the reader parses subject-verb-object with no grouping decision to make. The only real noun pair, 'cluster administrators', is entirely transparent.",
-        "reviewerConfidence": 0.92
-      },
-      {
-        "passageId": "ambiguous-pronoun-candidate:s5:621",
-        "ruleId": "ambiguous-pronoun-candidate",
-        "evaluatorId": "pronoun-antecedent-ambiguity",
-        "quote": "it",
-        "span": { "start": 621, "end": 623 },
-        "verdict": "non-violation",
-        "reason": "In the parallel list of audit questions, 'it' consistently denotes the audited event or action, and no competing referent is on offer; the heuristic's candidate antecedents are verbs ('happened', 'happen'), not nouns a reader could select.",
-        "reviewerConfidence": 0.85
-      },
-      {
-        "passageId": "ambiguous-pronoun-candidate:s6:649",
-        "ruleId": "ambiguous-pronoun-candidate",
-        "evaluatorId": "pronoun-antecedent-ambiguity",
-        "quote": "it",
-        "span": { "start": 649, "end": 651 },
-        "verdict": "non-violation",
-        "reason": "Same parallel question list: 'when did it happen?' uses the same single implied referent (the audited event) as every sibling bullet, so there is nothing for a reader to choose between.",
-        "reviewerConfidence": 0.85
-      },
-      {
-        "passageId": "ambiguous-pronoun-candidate:s7:668",
-        "ruleId": "ambiguous-pronoun-candidate",
-        "evaluatorId": "pronoun-antecedent-ambiguity",
-        "quote": "it",
-        "span": { "start": 668, "end": 670 },
-        "verdict": "non-violation",
-        "reason": "'who initiated it?' carries the same event referent as the rest of the list; the parallel structure fixes the reading and no alternative antecedent competes.",
-        "reviewerConfidence": 0.85
-      },
-      {
-        "passageId": "ambiguous-pronoun-candidate:s8:692",
-        "ruleId": "ambiguous-pronoun-candidate",
-        "evaluatorId": "pronoun-antecedent-ambiguity",
-        "quote": "it",
-        "span": { "start": 692, "end": 694 },
-        "verdict": "non-violation",
-        "reason": "'on what did it happen?' repeats the same single implied referent used throughout the question list, so a reader cannot resolve it two ways.",
-        "reviewerConfidence": 0.85
-      },
-      {
         "passageId": "ambiguous-pronoun-candidate:s9:723",
         "ruleId": "ambiguous-pronoun-candidate",
         "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -70,16 +20,6 @@
         "span": { "start": 753, "end": 755 },
         "verdict": "non-violation",
         "reason": "'from where was it initiated?' shares the single implied event referent of the surrounding bullets, so the pronoun is not open to a meaning-changing second reading.",
-        "reviewerConfidence": 0.85
-      },
-      {
-        "passageId": "noun-cluster-candidate:s14:1150",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "current backend implementations\ninclude logs files",
-        "span": { "start": 1150, "end": 1200 },
-        "verdict": "non-violation",
-        "reason": "The span crosses the main verb 'include', so it is not a single noun run; the genuine phrase 'current backend implementations' is three transparent words and 'log files' is a conventional term.",
         "reviewerConfidence": 0.85
       },
       {
@@ -222,16 +162,6 @@
         "span": { "start": 1266, "end": 1268 },
         "verdict": "non-violation",
         "reason": "'messages from the scheduler about why it can not schedule your pod' - only the scheduler schedules, and it is the nearest noun, so the pronoun resolves one way.",
-        "reviewerConfidence": 0.9
-      },
-      {
-        "passageId": "noun-cluster-candidate:s22:1523",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "See [Compute Resources document",
-        "span": { "start": 1523, "end": 1554 },
-        "verdict": "non-violation",
-        "reason": "The span begins with the imperative 'See' and an opening markdown bracket; the actual content is the link text 'Compute Resources document', which is a document title and reads unambiguously.",
         "reviewerConfidence": 0.9
       }
     ],

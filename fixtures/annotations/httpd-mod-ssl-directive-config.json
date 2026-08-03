@@ -243,13 +243,13 @@
       "passageId": "noun-cluster-candidate:s1:207",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
-      "quote": "SSLEngine\nSSL Engine Operation",
+      "quote": "SSLEngine\nSSL Engine Operation Switch\nSyntax: SSLEngine",
       "span": {
         "start": 207,
-        "end": 237
+        "end": 262
       },
       "verdict": "non-violation",
-      "reason": "The span joins the directive name SSLEngine to the title line 'SSL Engine Operation Switch' across a line break; both are component identity (a directive name and its title), not a prose noun pile a reader must parse.",
+      "reason": "The span joins the directive name SSLEngine to its title line 'SSL Engine Operation Switch' and the following 'Syntax: SSLEngine' declaration across line breaks; all three are component identity and reference-page boilerplate (a directive name, its title, and its syntax label), not a prose noun pile a reader must parse.",
       "reviewer": "reviewer-a",
       "reviewerConfidence": 0.85
     },
@@ -338,30 +338,16 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "passive-voice-candidate:s6:633",
-      "ruleId": "passive-voice-candidate",
-      "evaluatorId": "passive-voice-adjudication",
-      "quote": "is\ndisabled",
-      "span": {
-        "start": 633,
-        "end": 644
-      },
-      "verdict": "non-violation",
-      "reason": "'By default the ... Engine is disabled' states a configuration state, adjectival rather than a passive action, and describes the shipped default where no actor performed anything.",
-      "reviewer": "reviewer-a",
-      "reviewerConfidence": 0.9
-    },
-    {
       "passageId": "noun-cluster-candidate:s9:777",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
-      "quote": "SSLFIPS\nSSL FIPS mode",
+      "quote": "SSLFIPS\nSSL FIPS mode Switch\nSyntax: SSLFIPS",
       "span": {
         "start": 777,
-        "end": 798
+        "end": 821
       },
       "verdict": "non-violation",
-      "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across a line break to its title 'SSL FIPS mode Switch'. Directive identity, not an opaque noun run.",
+      "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across line breaks to its title 'SSL FIPS mode Switch' and its 'Syntax: SSLFIPS' declaration. Directive identity and reference-page boilerplate, not an opaque noun run.",
       "reviewer": "reviewer-a",
       "reviewerConfidence": 0.85
     },
@@ -392,20 +378,6 @@
       "reason": "The passive states a placement constraint on the directive (where it must appear), not an action assigned to an actor; who edits the configuration file is immaterial to the constraint.",
       "reviewer": "reviewer-a",
       "reviewerConfidence": 0.6
-    },
-    {
-      "passageId": "passive-voice-candidate:s11:997",
-      "ruleId": "passive-voice-candidate",
-      "evaluatorId": "passive-voice-adjudication",
-      "quote": "be configured",
-      "span": {
-        "start": 997,
-        "end": 1010
-      },
-      "verdict": "non-violation",
-      "reason": "'cannot be configured with conflicting settings' is a stated property/limitation of the directive in reference prose, not an instruction whose actor matters.",
-      "reviewer": "reviewer-a",
-      "reviewerConfidence": 0.75
     },
     {
       "passageId": "passive-voice-candidate:s13:1144",

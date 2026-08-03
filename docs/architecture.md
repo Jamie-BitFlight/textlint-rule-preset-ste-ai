@@ -47,7 +47,7 @@ it.
 The diagram below is what `src/core/document.ts` runs today — regex passes over progressively masked
 text, selected by a two-value `format: 'markdown' | 'text'` flag (`src/core/types.ts:176`) — and it is
 not the intended permanent design. [Issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25)
-records the cost: `noun-cluster-candidate` measured 0 confirmed defects in 35 reviewer-adjudicated
+records the cost: `noun-cluster-candidate` measured 0 confirmed defects in 24 reviewer-adjudicated
 candidates ([issue #11](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/11)), with the false
 positives traced to a line scanner disagreeing with a table cell, a `See [` link, and a directive name
 followed by its title line — constructs a real parser reads correctly and a line scanner reliably does

@@ -85,6 +85,7 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
       policy: config.diagnostics,
       autofix: config.autofix,
       blockById,
+      extraImperativeVerbs: config.extraImperativeVerbs,
     };
 
     const output = rule.run(input);

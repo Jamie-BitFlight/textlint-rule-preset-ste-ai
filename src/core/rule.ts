@@ -20,6 +20,16 @@ export interface RuleInput<TOptions extends object = object> {
   readonly autofix: AutofixPolicy;
   /** Blocks keyed by id, for rules that need a sentence's container. */
   readonly blockById: ReadonlyMap<string, TextBlock>;
+  /**
+   * The run's configured `extraImperativeVerbs` (`SteAiConfig.extraImperativeVerbs`), passed
+   * through so a rule that consults `src/core/pos-tags.ts` (`sentenceOpensImperative`,
+   * `buildSentencePosIndex`) can pass the *current* run's vocabulary explicitly on every call,
+   * rather than relying on it having been taught to `compromise`'s shared lexicon by an earlier
+   * call for this document. `pos-tags.ts` keys its lexicon state off exactly this value, so a rule
+   * that silently omits it gets whatever configuration happened to run last in this process, not
+   * necessarily this run's own.
+   */
+  readonly extraImperativeVerbs: readonly string[];
 }
 
 export interface RuleOutput {

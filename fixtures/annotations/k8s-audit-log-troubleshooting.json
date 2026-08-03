@@ -69,76 +69,6 @@
   "notes": "The single sentence-length-descriptive finding is disputed as an empirically-verified tool artifact: masking the markdown link destination breaks the sentence-splitter for the remainder of the paragraph, merging four short, correct sentences into one falsely 'overlong' one. The only genuine, safe defect (an unambiguous contraction) is accepted. Passage p1 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery.",
   "candidateAdjudications": [
     {
-      "passageId": "noun-cluster-candidate:s3:516",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "Auditing allows cluster administrators",
-      "span": {
-        "start": 516,
-        "end": 554
-      },
-      "verdict": "non-violation",
-      "reason": "This is not a noun run at all: the span straddles the finite verb 'allows', so the reader parses subject-verb-object with no grouping decision to make. The only real noun pair, 'cluster administrators', is entirely transparent.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.92
-    },
-    {
-      "passageId": "ambiguous-pronoun-candidate:s5:621",
-      "ruleId": "ambiguous-pronoun-candidate",
-      "evaluatorId": "pronoun-antecedent-ambiguity",
-      "quote": "it",
-      "span": {
-        "start": 621,
-        "end": 623
-      },
-      "verdict": "non-violation",
-      "reason": "In the parallel list of audit questions, 'it' consistently denotes the audited event or action, and no competing referent is on offer; the heuristic's candidate antecedents are verbs ('happened', 'happen'), not nouns a reader could select.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.85
-    },
-    {
-      "passageId": "ambiguous-pronoun-candidate:s6:649",
-      "ruleId": "ambiguous-pronoun-candidate",
-      "evaluatorId": "pronoun-antecedent-ambiguity",
-      "quote": "it",
-      "span": {
-        "start": 649,
-        "end": 651
-      },
-      "verdict": "non-violation",
-      "reason": "Same parallel question list: 'when did it happen?' uses the same single implied referent (the audited event) as every sibling bullet, so there is nothing for a reader to choose between.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.85
-    },
-    {
-      "passageId": "ambiguous-pronoun-candidate:s7:668",
-      "ruleId": "ambiguous-pronoun-candidate",
-      "evaluatorId": "pronoun-antecedent-ambiguity",
-      "quote": "it",
-      "span": {
-        "start": 668,
-        "end": 670
-      },
-      "verdict": "non-violation",
-      "reason": "'who initiated it?' carries the same event referent as the rest of the list; the parallel structure fixes the reading and no alternative antecedent competes.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.85
-    },
-    {
-      "passageId": "ambiguous-pronoun-candidate:s8:692",
-      "ruleId": "ambiguous-pronoun-candidate",
-      "evaluatorId": "pronoun-antecedent-ambiguity",
-      "quote": "it",
-      "span": {
-        "start": 692,
-        "end": 694
-      },
-      "verdict": "non-violation",
-      "reason": "'on what did it happen?' repeats the same single implied referent used throughout the question list, so a reader cannot resolve it two ways.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.85
-    },
-    {
       "passageId": "ambiguous-pronoun-candidate:s9:723",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -163,20 +93,6 @@
       },
       "verdict": "non-violation",
       "reason": "'from where was it initiated?' shares the single implied event referent of the surrounding bullets, so the pronoun is not open to a meaning-changing second reading.",
-      "reviewer": "reviewer-c",
-      "reviewerConfidence": 0.85
-    },
-    {
-      "passageId": "noun-cluster-candidate:s14:1150",
-      "ruleId": "noun-cluster-candidate",
-      "evaluatorId": "noun-cluster-comprehension",
-      "quote": "current backend implementations\ninclude logs files",
-      "span": {
-        "start": 1150,
-        "end": 1200
-      },
-      "verdict": "non-violation",
-      "reason": "The span crosses the main verb 'include', so it is not a single noun run; the genuine phrase 'current backend implementations' is three transparent words and 'log files' is a conventional term.",
       "reviewer": "reviewer-c",
       "reviewerConfidence": 0.85
     },

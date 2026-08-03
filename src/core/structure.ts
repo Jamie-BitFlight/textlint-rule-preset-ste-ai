@@ -1,4 +1,4 @@
-import { IMPERATIVE_VERBS } from './imperative-verbs.js';
+import { sentenceOpensImperative } from './pos-tags.js';
 import { trimRange } from './text.js';
 import type {
   AdmonitionKind,
@@ -151,26 +151,19 @@ export function isAdmonitionLabelLine(line: string): boolean {
 // Mode detection
 // ---------------------------------------------------------------------------
 
-const NEGATIVE_IMPERATIVE = /^(?:do not|don't|never|always)\b/i;
-
 /**
  * Classify a passage as an instruction or a description.
  *
- * This is a **provisional heuristic**, not a parser: the first content word is compared against
- * a closed list of base-form technical action verbs, and a leading `Do not` / `Never` / `Always`
- * is treated as imperative. It has no part-of-speech model, so `Record the value` is procedural
- * while `Record the value is stored in flash` is misclassified. Rules that depend on the
- * distinction therefore emit review-required candidates rather than hard violations wherever the
- * classification changes the outcome.
+ * This is a **provisional heuristic**, not a parser: it asks whether the passage opens with an
+ * imperative-mood verb, using `compromise`'s grammatical tagging (see
+ * {@link sentenceOpensImperative}) rather than closed-list membership. That still only looks at
+ * the sentence opener, so `Record the value` is procedural while `Record the value is stored in
+ * flash` is misclassified — the same known limit the previous list-based heuristic had. Rules
+ * that depend on the distinction therefore emit review-required candidates rather than hard
+ * violations wherever the classification changes the outcome.
  */
 export function detectMode(text: string, options: StructureOptions): TextMode {
-  const stripped = text.replace(/^[\s>*_-]+/, '');
-  if (NEGATIVE_IMPERATIVE.test(stripped)) return 'procedural';
-  const firstWord = /^[\p{L}]+/u.exec(stripped)?.[0]?.toLowerCase();
-  if (firstWord === undefined) return 'descriptive';
-  if (IMPERATIVE_VERBS.has(firstWord)) return 'procedural';
-  if (options.extraImperativeVerbs.includes(firstWord)) return 'procedural';
-  return 'descriptive';
+  return sentenceOpensImperative(text, options.extraImperativeVerbs) ? 'procedural' : 'descriptive';
 }
 
 // ---------------------------------------------------------------------------

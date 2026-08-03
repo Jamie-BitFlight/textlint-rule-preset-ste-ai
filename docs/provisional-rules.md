@@ -379,7 +379,7 @@ conventional pair; `engine oil pressure warning lamp test procedure` is genuinel
 are identical. `noun-cluster-comprehension` decides, and is instructed that component identity
 outranks simplification.
 
-**Known failure modes — this rule is unvalidated.** Measured: **0 confirmed defects in 35
+**Known failure modes — this rule is unvalidated.** Measured: **0 confirmed defects in 24
 candidates.** Reviewers found that most spans are not noun runs at all — they cross a finite verb
 (`allows`, `include`, `named`), a parenthetical, a table cell, a `See [` link, or a title line
 immediately below a directive name — and that the remainder name real components. Treat any finding
@@ -398,7 +398,7 @@ antecedents.
 
 **Known failure modes** The antecedent count is a crude content-word count over the current and
 previous sentence. It over-triggers in dense technical prose; the default threshold of 2 is a
-compromise, and `info` severity reflects the uncertainty. Measured: 2 confirmed defects in 34
+compromise, and `info` severity reflects the uncertainty. Measured: 2 confirmed defects in 30
 candidates. Reviewers noted a specific failure — a list whose every item begins `it`, sharing one
 implied referent, produces one candidate per item, and "no explicit antecedent" is not the same
 defect as "more than one plausible antecedent". The proposed antecedents were also sometimes past

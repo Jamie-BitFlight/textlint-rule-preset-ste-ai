@@ -231,6 +231,17 @@ describe('sentenceOpensImperative', () => {
     expect(sentenceOpensImperative('VACUUM reclaims storage occupied by dead tuples.')).toBe(false);
   });
 
+  it('lets an explicitly configured extra verb override the corpus-specific suppression list', () => {
+    // Regression (chatgpt-codex-connector, P2, r3700698040): the "vacuum"/"list" false-positive
+    // suppression above used to apply unconditionally, so a project that explicitly configured
+    // `extraImperativeVerbs: ['vacuum']` (e.g. to treat "VACUUM the table." as a command in its own
+    // SQL-heavy docs) had that configuration silently overridden back to descriptive.
+    expect(sentenceOpensImperative('Vacuum the table.', ['vacuum'])).toBe(true);
+    expect(sentenceOpensImperative('List the files.', ['list'])).toBe(true);
+    // Unconfigured, the suppression still applies as before.
+    expect(sentenceOpensImperative('Vacuum the table.')).toBe(false);
+  });
+
   it('is a known, documented limitation that only the sentence opener is examined', () => {
     // Matches the previous heuristic's own documented limit: this still misclassifies a sentence
     // whose real grammatical subject is a later clause, because only the first word is examined.

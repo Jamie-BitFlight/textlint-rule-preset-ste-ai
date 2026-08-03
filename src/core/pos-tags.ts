@@ -66,10 +66,25 @@ function alreadyKnownAsVerb(word: string): boolean {
 /**
  * The domain lexicon (see {@link IMPERATIVE_VERBS}) as an `addWords` payload: only the words
  * `compromise` does not already tag as a verb on its own (see {@link alreadyKnownAsVerb}). Computed
- * once, lazily, on first use and cached — the underlying word list is static, so which words need
- * teaching never changes between calls; only *whether* they are currently taught does (see
- * {@link withLexicons} below, which teaches this dict at the start of every public entry-point call
- * and restores it at the end of that same call, never leaving it taught in between).
+ * once, lazily, on first use and cached for the life of the process.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2): flagged that caching this dict assumes
+ * `alreadyKnownAsVerb`'s answer for each word never changes — a host application or another
+ * package sharing this process's `compromise` singleton (see {@link LexiconStore}'s own
+ * PROVENANCE) could call `addWords` on one of these words directly, and the stale cached answer
+ * would then either over- or under-teach that word for the rest of the process.
+ *
+ * Investigated and *not* fixed by recomputing every call, unlike {@link extraLexiconDict}'s
+ * identical-shaped finding: {@link IMPERATIVE_VERBS} is 173 words, not the handful a real
+ * `extraImperativeVerbs` configuration ever contains, and `alreadyKnownAsVerb` is a real
+ * `compromise` NLP call per word, not a map lookup. Measured directly: recomputing all 173 words on
+ * every call (the naive fix) raised a single `sentenceOpensImperative` call from microseconds to
+ * ~24ms and made the full test suite time out past 60s (from ~10s cached) — a 100x+ regression paid
+ * by every caller, unconditionally, to guard against a narrow embedding scenario (another process
+ * consumer actively re-teaching one of these specific 173 words between two of this module's own
+ * calls) that most callers will never hit. The remaining risk is accepted, not silently dropped: an
+ * embedder relying on dynamic changes to one of these specific words' `compromise` tag, made
+ * *between* calls into this module, will not see it reflected here without a process restart.
  */
 let cachedDomainLexicon: Record<string, string> | undefined;
 function domainLexiconDict(): Record<string, string> {
@@ -265,56 +280,30 @@ function normalizeExtraVerbs(extraVerbs: readonly string[]): string[] {
 }
 
 /**
- * Canonical identity of an `extraVerbs` list — same entries, any order or case, same identity.
+ * The extra/per-configuration lexicon as an `addWords` payload for one call's `extraVerbs`: only
+ * the entries `compromise` does not already tag as a verb on its own (see
+ * {@link alreadyKnownAsVerb}). Computed fresh on every call, never cached by configuration.
  *
- * PROVENANCE: an earlier version joined normalised entries with a plain space (`' '`) to build
- * this identity string, and the teaching step then re-split that same joined string on whitespace
- * to decide what to actually teach `compromise` — found by `chatgpt-codex-connector` (P2) to
- * conflate two different things a plain space can mean: the delimiter between separate entries,
- * and a multi-word phrase's own internal space. A configured `["power cycle"]` (one phrase) was
- * taught as the two independent single-word verbs "power" and "cycle" instead of the phrase
- * "power cycle", because the teaching loop split the identity string apart the same way regardless
- * of which entries produced it. Using `\u0000` (a character no real `extraVerbs` entry can contain)
- * as the join delimiter here, instead of a space, is *sufficient* to prevent that specific bug from
- * recurring by fixing this string's own ambiguity, but the actual fix is in
- * {@link extraLexiconDict}: it teaches directly from the normalised entry list (see
- * {@link normalizeExtraVerbs}), never by re-splitting this identity string, so nothing downstream
- * depends on this particular choice of delimiter either way. This identity string now exists only
- * to key the small teach-dict cache below, not to decide what gets restored — restoring happens
- * every call regardless of identity (see {@link withLexicons}).
+ * PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version cached this dict by a
+ * configuration-identity key, on the assumption that `alreadyKnownAsVerb`'s answer for a given
+ * `extraVerbs` list never changes between two calls that pass the identical list. `compromise` is a
+ * module-global singleton (see {@link LexiconStore}'s own PROVENANCE) a host application or another
+ * package can also call `addWords` on directly — if one such consumer teaches or re-teaches a word
+ * this call's own `extraVerbs` also names (the review's own example: this package teaches `cache`
+ * as a verb, then the host changes `cache` to a noun), a later call with that exact same
+ * `extraVerbs` list would reuse the stale cached answer and silently skip teaching a word it should
+ * teach fresh. Recomputed here instead, every call, directly from `entries` — never by re-deriving
+ * words from a joined identity string. PROVENANCE (`chatgpt-codex-connector`, P2, a second, earlier
+ * finding against a version that did): an even earlier version looped over a `key.split(' ')` here,
+ * which re-split a multi-word `extraVerbs` entry (e.g. `"power cycle"`) apart on the very same space
+ * that joined it to any other entries in that key, teaching "power" and "cycle" as two independent
+ * single-word verbs instead of the phrase "power cycle".
  */
-function extraVerbsKey(extraVerbs: readonly string[]): string {
-  return normalizeExtraVerbs(extraVerbs).toSorted().join('\u0000');
-}
-
-/**
- * The extra/per-configuration lexicon (see {@link extraVerbsKey}) as an `addWords` payload for one
- * `extraVerbs` configuration: only the entries `compromise` does not already tag as a verb on its
- * own (see {@link alreadyKnownAsVerb}). Cached by `key`, one entry deep — a call requesting the
- * same configuration as the one most recently computed reuses the same dict rather than
- * recomputing `alreadyKnownAsVerb` for every entry again, which is the one piece of the old
- * same-config no-op optimisation that survives the move to restore-after-every-call (see
- * {@link withLexicons}): the teach/restore round trip itself still runs on every call — it has
- * to, so the shared singleton is never left mutated between calls — but the relatively more
- * expensive "which of these words does compromise not already know" computation does not.
- */
-let cachedExtraLexicon: { readonly key: string; readonly dict: Record<string, string> } | undefined;
-
-function extraLexiconDict(entries: readonly string[], key: string): Record<string, string> {
-  if (cachedExtraLexicon !== undefined && cachedExtraLexicon.key === key) {
-    return cachedExtraLexicon.dict;
-  }
+function extraLexiconDict(entries: readonly string[]): Record<string, string> {
   const dict: Record<string, string> = {};
-  // Teach directly from `entries` — the normalised list, each entry intact — never by re-deriving
-  // words from `key`. PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version looped over
-  // `key.split(' ')` here, which re-split a multi-word `extraVerbs` entry (e.g. `"power cycle"`)
-  // apart on the very same space that joined it to any other entries in `key`, teaching "power"
-  // and "cycle" as two independent single-word verbs instead of the phrase "power cycle". See
-  // {@link extraVerbsKey}'s own PROVENANCE note.
   for (const verb of entries) {
     if (!alreadyKnownAsVerb(verb)) dict[verb] = 'Verb';
   }
-  cachedExtraLexicon = { key, dict };
   return dict;
 }
 
@@ -353,18 +342,18 @@ function extraLexiconDict(entries: readonly string[], key: string): Record<strin
  *
  * This does reintroduce, by design, a teach/restore round trip for the domain lexicon on every
  * call — a real cost the previous, permanently-loaded-once design did not pay, accepted here
- * because leaving the domain lexicon taught between calls is exactly finding B. The extra lexicon's
- * relatively more expensive "which entries need teaching" computation is still cached across calls
- * (see {@link extraLexiconDict}), and a call configuring no extra verbs at all — the common case —
- * pays no extra-lexicon `addWords`/restore cost either way, since {@link teachAndTrack} is a no-op
- * on an empty dict.
+ * because leaving the domain lexicon taught between calls is exactly finding B. {@link
+ * domainLexiconDict} and {@link extraLexiconDict} both recompute their "which words need teaching"
+ * dict fresh on every call, never cached by configuration — see their own PROVENANCE notes for why
+ * caching that decision was itself a correctness bug, not just an optimisation this design forgoes.
+ * A call configuring no extra verbs at all — the common case — pays no extra-lexicon
+ * `addWords`/restore cost either way, since {@link teachAndTrack} is a no-op on an empty dict.
  */
 function withLexicons<T>(extraVerbs: readonly string[], fn: () => T): T {
   const store = lexiconStore();
   const domainDiff = teachAndTrack(store, domainLexiconDict());
   const entries = normalizeExtraVerbs(extraVerbs);
-  const key = extraVerbsKey(extraVerbs);
-  const extraDiff = teachAndTrack(store, extraLexiconDict(entries, key));
+  const extraDiff = teachAndTrack(store, extraLexiconDict(entries));
   try {
     return fn();
   } finally {
@@ -408,6 +397,13 @@ const NEGATIVE_IMPERATIVE_PREFIX = /^(?:do not|don't|never|always)\b/i;
  * This is a small, empirically-justified override list, not a return to list-based detection: it
  * exists to suppress a specific false positive `compromise` produces on its own, not to decide
  * what counts as imperative in the first place.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, r3700698040): this suppression used to apply
+ * unconditionally, so a project that explicitly configured `extraImperativeVerbs: ['list']` or
+ * `['vacuum']` to treat those words as commands in its own domain (e.g. "VACUUM the table." in a
+ * SQL-heavy doc set) had that configuration silently overridden back to descriptive — defeating the
+ * documented purpose of `extraImperativeVerbs`. {@link sentenceOpensImperative} now applies this
+ * suppression only when the opener was not itself explicitly configured as an extra verb.
  */
 const FALSE_IMPERATIVE_OPENERS: ReadonlySet<string> = new Set(['vacuum', 'list']);
 
@@ -449,11 +445,18 @@ export function sentenceOpensImperative(text: string, extraVerbs: readonly strin
   // {@link withLexicons}): both lexicons are taught before the checks below run and restored
   // before this function returns, so `compromise`'s shared singleton is never left mutated once
   // control passes back to this function's own caller.
+  const extraEntries = normalizeExtraVerbs(extraVerbs);
   return withLexicons(extraVerbs, () => {
     const first = nlp(stripped).terms().first();
     if (!first.found) return false;
     const firstWord = /^[\p{L}]+/u.exec(stripped)?.[0]?.toLowerCase();
-    if (firstWord !== undefined && FALSE_IMPERATIVE_OPENERS.has(firstWord)) return false;
+    if (
+      firstWord !== undefined &&
+      FALSE_IMPERATIVE_OPENERS.has(firstWord) &&
+      !extraEntries.includes(firstWord)
+    ) {
+      return false;
+    }
     if (first.has('#Imperative')) return true;
     // A word immediately followed by a colon ("Note:", "Exception:") is a label, not a verb taking
     // an object — confirmed directly: without this guard, "Note: Exception: The employer need not
@@ -806,12 +809,23 @@ const AMBIGUOUS_AUXILIARY_VERBS: ReadonlySet<string> = new Set([
  * and antecedent heuristics need (a verb interrupts a run of content-word nouns; a verb is never a
  * pronoun's antecedent), not specifically a command form?
  *
- * True if either `compromise`'s contextual tag says so — which also covers ordinary English verbs
- * outside the technical domain lexicon, e.g. "wipe"/"trim", never enumerated in
- * {@link IMPERATIVE_VERBS} — or `word` is a member of that list, which still guards the small
- * number of technical verbs `compromise` cannot resolve from context alone.
- * {@link AMBIGUOUS_AUXILIARY_VERBS} is excluded from the tag-based signal for the reason given on
- * its own comment.
+ * `compromise`'s contextual tag decides whenever `index.tagsAt` actually resolves one — which also
+ * covers ordinary English verbs outside the technical domain lexicon, e.g. "wipe"/"trim", never
+ * enumerated in {@link IMPERATIVE_VERBS}. {@link IMPERATIVE_VERBS} membership is consulted only on
+ * a genuine alignment miss (`tagsAt` returns `undefined` — `compromise`'s own tokeniser disagreeing
+ * with this project's `tokenizeWords` at a boundary; see {@link tagByOffset}'s own doc comment),
+ * never as a second opinion once a tag actually resolved.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2): an earlier version consulted the list unconditionally
+ * whenever the tag-based check returned false, not just on a lookup miss — so a word `compromise`
+ * successfully and correctly tagged as *not* a verb (`record` tagged `Noun` in "the maintenance
+ * record archive system") still counted as one anyway, because `record` is also a member of
+ * {@link IMPERATIVE_VERBS} (for the sentences where it genuinely is a verb, e.g. "Record the
+ * value."). That silently discarded a correct, resolved tag in favour of the list precisely in the
+ * ambiguous cases the list-membership check was replaced with real POS tagging to get right.
+ * Confirmed directly: "Check the engine oil pressure warning lamp maintenance record archive
+ * system." reported a `noun-cluster-candidate` span that stopped at "maintenance" before the fix
+ * (excluding "record" as if it were a verb) and extends through "record" after it.
  *
  * **Do not use this to decide whether `word` opens or continues an imperative clause** (a second
  * instruction after a conjunction or a comma) — its tag-based signal, {@link isBareVerbTagSet},
@@ -821,10 +835,8 @@ const AMBIGUOUS_AUXILIARY_VERBS: ReadonlySet<string> = new Set([
  */
 export function isImperativeVerbWord(word: Word, index: SentencePosIndex): boolean {
   const tags = index.tagsAt(word.range.start);
-  if (tags !== undefined && isBareVerbTagSet(tags) && !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower)) {
-    return true;
-  }
-  return IMPERATIVE_VERBS.has(word.lower);
+  if (tags === undefined) return IMPERATIVE_VERBS.has(word.lower);
+  return isBareVerbTagSet(tags) && !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower);
 }
 
 /**
@@ -840,17 +852,12 @@ export function isImperativeVerbWord(word: Word, index: SentencePosIndex): boole
  * agent, which logs events and sends reports." as a second instruction opener, because it sits right
  * after the conjunction "and". This function uses {@link isImperativeOpenerTagSet} instead, which
  * requires `Infinitive`, so only a genuine command-form verb ("...and format the disk.") counts.
- * {@link AMBIGUOUS_AUXILIARY_VERBS} and the {@link IMPERATIVE_VERBS} list fallback are unchanged
- * from {@link isImperativeVerbWord} — both apply identically to a bare command-form check.
+ * {@link AMBIGUOUS_AUXILIARY_VERBS} and the alignment-miss-only {@link IMPERATIVE_VERBS} fallback
+ * (`chatgpt-codex-connector`, P2 — see {@link isImperativeVerbWord}'s own PROVENANCE note) are
+ * unchanged from {@link isImperativeVerbWord} — both apply identically to a bare command-form check.
  */
 export function isImperativeOpenerWord(word: Word, index: SentencePosIndex): boolean {
   const tags = index.tagsAt(word.range.start);
-  if (
-    tags !== undefined &&
-    isImperativeOpenerTagSet(tags) &&
-    !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower)
-  ) {
-    return true;
-  }
-  return IMPERATIVE_VERBS.has(word.lower);
+  if (tags === undefined) return IMPERATIVE_VERBS.has(word.lower);
+  return isImperativeOpenerTagSet(tags) && !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower);
 }

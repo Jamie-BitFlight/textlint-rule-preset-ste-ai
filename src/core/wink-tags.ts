@@ -15,7 +15,20 @@ import model from 'wink-eng-lite-web-model';
  * better than the regex-plus-participle-list it can replace, not merely different.
  */
 
-const nlp = winkNLP(model);
+/**
+ * PROVENANCE: lazily constructed, not module-load-time, per reviewer finding on this file
+ * (r3700698045). `candidate-rules.ts` imports this module unconditionally as part of the
+ * deterministic rule registry, so a module-level `winkNLP(model)` paid the pretrained model's
+ * initialization cost on every run, even when `passive-voice-candidate` is disabled or no
+ * regex-level passive match exists in the document. Deferring construction to first actual use
+ * inside {@link buildWinkPosIndex} means that cost is paid only when a passive-voice check
+ * genuinely runs.
+ */
+let nlp: ReturnType<typeof winkNLP> | undefined;
+function ensureNlp(): ReturnType<typeof winkNLP> {
+  nlp ??= winkNLP(model);
+  return nlp;
+}
 
 /** A per-text cache of `wink-nlp` POS tags, keyed by character start offset within that text. */
 export interface WinkPosIndex {
@@ -32,22 +45,23 @@ export interface WinkPosIndex {
  */
 export function buildWinkPosIndex(text: string): WinkPosIndex {
   const map = new Map<number, PartOfSpeech>();
-  const doc = nlp.readDoc(text);
+  const wink = ensureNlp();
+  const doc = wink.readDoc(text);
   let offset = 0;
   doc.tokens().each((token: ItemToken) => {
-    // `wink-nlp` dispatches on the exact function reference passed to `out()`, so `nlp.its.pos`/
-    // `nlp.its.precedingSpaces` must be forwarded unwrapped — a wrapper (even a transparent
+    // `wink-nlp` dispatches on the exact function reference passed to `out()`, so `wink.its.pos`/
+    // `wink.its.precedingSpaces` must be forwarded unwrapped — a wrapper (even a transparent
     // pass-through arrow) was found, by direct testing, to make `out()` silently fall back to the
     // token's raw text instead of running the tagger. That is also why these are referenced
     // in-line rather than hoisted to a module-level constant, which would trip
     // `typescript/unbound-method` for the same reason a hoisted reference to any other interface
     // method would.
     // oxlint-disable-next-line typescript/unbound-method -- see comment above
-    const pre = token.out(nlp.its.precedingSpaces);
+    const pre = token.out(wink.its.precedingSpaces);
     if (typeof pre === 'string') offset += pre.length;
     const value = token.out();
     // oxlint-disable-next-line typescript/unbound-method -- see comment above
-    const pos = token.out(nlp.its.pos);
+    const pos = token.out(wink.its.pos);
     // `token.out(nlp.its.pos)`'s typed return is a wider string type than `PartOfSpeech`; the
     // model's own tagset guarantees this narrows correctly, but the type checker cannot verify it.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion

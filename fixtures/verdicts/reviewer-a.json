@@ -6,13 +6,13 @@
         "passageId": "noun-cluster-candidate:s1:207",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
-        "quote": "SSLEngine\nSSL Engine Operation",
+        "quote": "SSLEngine\nSSL Engine Operation Switch\nSyntax: SSLEngine",
         "span": {
           "start": 207,
-          "end": 237
+          "end": 262
         },
         "verdict": "non-violation",
-        "reason": "The span joins the directive name SSLEngine to the title line 'SSL Engine Operation Switch' across a line break; both are component identity (a directive name and its title), not a prose noun pile a reader must parse.",
+        "reason": "The span joins the directive name SSLEngine to its title line 'SSL Engine Operation Switch' and the following 'Syntax: SSLEngine' declaration across line breaks; all three are component identity and reference-page boilerplate (a directive name, its title, and its syntax label), not a prose noun pile a reader must parse.",
         "reviewerConfidence": 0.85
       },
       {
@@ -97,13 +97,13 @@
         "passageId": "noun-cluster-candidate:s9:777",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
-        "quote": "SSLFIPS\nSSL FIPS mode",
+        "quote": "SSLFIPS\nSSL FIPS mode Switch\nSyntax: SSLFIPS",
         "span": {
           "start": 777,
-          "end": 798
+          "end": 821
         },
         "verdict": "non-violation",
-        "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across a line break to its title 'SSL FIPS mode Switch'. Directive identity, not an opaque noun run.",
+        "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across line breaks to its title 'SSL FIPS mode Switch' and its 'Syntax: SSLFIPS' declaration. Directive identity and reference-page boilerplate, not an opaque noun run.",
         "reviewerConfidence": 0.85
       },
       {

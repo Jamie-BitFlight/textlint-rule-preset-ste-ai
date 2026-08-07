@@ -385,6 +385,13 @@ describe('abbreviation-introduction', () => {
     expect(result.forRule(id)).toHaveLength(0);
   });
 
+  it('does not flag a bare token corroborated by a config-fragment occurrence elsewhere in the document', () => {
+    const result = run(
+      'Set journal_mode=WAL for better concurrency. WAL reduces write contention.\n',
+    );
+    expect(result.forRule(id)).toHaveLength(0);
+  });
+
   it('still flags a genuinely fabricated, uncorroborated all-caps token', () => {
     const result = run('The ZQX module failed during startup.\n');
     expect(result.forRule(id)).toHaveLength(1);

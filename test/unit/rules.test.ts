@@ -388,7 +388,7 @@ describe('abbreviation-introduction', () => {
   it('still flags a genuinely fabricated, uncorroborated all-caps token', () => {
     const result = run('The ZQX module failed during startup.\n');
     expect(result.forRule(id)).toHaveLength(1);
-    expect(result.forRule(id)[0]?.meta?.abbreviation).toBe('ZQX');
+    expect(result.forRule(id)[0]?.meta?.['abbreviation']).toBe('ZQX');
   });
 
   // Table-cell prose is treated identically to ordinary prose by the protected-region layer

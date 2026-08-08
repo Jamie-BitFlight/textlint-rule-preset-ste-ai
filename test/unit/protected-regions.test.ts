@@ -291,6 +291,12 @@ describe('configFragmentPass mid-sentence alternative, identifierPass citations,
     expect(kindsAt(text, 'LLVM is the compiler')).toContain('constant');
   });
 
+  it('corroborates a bare constant via a config-fragment occurrence of WAL', () => {
+    const text = 'Set journal_mode=WAL for better concurrency. WAL is the write-ahead log mode.\n';
+    expect(kindsAt(text, 'journal_mode=WAL')).toContain('config-fragment');
+    expect(kindsAt(text, 'WAL is the write-ahead')).toContain('constant');
+  });
+
   it('does not protect an uncorroborated bare all-caps token as a constant', () => {
     const text = 'The XYZ approach was discussed today.\n';
     const doc = analyse(text);

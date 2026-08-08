@@ -184,7 +184,7 @@ block is not.
 
 This is the entire class of defect that this repository's protected-region machinery exists
 to eliminate, and it is the argument for porting a taxonomy onto this engine rather than
-adopting their tool: 28 detection passes over progressively masked text, exact offset
+adopting their tool: 30 detection passes over progressively masked text, exact offset
 preservation, and a content-versus-structural distinction, all of which a new rule inherits
 for free.
 

@@ -10,16 +10,16 @@
 # TypeScript/Node/vitest-specific skill package). Populate skill_rules below if/when
 # a relevant skill becomes available.
 
-skill_discovery: auto   # auto | suggest | off
+skill_discovery: auto # auto | suggest | off
 
-always_use_skills:      # AUTO_MODE: review and adjust as needed
+always_use_skills: # AUTO_MODE: review and adjust as needed
   []
 
-prefer_skills:          # AUTO_MODE: review and adjust as needed
+prefer_skills: # AUTO_MODE: review and adjust as needed
   []
 
-avoid_skills:           # AUTO_MODE: review and adjust as needed
+avoid_skills: # AUTO_MODE: review and adjust as needed
   []
 
-skill_rules:            # AUTO_MODE: review and adjust as needed
+skill_rules: # AUTO_MODE: review and adjust as needed
   []

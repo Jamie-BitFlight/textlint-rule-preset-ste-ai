@@ -204,11 +204,13 @@ export const noRepeatedWordsRule: DeterministicRule<z.output<typeof repeatedOpti
 /**
  * Abbreviations exempt from introduction by default.
  *
- * PROVENANCE: implementation assumption. These are abbreviations that appear unexpanded in the
- * public documentation of every project in the fixture corpus. Projects should tune the list.
+ * PROVENANCE: implementation assumption. These are abbreviations and command keywords that
+ * appear unexpanded in the public documentation of every project in the fixture corpus.
+ * Projects should tune the list.
  */
 const DEFAULT_WELL_KNOWN: readonly string[] = [
   'AC',
+  'ANALYZE',
   'API',
   'ASCII',
   'CD',
@@ -236,6 +238,7 @@ const DEFAULT_WELL_KNOWN: readonly string[] = [
   'OS',
   'PC',
   'PDF',
+  'PRAGMA',
   'RAM',
   'ROM',
   'RPM',
@@ -252,6 +255,7 @@ const DEFAULT_WELL_KNOWN: readonly string[] = [
   'URL',
   'USB',
   'UTC',
+  'VACUUM',
   'XML',
   'YAML',
 ];

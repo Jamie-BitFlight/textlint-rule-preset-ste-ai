@@ -338,16 +338,16 @@
       "reviewerConfidence": 0.9
     },
     {
-      "passageId": "noun-cluster-candidate:s9:777",
+      "passageId": "noun-cluster-candidate:s9:794",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
-      "quote": "SSLFIPS\nSSL FIPS mode Switch\nSyntax: SSLFIPS",
+      "quote": "mode Switch\nSyntax: SSLFIPS",
       "span": {
-        "start": 777,
+        "start": 794,
         "end": 821
       },
       "verdict": "non-violation",
-      "reason": "Same structural artefact as the SSLEngine heading: the directive name SSLFIPS joined across line breaks to its title 'SSL FIPS mode Switch' and its 'Syntax: SSLFIPS' declaration. Directive identity and reference-page boilerplate, not an opaque noun run.",
+      "reason": "Re-reviewed after the leading 'SSLFIPS' and 'SSL FIPS' identifiers became protected regions, which shortened this candidate from 777-821 to 794-821. What is left is the tail of the directive's title line ('... mode Switch') stitched across a line break onto the following 'Syntax: SSLFIPS' declaration label. 'mode Switch' alone is two words and under the limit; the run only reaches four content words by crossing the newline into a reference-page metadata field. Two adjacent layout fields, not a noun pile a reader must parse — the same structural artefact as the SSLEngine heading above, on a narrower span.",
       "reviewer": "reviewer-a",
       "reviewerConfidence": 0.85
     },

@@ -30,10 +30,8 @@
       "rewrittenText": "PRAGMAs",
       "ruleIds": ["abbreviation-introduction"],
       "originalSpans": [{ "start": 165, "end": 172 }],
-      "expectedDiagnostics": [
-        { "ruleId": "abbreviation-introduction", "category": "deterministic-violation", "quote": "PRAGMAs" }
-      ],
-      "reason": "PRAGMA is a SQLite SQL statement keyword (the SQL command used to query or set database settings), not an abbreviation of a longer phrase. There is no full term to expand it into; 'PRAGMA' is the command's actual name. This is the same class of false positive called out for SQL keywords and command names generally.",
+      "expectedDiagnostics": [],
+      "reason": "PRAGMA is a SQLite SQL statement keyword (the SQL command used to query or set database settings), not an abbreviation of a longer phrase. There is no full term to expand it into; 'PRAGMA' is the command's actual name. This is the same class of false positive called out for SQL keywords and command names generally. Reconciled after #56: PRAGMA was added to the rule's default well-known list, and the rule strips a trailing plural 's' before that lookup, so the plural 'PRAGMAs' is exempt too and the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the SQL keyword PRAGMA/PRAGMAs must remain unchanged and must not be expanded into a fabricated full term"
       ],

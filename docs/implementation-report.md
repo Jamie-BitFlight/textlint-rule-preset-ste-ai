@@ -95,15 +95,22 @@ response schema, prompts, evaluation, pipeline smoke), architecture (module boun
 ```
 node dist/cli/main.js lint fixtures/original/*.md   --deterministic-only --json
 node dist/cli/main.js lint fixtures/compliant/*.md  --deterministic-only --json
-→ deterministic violations: original 111 → compliant 60
+→ deterministic violations: original 121 → compliant 75
 ```
 
-By rule on the originals: `punctuation-constraints` 30, `abbreviation-introduction` 20,
-`number-unit-format` 20, `sentence-length-descriptive` 15, `no-contractions` 11,
-`unapproved-vocabulary` 6, `one-instruction-per-sentence` 4, `sentence-length-procedural` 3,
-`list-instruction-structure` 1, `no-repeated-words` 1.
+By rule on the originals: `sentence-length-descriptive` 35, `punctuation-constraints` 30,
+`number-unit-format` 17, `abbreviation-introduction` 11, `no-contractions` 11,
+`unapproved-vocabulary` 6, `one-instruction-per-sentence` 4, `list-instruction-structure` 3,
+`sentence-length-procedural` 3, `no-repeated-words` 1.
 
-The 60 remaining on the rewritten corpus are overwhelmingly the findings reviewers **refused** — see
+These counts were re-measured after the protected-region and well-known-list change that stopped
+`abbreviation-introduction` flagging protected all-caps tokens (which accounts for
+`abbreviation-introduction` 20 → 11 and `number-unit-format` 20 → 17). The other movements since the
+figures first published here — most visibly `sentence-length-descriptive` 15 → 35 — come from earlier
+segmentation work, not from that change; they are reported as measured rather than reconciled to the
+older numbers.
+
+The 75 remaining on the rewritten corpus are overwhelmingly the findings reviewers **refused** — see
 false-positive risk below. They are not oversights; they are recorded as `disputed`.
 
 ### Fixture provenance, independently verified
@@ -196,13 +203,13 @@ re-reading the code that implements it.
 
 ### False positives (observed, not hypothetical)
 
-| Rule                                         | Fires on                                                                  | Why it is wrong                                                                                    |
-| -------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `abbreviation-introduction`                  | `VACUUM`, `FULL`, `ANALYZE`, `PRAGMA`, `WAL`, `LLVM`, `FIPS`, `RFC`, `ON` | Command names, keywords, product names and CMake literals are not abbreviations of a longer phrase |
-| `number-unit-format`                         | `3.20.5`, `2.4.64`, `140-2`, `1910.132`                                   | Version strings, standard designations and regulatory citations are not quantity+unit pairs        |
-| `punctuation-constraints`                    | `SSL/TLS`; semicolons in an `(i)/(ii)/(iii)` legal list                   | A compound protocol name; legal list separators                                                    |
-| `punctuation-constraints`, `no-contractions` | `'hello!'` in an **unfenced** terminal transcript                         | If the source does not mark a transcript as code, the linter cannot know it is not prose           |
-| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names                                       | Not a sentence; no punctuation for the segmenter                                                   |
+| Rule                                         | Fires on                                                | Why it is wrong                                                                          |
+| -------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `abbreviation-introduction`                  | `FULL`, `LLVM`, `ON`                                    | Command names, product names and CMake literals are not abbreviations of a longer phrase |
+| `number-unit-format`                         | `3.20.5`, `2.4.64`, `1910.132`                          | Version strings and regulatory citations are not quantity+unit pairs                     |
+| `punctuation-constraints`                    | `SSL/TLS`; semicolons in an `(i)/(ii)/(iii)` legal list | A compound protocol name; legal list separators                                          |
+| `punctuation-constraints`, `no-contractions` | `'hello!'` in an **unfenced** terminal transcript       | If the source does not mark a transcript as code, the linter cannot know it is not prose |
+| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names                     | Not a sentence; no punctuation for the segmenter                                         |
 
 The dominant class is **an identifier that looks like an abbreviation or a quantity**.
 `approvedTerms`, `approvedTechnicalTerms` and `additionalWellKnown` are the mitigation and are the
@@ -237,10 +244,12 @@ off by default for this reason.
 1. **Run the evaluation suite against a real llama.cpp model and calibrate the thresholds.** The
    tooling, the ground truth and the split discipline are in place; the numbers are the gap. Without
    them the confidence thresholds are guesses.
-2. **Cut the abbreviation and quantity false positives.** Together they are 40 of the 111 findings on
-   the corpus, and nearly all are identifiers. An identifier-shape pre-filter — a token appearing in a
-   code span or table cell elsewhere in the document is probably not prose — would remove most of them
-   without a rule-pack change.
+2. **Cut the remaining abbreviation and quantity false positives.** Together they are 28 of the 121
+   findings on the corpus, down from 40 of 111 before the protected-region and well-known-list change,
+   which already implemented most of the identifier-shape pre-filter this item originally proposed: a
+   token corroborated by a naming region elsewhere in the document is now masked. What is left is the
+   case that filter cannot reach — a command or product name in running prose with nothing nearby to
+   corroborate it.
 3. **Obtain a licensed rule pack and exercise the import boundary end to end.** The path is
    implemented and unit-tested, but it has never carried real normative data. That is the difference
    between a useful plain-English linter and the tool this was meant to be.

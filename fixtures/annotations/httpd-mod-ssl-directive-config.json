@@ -45,14 +45,8 @@
           "end": 404
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "RFC"
-        }
-      ],
-      "reason": "'RFC 2817' is a specific IETF document citation (like the FIPS 140-2 and CFR citations elsewhere in this corpus), not a general term being repeatedly used that benefits from first-use expansion. It appears exactly once, as part of a fixed document number, and is never referred to again.",
+      "expectedDiagnostics": [],
+      "reason": "'RFC 2817' is a specific IETF document citation (like the FIPS 140-2 and CFR citations elsewhere in this corpus), not a general term being repeatedly used that benefits from first-use expansion. It appears exactly once, as part of a fixed document number, and is never referred to again. Reconciled after #56: the identifier pass now recognises standards-body citation numbers, so the whole span 'RFC 2817' is masked as a protected identifier and the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the citation 'RFC 2817' must remain byte-identical"
       ],
@@ -131,14 +125,8 @@
           "end": 793
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "FIPS"
-        }
-      ],
-      "reason": "The flagged occurrence is inside the SSLFIPS directive reference heading ('SSLFIPS / SSL FIPS mode Switch / Syntax: SSLFIPS on|off ...'), where 'FIPS' is part of the literal directive name and the C API symbol 'FIPS_mode' used later, and reappears afterward only inside the fixed citation 'FIPS 140-2'. There is no ordinary-prose occurrence where expanding it would not require altering a protected identifier (SSLFIPS, FIPS_mode) or a citation number (FIPS 140-2).",
+      "expectedDiagnostics": [],
+      "reason": "The flagged occurrence is inside the SSLFIPS directive reference heading ('SSLFIPS / SSL FIPS mode Switch / Syntax: SSLFIPS on|off ...'), where 'FIPS' is part of the literal directive name and the C API symbol 'FIPS_mode' used later, and reappears afterward only inside the fixed citation 'FIPS 140-2'. There is no ordinary-prose occurrence where expanding it would not require altering a protected identifier (SSLFIPS, FIPS_mode) or a citation number (FIPS 140-2). Reconciled after #56: the corroborated-constant pass now masks the bare token, on the evidence of the identifier regions FIPS_mode and FIPS 140-2 in this same document — exactly the corroboration this note describes — so the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the directive name SSLFIPS, the C symbol FIPS_mode, and the citation 'FIPS 140-2' must all remain byte-identical"
       ],
@@ -167,14 +155,8 @@
           "end": 1489
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "140-2"
-        }
-      ],
-      "reason": "'140-2' is part of the fixed standard number 'FIPS 140-2', a NIST publication citation, not a quantity with a missing unit space. Inserting a space would corrupt the standard's name.",
+      "expectedDiagnostics": [],
+      "reason": "'140-2' is part of the fixed standard number 'FIPS 140-2', a NIST publication citation, not a quantity with a missing unit space. Inserting a space would corrupt the standard's name. Reconciled after #56: the identifier pass now recognises standards-body citation numbers, so all three occurrences of 'FIPS 140-2' are masked as protected identifiers and number-unit-format no longer sees them; the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the standard citation 'FIPS 140-2' must remain byte-identical everywhere it appears"
       ],

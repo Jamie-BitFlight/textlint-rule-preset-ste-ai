@@ -180,14 +180,8 @@
           "end": 222
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "VACUUM"
-        }
-      ],
-      "reason": "VACUUM is the SQL command name this entire document is about, not an abbreviation of a longer phrase. Writing 'Vacuum (VACUUM)' or any invented expansion would be nonsensical; the word is already the full, correct term.",
+      "expectedDiagnostics": [],
+      "reason": "VACUUM is the SQL command name this entire document is about, not an abbreviation of a longer phrase. Writing 'Vacuum (VACUUM)' or any invented expansion would be nonsensical; the word is already the full, correct term. Reconciled after #56: the rule no longer reports this occurrence, because VACUUM was added to the rule's default well-known list, so the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the command name VACUUM must remain unchanged throughout"
       ],

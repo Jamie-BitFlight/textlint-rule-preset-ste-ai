@@ -80,34 +80,85 @@ for having produced `03` at all.
   `src/rule-pack/loader.ts`; `grep -rln "authority\|conformance\|rulePack" test/` returns zero files.
   Nothing else should merge before that gap is closed.
 
-## Open — needs a human decision
+## Decided by the maintainer
 
-### A. `limits` merge policy
+### A. `limits` merge policy — last-wins
 
-`01` recommends **last-wins**, with this argument: `limits` is required in `rulePackSchema`, so a
-most-restrictive-wins rule would pin the bundled pack's values (procedural grade level 7) as a
-ceiling no organisation could raise, pushing every such operator back onto `replace` — which is the
-defect this work exists to fix.
+**Decided: last-wins**, matching how ESLint and Ruff resolve overlapping configuration. A later
+layer's limit replaces an earlier one; there is no organisation-set floor that lower layers cannot
+loosen.
 
-Stated cost: a product layer can loosen an organisation's limit, guarded only by a notice.
+This follows `01`'s recommendation. Its argument stands: `limits` is required in `rulePackSchema`, so
+a most-restrictive-wins rule would pin the bundled pack's values (procedural grade level 7) as a
+ceiling no organisation could raise.
 
-The alternative is an organisation-set floor that lower layers cannot loosen, which blocks a locale
-or product layer from a legitimate override. **Not decided.**
+Accepted cost, recorded so it is not rediscovered as a surprise: a product or locale layer can loosen
+an organisation's limit. The conventional-tooling behaviour was preferred over enforcement.
 
-### B. Conformance claims under mixed authority
+### B. Conformance under mixed authority — not in scope
 
-`02` proposes splitting `packPermitsConformanceClaim` into:
+**Decided: the product does not make conformance claims, so there is nothing to protect here.**
 
-- `entryPermitsConformanceClaim` — per entry, so a finding from a trusted normative layer keeps its
-  standing even in a mixed stack;
-- `stackPermitsConformanceClaim` — run level, requiring **unanimity** across contributing layers.
+The maintainer's framing: this is a configurable linter that flags prose exceeding a threshold and
+suggests it could be tighter. It is a per-repository capability that may import organisation-level
+dictionaries, stay local-only, or mix the two. Conformance standing for a supplied pack is not a
+goal.
 
-The asymmetry driving it: a positive finding is attributable to one entry, whereas silence is a
-property of the whole stack. Unanimity is deliberately strict — one untrusted layer anywhere disables
-run-level conformance claims. **Not decided.**
+That resolves the question by removing it. It also removes the reason a subsystem exists, which is a
+larger change than the decision it settles.
 
-`02` also closes a self-attack worth preserving: defining "contributing layer" as "has a surviving
-entry" would let a pure-retraction untrusted layer escape the unanimity check entirely.
+#### What this decision cascades into
+
+The authority machinery exists to guard one path: a supplied pack declaring `normative` authority and
+having that claim honoured after an operator names it in `trustedRulePackIds`. With conformance out
+of scope, that path has no destination. Surface measured at this commit — 33 references across 8
+files:
+
+| File                                | References |
+| ----------------------------------- | ---------: |
+| `src/rule-pack/loader.ts`           |         11 |
+| `src/cli/main.ts`                   |          8 |
+| `src/core/runner.ts`                |          6 |
+| `src/analysis/analyse.ts`           |          3 |
+| `src/rule-pack/provisional-pack.ts` |          2 |
+| `src/rule-pack/schema.ts`           |          1 |
+| `src/core/types.ts`                 |          1 |
+| `src/core/config.ts`                |          1 |
+
+Candidates for removal, each serving only the conformance path: `packPermitsConformanceClaim`,
+`verifiedAuthority`, `verifiedRuleStatus`, the `trustedRulePackIds` config key, and
+`metadata.authority` / `metadata.conformanceClaim` in the pack schema.
+
+**What is kept, and what each protects when working correctly:**
+
+- **`provisional` rule status and the `[provisional]` tag** — tells a reader a finding comes from an
+  authored heuristic rather than a standard. Honest, cheap, and independent of the conformance path.
+- **`sourceRef` per rule** — says where a rule is documented. With authority elevation gone this
+  becomes pure provenance, which is the same thing layered packs need per entry.
+- **`DISCLAIMER.md`'s trademark and non-implementation statements** — these describe what the package
+  is not, and remain true. Its "supplying authorised material" section describes the removed path and
+  would need reconciling.
+- **The disclaimer line in CLI output** — states plainly that the tool certifies nothing.
+
+This also shrinks the `sourceRef` defect (#66). Without an authority-elevation path there is no
+trusted-versus-untrusted distinction for a citation to cross; attributing a `sourceRef` to the pack
+that supplied it is then the same work as per-entry provenance, rather than a separate fix.
+
+## Superseded by project stage
+
+The maintainer has confirmed the repository is a prototype with no users. Two conclusions recorded
+above lose their supporting argument:
+
+- **The `rulePack` versus `rulePacks` decision.** The measured version-skew argument — a config
+  written for a newer linter silently losing its layer stack on an older one — requires users on old
+  versions. The weaker argument for widening the existing key (one key is less confusing than two)
+  is unaffected.
+- **`replace` mode.** It was specified to preserve the current substituting behaviour for configs
+  already in use. Without such configs to preserve, packs can always compose, which removes a config
+  mode, the "`replace` only at index 0" validation rule, and its test cases.
+
+Spec `03`'s back-compatibility analysis should be read with this in mind. Its blast-radius inventory,
+test strategy and staged rollout remain applicable; its back-compat reasoning does not.
 
 ## Related defects found while specifying
 

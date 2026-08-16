@@ -11,7 +11,19 @@ would not design across each other:
 | [`03-migration-verification.md`](./03-migration-verification.md) | Blast radius, back-compatibility, test strategy, staged rollout                   |
 
 This file records what the three agree on, where two of them disagreed, and what remains for a human
-to decide. It supersedes nothing in the specs; they hold the detail and the citations.
+to decide. The specs hold the detail and the citations, and they are **not** rewritten to match this
+record — so where the two differ, this file wins. Four things it overturns, each still asserted
+unqualified in the spec that proposed it:
+
+| Overturned                                   | Still asserted in                       |
+| -------------------------------------------- | --------------------------------------- |
+| `rulePacks` as a new config key              | `01:178`, the config table, conflict C1 |
+| Composed output satisfies `RulePack` exactly | `01:14`, its opening premise            |
+| `replace` mode, and replace-only-at-index-0  | `01` (C2, C5, C6); depended on by `02`  |
+| Conformance claims are in scope              | most of `02`                            |
+
+Each spec carries a banner pointing here, so a reader who opens one directly is not led into an
+overturned design.
 
 ## Framing correction: this is a defect, not a feature
 
@@ -19,8 +31,11 @@ to decide. It supersedes nothing in the specs; they hold the detail and the cita
 vocabulary **"on top of the bundled provisional pack"**. `resolveRulePack` (`loader.ts:49-56`)
 substitutes instead — its three branches each return one pack, and none combines them.
 
-So the documented behaviour and the implemented behaviour already disagree. Layering closes that gap
-rather than adding something new. `03` found a second instance of the same drift: `README.md` is not
+So the documented behaviour and the implemented behaviour already disagree — with one qualifier that
+sentence conjoins two keys and only one of them layers today: `config.approvedTerms` really is spread
+together with `pack.approvedTechnicalTerms` at `analyse.ts:255`. `rulePack` is the half that
+substitutes. `03:477` states this precisely; the claim here is the same one, narrowed to the key it
+actually applies to. Layering closes that gap rather than adding something new. `03` found a second instance of the same drift: `README.md` is not
 alone, and the reconciliation list in that spec names the rest.
 
 ## Resolved: the two places the specs disagreed
@@ -111,16 +126,25 @@ larger change than the decision it settles.
 
 The authority machinery exists to guard one path: a supplied pack declaring `normative` authority and
 having that claim honoured after an operator names it in `trustedRulePackIds`. With conformance out
-of scope, that path has no destination. Surface measured at this commit — 33 references across 8
-files:
+of scope, that path has no destination. The surface is 35 references across 8 files, counted by this
+exact command so the number can be re-derived rather than trusted:
+
+```bash
+grep -vE '^\s*(//|\*|/\*)' <file> \
+  | grep -coE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority'
+```
+
+That is occurrences of the removal candidates, with comment-only lines excluded — a rule worth
+stating, because counting matching _lines_ instead, or leaving comments in, gives materially
+different totals, and the scope of the proposed removal is argued from this table.
 
 | File                                | References |
 | ----------------------------------- | ---------: |
-| `src/rule-pack/loader.ts`           |         11 |
-| `src/cli/main.ts`                   |          8 |
-| `src/core/runner.ts`                |          6 |
-| `src/analysis/analyse.ts`           |          3 |
-| `src/rule-pack/provisional-pack.ts` |          2 |
+| `src/cli/main.ts`                   |         11 |
+| `src/rule-pack/loader.ts`           |         10 |
+| `src/core/runner.ts`                |          5 |
+| `src/analysis/analyse.ts`           |          5 |
+| `src/rule-pack/provisional-pack.ts` |          1 |
 | `src/rule-pack/schema.ts`           |          1 |
 | `src/core/types.ts`                 |          1 |
 | `src/core/config.ts`                |          1 |
@@ -189,5 +213,7 @@ spec labelled something as its own proposal rather than an existing fact — `01
 "weakest authority wins", since `ruleStatusSchema` declares no ordering — that label is preserved.
 
 `03` recorded that it could not run the test suite (no `node_modules` in its worktree) and flagged
-"main is green at `9d78a8b`" as unconfirmed. The full suite was run separately at that commit:
-545 tests, all passing.
+"main is green at `9d78a8b`" as unconfirmed. Confirmed since, and the answer needs its commit
+naming: at `9d78a8b` the suite is green (545 tests). At `ebcc623` — the commit this branch was cut
+from, and a different tree — one corpus assertion was failing, pre-existing from #56 and fixed by
+#58. `03`'s Stage 0 precondition is therefore discharged only against a tree that has #58 in it.

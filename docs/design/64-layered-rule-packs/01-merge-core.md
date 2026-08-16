@@ -1,5 +1,11 @@
 # Layered rule packs — the composition core
 
+> **Read [`00-decisions.md`](./00-decisions.md) first.** This spec is one of three produced
+> independently, and the decision record overturns part of it: the new `rulePacks` config key is
+> replaced by widening the existing `rulePack`, `replace` mode is dropped, and the composed output
+> no longer has to satisfy `RulePack` exactly. Nothing below has been rewritten to match, on purpose
+> — the specs are the reasoning, `00` is the conclusion.
+
 Spec scope: the merge algorithm and the schema/config changes that support it.
 Out of scope (owned elsewhere): authority/trust, `trustedRulePackIds`, `verifiedAuthority`,
 per-entry provenance reporting, migration, fixtures, pack distribution. Seams are marked
@@ -119,7 +125,7 @@ Two call sites bind the result directly and neither has a channel for load-time 
 - `limits` → five consumers, each `options.X ?? pack.limits.X`:
   `structure-rules.ts:43`, `candidate-rules.ts:331`, `sentence-length.ts:28-30`.
 - `rules` → indexed by `ruleId` in `runDeterministicRules` (`src/core/runner.ts:51`), then used for
-  `enabled` (`:58`), options base (`:60-63`, a **shallow spread**:
+  `enabled` (`:59`), options base (`:62-65`, a **shallow spread**:
   `{...packSpec?.options, ...stripControlKeys(userConfig)}`), `severity` (`:78`), and
   `status`/`sourceRef` on emitted diagnostics (`:93-113`).
 - `dictionary.approved` → **no production reader at this commit.** A grep over `src/` for
@@ -223,10 +229,11 @@ export const steAiConfigSchema = z
   });
 ```
 
-Note the zod idiom in this file is v4-flavoured (`z.record(z.string(), …)`, `.prefault({})`,
-`ctx.addIssue({ code: 'custom' })` — see `config.ts:104,139-144`). `.superRefine` on the object means
-`SteAiConfig` stays `z.output<typeof steAiConfigSchema>` (`config.ts:147`) and `resolveConfig`
-(`config.ts:150-152`) is unchanged.
+Note the zod idiom in this file is v4-flavoured (`z.record(z.string(), …)`, `.prefault({})` — see
+`config.ts:104,139-144`). `.superRefine`, `.refine` and `ctx.addIssue` appear nowhere in `src/`
+today, so the block above introduces that idiom rather than following it. Putting it on the object
+keeps `SteAiConfig` as `z.output<typeof steAiConfigSchema>` (`config.ts:147`) and leaves
+`resolveConfig` (`config.ts:150-152`) unchanged.
 
 ### Normalisation to a canonical stack
 
@@ -285,7 +292,9 @@ say _only_ what it changes. So:
 // src/rule-pack/schema.ts
 
 /** Unchanged. The contract a base pack satisfies. Existing packs keep parsing. */
-export const rulePackSchema = z.object({/* …as today… */});
+export const rulePackSchema = z.object({
+  /* …as today… */
+});
 
 /** What an `extend` layer may be. Everything optional except metadata. */
 export const rulePackLayerContentSchema = z.object({
@@ -563,7 +572,7 @@ value is consumed directly by rules that iterate these arrays with no notion of 
 `vocabulary.ts:53-61` builds its working list straight from `pack.dictionary.unapproved`,
 `:164-172` from `pack.dictionary.preferred`, `:242` from `pack.contractions`. A sentinel is a _layer_
 operation smuggled into _pack data_; it would either have to survive into the composed pack (forcing
-every consumer to learn to skip it, and `RulePack` in `types.ts:428-441` to gain an optional flag
+every consumer to learn to skip it, and `RulePack` in `types.ts:428-440` to gain an optional flag
 that is meaningless post-composition) or be stripped, in which case it is a separate concept wearing
 an entry's clothes. Keeping it in its own field means **the composed pack contains only live
 entries** and `RulePack` is untouched. That is the decisive argument.
@@ -585,7 +594,7 @@ It is the wrong _layer mechanism_, for three verified reasons:
    pack and wants to retract an _org_ pack's entry would have to write into
    `rules["unapproved-vocabulary"].options.allow`, which — under the shallow `options` merge —
    **replaces** the org layer's `allow` array wholesale. Retraction would clobber allow-listing.
-   And `docs/rule-pack-import.md:159-162` explicitly warns against smuggling data through
+   And `docs/rule-pack-import.md:153-156` explicitly warns against smuggling data through
    `rules[].options`.
 3. **It cannot reach three of the seven fields.** There is no `allow` for
    `approvedTechnicalTerms`, for `dictionary.approved`, or for `limits`. A locale layer cannot
@@ -659,7 +668,7 @@ vocabulary compliance, so they do not catch this.
 
 **K4** differs from K3 only in that `alternatives[1..n]` (and `alternatives[0]` when
 `safeSubstitution` is false) are _advice_ — they reach the author as `suggestions`
-(`vocabulary.ts:96`) and as message text (`:86-89`), never as an applied edit. Bad advice is a defect
+(`vocabulary.ts:97`) and as message text (`:86-89`), never as an applied edit. Bad advice is a defect
 worth reporting; it does not make the pack unusable. `warning`, so textlint shows it.
 
 **K5** is a genuine, legitimate layering idiom: a product layer whose product is literally called
@@ -668,7 +677,7 @@ vocabulary matching runs against `sentence.masked` and a protected term is maske
 (`helpers.ts:18-23`, `protected-regions.ts:546-558`). Erroring would forbid the idiom. But the ban is
 now dead data, and dead bans are exactly what an audit needs to see. One subtlety the notice message
 must carry: technical-term protection is case-**sensitive** (`protected-regions.ts:552`, flags `gu`)
-while the ban is case-**insensitive** (`helpers.ts:11`, flags `giu`), so `approvedTechnicalTerms:
+while the ban is case-**insensitive** (`helpers.ts:10`, flags `giu`), so `approvedTechnicalTerms:
 ["Abort"]` shadows only `Abort`; lowercase `abort` in prose is still flagged. The shadowing is
 partial, and the notice should say so rather than claiming the ban is fully dead.
 

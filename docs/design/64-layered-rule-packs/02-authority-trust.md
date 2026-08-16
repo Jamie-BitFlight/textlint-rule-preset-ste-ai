@@ -1,5 +1,11 @@
 # Layered rule packs: the trust model
 
+> **Read [`00-decisions.md`](./00-decisions.md) first.** This spec is one of three produced
+> independently, and the decision record overturns part of it: conformance claims are out of scope
+> for this project stage, which removes the destination `stackPermitsConformanceClaim` was built to
+> guard, and `replace` mode — which several sections here depend on — is dropped. Nothing below has
+> been rewritten to match, on purpose — the specs are the reasoning, `00` is the conclusion.
+
 Spec owner: authority, trust, and provenance. The merge algorithm, per-field merge keys, retraction
 syntax, conflict detection and the config zod shape are **out of scope** and are referenced here as
 given. Where this spec depends on a decision the merge-algorithm spec owns, it is flagged as a
@@ -204,7 +210,13 @@ New type, in `src/core/types.ts`, beside `RulePack`:
 ```ts
 /** Position in the layer stack. Fixed order, lowest precedence first. */
 export type PackLayer =
-  'bundled' | 'organisation' | 'department' | 'product' | 'tech-stack' | 'industry' | 'locale';
+  | 'bundled'
+  | 'organisation'
+  | 'department'
+  | 'product'
+  | 'tech-stack'
+  | 'industry'
+  | 'locale';
 
 /** Where a contribution came from, when it did not come from a rule pack layer. */
 export type ContributionOrigin = 'pack' | 'operator-config' | 'builtin';
@@ -215,9 +227,10 @@ export type ContributionOrigin = 'pack' | 'operator-config' | 'builtin';
  * Written **only** by the compositor. No supplier can assert this: it does not exist in
  * `rulePackSchema`, and it lives on `ComposedRulePack`, a type no parse path produces.
  *
- * Required and deliberately not defaulted, on the same principle as `reviewerKind`
- * (`src/fixture-tools/annotation-schema.ts:80-91`): an optional origin makes "nothing produced
- * this" indistinguishable from "we forgot to record what produced this".
+ * Required and deliberately not defaulted, on the same principle as `reviewerKind` in
+ * `src/fixture-tools/annotation-schema.ts` (which arrives with #59, not in this tree): an optional
+ * origin makes "nothing produced this" indistinguishable from "we forgot to record what produced
+ * this".
  */
 export interface EntryProvenance {
   readonly origin: ContributionOrigin;
@@ -331,7 +344,9 @@ authority only, not about _which_ entry wins.
   inherited from below.
 - **A5.** Field-level merge (if the merge algorithm does any): the composite entry's
   `verifiedAuthority` is the **weakest** across every layer that contributed any surviving field,
-  under the lattice `normative > supplementary > provisional`. `packId`/`packVersion`/`layer` name
+  under the lattice `normative > supplementary > provisional` — which is a proposal, not an existing
+  fact: `ruleStatusSchema` (`schema.ts:14`) is a bare `z.enum` and declares no ordering. `01:435`
+  carries the same caveat. `packId`/`packVersion`/`layer` name
   the top contributing layer; every other contributor appears in `displaces` with
   `kind: 'field-merge'`.
 - **A6.** Operator-config contributions (`rules.*.additional` at `vocabulary.ts:55-60` and
@@ -461,7 +476,7 @@ check completely. (This is a hole in the obvious definition; it is closed here d
 
 **Consequence the merge-algorithm spec must accommodate:** the bundled provisional layer declares
 `authority: 'provisional'` and `conformanceClaim: 'none'`
-(`src/rule-pack/provisional-pack.ts:28,32`). Under unanimity, if the bundled layer contributes
+(`src/rule-pack/provisional-pack.ts:27,31`). Under unanimity, if the bundled layer contributes
 anything at all, no run-level conformance claim is ever reachable. An operator holding a licensed
 pack must therefore be able to **fully replace** the bundled layer, not merely extend it. This is a
 dependency on the merge spec's `replace` mode, flagged, not designed here. If `replace` cannot
@@ -569,7 +584,7 @@ export interface Diagnostic {
    * What put the rule data behind this finding into the run.
    *
    * Required and not defaulted, on the `reviewerKind` principle
-   * (`src/fixture-tools/annotation-schema.ts:80-91`): "record what produced a record, on the
+   * (`src/fixture-tools/annotation-schema.ts`, arriving with #59): "record what produced a record, on the
    * record". An optional field makes "this finding has no pack origin" and "we forgot to set it"
    * the same value, and the second is the one that laundered authority.
    *
@@ -608,7 +623,7 @@ Both currently take a **run-level** authority scalar: `analyse.ts:292` and `anal
 - `undecidedCandidateDiagnostics` (`analyse.ts:535-556`) sets `ruleStatus:
 candidate.provenance.verifiedAuthority` and `provenance: candidate.provenance` per candidate,
   dropping its `ruleStatus` parameter.
-- `analyseSemantically` (`analyse.ts:600-609`) likewise drops its `ruleStatus` argument and reads it
+- `analyseSemantically` (`analyse.ts:598-609`) likewise drops its `ruleStatus` argument and reads it
   off each candidate.
 
 This is strictly more correct than today even before layering: a semantic verdict on a passage raised
@@ -695,7 +710,7 @@ All three are single-pack scalars and all three become false under layering. Rep
 `retractions` appears once at the top level alongside `conformance`, since it is a stack property,
 not a per-file one.
 
-The top-level `conformance` block (`main.ts:213-217`) keeps `disclaimer` verbatim and takes
+The top-level `conformance` block (`main.ts:218-220`) keeps `disclaimer` verbatim and takes
 `claim`/`packAuthority` from the composed stack rather than `results[0]`.
 
 **Separately**: `main.ts:266` prints, unconditionally,
@@ -951,7 +966,7 @@ Two problems. The function is being replaced by `entryPermitsConformanceClaim` /
 unconditional line at `src/cli/main.ts:266` — which this spec proposes to derive rather than
 hard-code. The replacement must state the derived behaviour: the sentence is printed whenever
 `stackPermitsConformanceClaim` is false, which is every run of the shipped configuration, because the
-bundled layer declares `provisional`/`none` (`src/rule-pack/provisional-pack.ts:28,32`).
+bundled layer declares `provisional`/`none` (`src/rule-pack/provisional-pack.ts:27,31`).
 
 ### 3. "What a passing run means" (lines 44-47) — the most important change
 
@@ -1017,7 +1032,7 @@ Not my file to change, but inside the authority contract I own, so recorded:
 ## Open questions
 
 1. **Can the bundled layer be fully evacuated?** Unanimity plus the bundled layer's
-   `provisional`/`none` metadata (`provisional-pack.ts:28,32`) means no run-level conformance claim
+   `provisional`/`none` metadata (`provisional-pack.ts:27,31`) means no run-level conformance claim
    is reachable unless `replace` at the bundled layer removes it entirely. **Dependency on the merge
    spec.** If it cannot, `stackPermitsConformanceClaim` is permanently `false` and should be
    documented as such rather than weakened.

@@ -1,13 +1,27 @@
 # Layered rule packs — migration, impact and verification
 
+> **Read [`00-decisions.md`](./00-decisions.md) first.** This spec is one of three produced
+> independently. The decision record adopts its config-key proposal over `01`'s, and moves several
+> things it takes as given from the other two specs. Nothing below has been rewritten to match, on
+> purpose — the specs are the reasoning, `00` is the conclusion.
+
 **Scope owner:** landing safety. Merge algorithm, merge keys, retraction syntax, conflict semantics,
 config zod shape, and the authority/provenance model are specified by other agents and are taken as
 given here. This document answers: what breaks, what must not silently change meaning, what tests
 must exist before merge, what documentation goes stale, and in what order the PRs ship.
 
-**Baseline commit:** `9d78a8b9999c9d4b89694cc0ca154ab9292ee10f` (detached). Every line reference
-below is against that commit and was opened, not inferred. Where a claim could not be executed in
-this worktree it says so explicitly.
+**Stage 0 precondition — not yet dischargeable.** The staged rollout below assumes the tree is
+green before the first characterisation tests land. At `9d78a8b` the suite was green (545 tests).
+At `ebcc623`, which is what this branch was actually cut from, one corpus assertion was failing
+(`test/fixtures/corpus.test.ts`, `abbreviation-introduction` not firing on `VACUUM`) — a
+pre-existing failure from #56, not caused by anything here. It was fixed by #58 and the merged base
+is green again. Re-run `npm ci && npm run verify` on the tree an implementation actually starts
+from; do not take a figure from this document as the check.
+
+**Baseline commit:** authored against `9d78a8b` (detached). That commit turned out to be a
+**sibling** of this branch rather than an ancestor of it, so every line reference below was
+re-checked against the branch after `main` was merged in, and the ones that had drifted were
+corrected. Each reference was opened, not inferred, in both passes.
 
 **Verification environment caveat:** `node_modules` is **not** installed in this worktree, so
 `npm test`, `npm run typecheck` and coverage were **not** run. Zod behaviour claims below were
@@ -22,9 +36,12 @@ The single-pack assumption is narrower than it looks in the type system and wide
 the test suite.
 
 - **Narrow in code.** Exactly **three** call sites resolve a pack (`src/analysis/analyse.ts:244`,
-  `src/evaluation/evaluate.ts:227`, `scripts/build-candidate-packets.mjs:77`), and exactly **nine**
-  places read pack _content_ (`runner.ts:51`, `analyse.ts:255`, `evaluate.ts:244`, four rule files,
-  `cli/main.ts:190-197`). A composite `RulePack` that satisfies the existing `RulePack` interface
+  `src/evaluation/evaluate.ts:227`, `scripts/build-candidate-packets.mjs:77`), and **eleven**
+  places across seven files read pack _content_ — the measurement is
+  `grep -rn 'pack\.\(rules\|dictionary\|contractions\|approvedTechnicalTerms\|limits\)' src/`
+  (`runner.ts:51`, `analyse.ts:255`, `evaluate.ts:244`, and the four rule files: `vocabulary.ts` ×3,
+  `sentence-length.ts` ×3, `structure-rules.ts`, `candidate-rules.ts`). `cli/main.ts:190-196` reads
+  pack _metadata_, which is a separate surface and is treated as one in `02`. A composite `RulePack` that satisfies the existing `RulePack` interface
   (`src/core/types.ts:474-486`) would require **no change at all** to the rule layer.
 - **Wide in the test suite — dangerously so.** **Zero** tests import
   `src/rule-pack/loader.ts`. `resolveRulePack`, `loadRulePackFromFile`, `parseRulePack`,
@@ -71,7 +88,7 @@ Every row cites a file and line opened at the baseline commit.
 | A4  | `src/rule-pack/loader.ts:76-83` `packPermitsConformanceClaim(pack, trustedIds)` | Reads `pack.metadata.authority` / `.conformanceClaim` / `.id` — **a single identity**.                                                        | A merged pack has N identities and N licences. Authority agent owns the semantics; this call site must be updated in lockstep with `cli/main.ts:193-197`.                                                                                                                                                                                                                       |
 | A5  | `src/rule-pack/loader.ts:92-98` `verifiedAuthority(pack, trustedIds)`           | Same single-identity assumption; `:97` `trustedIds.includes(pack.metadata.id)`.                                                               | Same. Called from `analyse.ts:292`, `analyse.ts:607`, `cli/main.ts:190`.                                                                                                                                                                                                                                                                                                        |
 | A6  | `src/rule-pack/index.ts:1-3` + `package.json:22-25` (`"./rule-pack"` export)    | `export * from './loader.js'` makes `resolveRulePack`'s **signature a public API**.                                                           | Any signature change is a semver-visible break for external consumers, not just an internal refactor. Additive overload or a new `resolveRulePacks` beside the old one is the low-risk shape.                                                                                                                                                                                   |
-| A7  | `src/rule-pack/provisional-pack.ts:22` `provisionalRulePack`                    | The one bundled pack; `metadata.id: 'ste-ai-provisional'` (`:26`), `authority: 'provisional'`, `conformanceClaim: 'none'` (`:29`,`:32`).      | Becomes layer 0 (bundled) in the layer order. Its identity must survive merge in a form `assert-corpus-report.mjs:36` can still see as `provisional`.                                                                                                                                                                                                                           |
+| A7  | `src/rule-pack/provisional-pack.ts:22` `provisionalRulePack`                    | The one bundled pack; `metadata.id: 'ste-ai-provisional'` (`:24`), `authority: 'provisional'`, `conformanceClaim: 'none'` (`:27`,`:31`).      | Becomes layer 0 (bundled) in the layer order. Its identity must survive merge in a form `assert-corpus-report.mjs:36` can still see as `provisional`.                                                                                                                                                                                                                           |
 
 ### B. Config
 
@@ -126,7 +143,7 @@ Every row cites a file and line opened at the baseline commit.
 | #   | File:line                                                                                                                  | What it assumes                                                                           | What has to change                                                                                                                                                                                                          |
 | --- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F1  | `src/cli/main.ts:190-197` per-file `packAuthority` / `declaredAuthority` / `conformanceClaim`                              | One pack → one authority, one declared authority, one claim.                              | Follows A4/A5. `declaredAuthority` (`:191`, `analysis.pack.metadata.authority`) has no meaning for a merged pack without a provenance model.                                                                                |
-| F2  | `src/cli/main.ts:217-219` `conformance: { claim: results[0]?.conformanceClaim, packAuthority: results[0]?.packAuthority }` | **The whole run's conformance block is taken from the first file.**                       | Latent single-pack reporting bug today (all files share one config so it happens to be right). With layers it stays right only by accident. `scripts/ci/assert-corpus-report.mjs:32-45` asserts against exactly this block. |
+| F2  | `src/cli/main.ts:218-220` `conformance: { claim: results[0]?.conformanceClaim, packAuthority: results[0]?.packAuthority }` | **The whole run's conformance block is taken from the first file.**                       | Latent single-pack reporting bug today (all files share one config so it happens to be right). With layers it stays right only by accident. `scripts/ci/assert-corpus-report.mjs:32-45` asserts against exactly this block. |
 | F3  | `src/cli/main.ts:277-296` `listRules`                                                                                      | Enumerates `deterministicRules` and reports `r.meta.status` — **never touches the pack**. | **No change required.** This is why `check-rules-provisional.sh`'s hard-coded `14` is not at risk (see Fixture & corpus impact). Do not make `rules` pack-aware in this change.                                             |
 
 ### G. Scripts and CI
@@ -234,7 +251,7 @@ state clearly I did not.
    all verified in the rule code: `pack.rules` duplicates are last-wins via `Map`
    (`runner.ts:51`, executed: `new Map([['a',1],['a',2]]).get('a') === 2`); `dictionary.unapproved`
    and `.preferred` duplicates are decided by post-sort array order plus the `claimed` first-wins
-   guard (`vocabulary.ts:63,68-70,172`); `contractions` duplicates are **not** deduplicated at all
+   guard (`vocabulary.ts:64,68-70,172`); `contractions` duplicates are **not** deduplicated at all
    and produce two diagnostics on one span (`vocabulary.ts:236-275` — no `claimed` guard).
    Only the third is loud (it changes visible output and will break `textlint-tester.test.ts`); the
    first two are silent. _Mitigation:_ merge must key `rules` by `ruleId`, `unapproved`/`approved`
@@ -260,7 +277,7 @@ principle and any signature change is semver-visible to them.
 
 ## Test strategy
 
-Conventions observed in `test/`: vitest with `globals: true` (`vitest.config.ts:8`), explicit
+Conventions observed in `test/`: vitest with `globals: true` (`vitest.config.ts:10`), explicit
 `import { describe, expect, it } from 'vitest'` in project-owned tests, `mkdtempSync(join(tmpdir(),
 ...))` + `afterEach` cleanup for filesystem cases (`shared-config-merge.test.ts:29-37`), long
 `/** … */` block comments stating _why_ a test exists and what regression it guards
@@ -268,7 +285,7 @@ Conventions observed in `test/`: vitest with `globals: true` (`vitest.config.ts:
 (`clearSharedConfigCache`, `clearAnalysisCache`).
 
 Coverage thresholds are enforced only under `--coverage` (`vitest.config.ts:15-35`: statements 91,
-branches 81, functions 91, lines 94) and CI runs `test:coverage` (`ci.yml:47`). New unreached
+branches 81, functions 91, lines 94) and CI runs `test:coverage` (`ci.yml:45`). New unreached
 branches in `src/rule-pack/` will pull these down, so tests are not optional for the thresholds
 either.
 
@@ -364,7 +381,7 @@ need of updating. State that in the PR description so a reviewer does not "fix" 
   `annotation.candidateAdjudications` (`:365-366`) — static JSON in `fixtures/annotations/*.json`,
   merged in from `fixtures/verdicts/`. **The linter is not consulted.** Layering cannot move this
   number. Same for `corpus.test.ts:376-389` (`noun-cluster-candidate` → `{violation: 0, total: 24}`)
-  and for the 105/5/100 table in `docs/provisional-rules.md:265-271`.
+  and for the 105/5/100 table in `docs/provisional-rules.md:262-268`.
 - **`scripts/ci/check-rules-provisional.sh:20`'s hard-coded `14`.** It lints the output of
   `ste-ai rules --json`, which `listRules` (`cli/main.ts:277-296`) builds from the
   `deterministicRules` registry and `r.meta.status` — **never from the pack**.
@@ -395,7 +412,7 @@ Every one of the following calls `analyseTextDeterministic(text)` **with no conf
 (`docs/fixtures.md:179-180`). The correct posture is therefore _not_ to update the fixture
 expectations, but to treat any movement in them as a stop-the-line signal.
 
-**One documentation dependency:** `docs/fixtures.md:194` ("violation count never increases after a
+**One documentation dependency:** the "Corpus tests" table in `docs/fixtures.md` ("violation count never increases after a
 rewrite") and the surrounding invariant table at `:189-201` describe corpus assertions accurately
 today. They stay accurate. No fixture, manifest, annotation or verdict file needs to change.
 
@@ -534,7 +551,7 @@ baseline commit.
 
 - `docs/fixtures.md` — no pack-dependent claim (verified by grep: the only "pack" hits are
   unrelated). No change.
-- `docs/provisional-rules.md:265-271` (the 105/5/100 table) — annotation-derived, not linter-derived.
+- `docs/provisional-rules.md:262-268` (the 105/5/100 table) — annotation-derived, not linter-derived.
   No change.
 - `docs/diagnostic-policy.md`, `docs/suppression.md`, `docs/semantic-evaluators.md`,
   `docs/llama-cpp-setup.md` — no single-pack claim.
@@ -638,7 +655,7 @@ edits into Stage 3 instead and keep only the roadmap/README prose for last.
 Things that could go wrong which the tests above would **not** catch.
 
 1. **Merge is correct but non-deterministic across platforms.** The merge output feeds
-   `vocabulary.ts:63` (`sort((a,b) => b.term.length - a.term.length)`) — a comparator with ties, and
+   `vocabulary.ts:64` (`sort((a,b) => b.term.length - a.term.length)`) — a comparator with ties, and
    `Array.prototype.sort` stability preserves _input_ order for ties. If the merge builds its output
    from a `Map`/`Set` whose insertion order varies with layer file read order (e.g. a
    `Promise.all` over layer loads), two runs can differ in which of two equal-length terms claims a
@@ -668,7 +685,7 @@ Things that could go wrong which the tests above would **not** catch.
    `licence` or `notice` in output at all (grep: no consumer outside the schema/type), so a merge
    that drops them loses an audit trail **without any test failing** — the field is validated on the
    way in and never read on the way out. Given this repo's posture on provenance
-   (`docs/DISCLAIMER.md`, `docs/fixtures.md:145-170`), silently losing per-layer licence text is a
+   (`docs/DISCLAIMER.md`, the "How the adjudication was run" section of `docs/fixtures.md`), silently losing per-layer licence text is a
    real harm that the test suite is structurally incapable of detecting. **Mitigation:** the
    provenance model must retain per-layer `licence`/`notice`, and a test must assert they survive
    the merge even though nothing consumes them yet.
@@ -680,7 +697,7 @@ Things that could go wrong which the tests above would **not** catch.
    not once per process. The adapter's analysis cache hides this for textlint, but the CLI resolves
    per file (`cli/main.ts:161-183` loops files, each calling `analyseText`). A 500-file lint would
    do 3500 file reads and 3500 schema validations. No test measures this; `testTimeout: 20_000`
-   (`vitest.config.ts:9`) is generous enough to hide it. **Mitigation:** memoise resolved layers by
+   (`vitest.config.ts:11`) is generous enough to hide it. **Mitigation:** memoise resolved layers by
    (absolute path, mtime/size) inside the loader, and say so in the docs.
 
 6. **Zod default application on every layer.** `schema.ts:41,47,54,88,97-103` apply `.default()` to

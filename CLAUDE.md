@@ -106,6 +106,15 @@ Then address the findings, the same as for a human or Codex review.
 Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScript checks, or rebuild
 `dist/` immediately before using it. Never run stale `dist/` output with plain `node`.
 
+**In a fresh worktree, run the repo's own binaries from `node_modules/.bin/`, not `npx`.** A worktree
+created by `git worktree add` or by `isolation: "worktree"` has no `node_modules`, so `npx <tool>`
+silently downloads the _latest_ published version instead of the pinned one. That is not a
+hypothetical: `npx prettier --write` in such a worktree reformatted two embedded TypeScript blocks
+the way prettier 4 wants them, reported the tree clean, and CI — which runs the pinned 3.9.6 — failed
+on exactly those two files. Either `npm ci` in the worktree first, or invoke the main checkout's
+binary by path. A tool that reports success against a version the project does not use has verified
+nothing.
+
 ## `send_later` (self-scheduled check-ins)
 
 Works without approval friction in this environment — verified: a call this session registered

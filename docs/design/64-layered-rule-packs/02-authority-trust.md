@@ -210,13 +210,7 @@ New type, in `src/core/types.ts`, beside `RulePack`:
 ```ts
 /** Position in the layer stack. Fixed order, lowest precedence first. */
 export type PackLayer =
-  | 'bundled'
-  | 'organisation'
-  | 'department'
-  | 'product'
-  | 'tech-stack'
-  | 'industry'
-  | 'locale';
+  'bundled' | 'organisation' | 'department' | 'product' | 'tech-stack' | 'industry' | 'locale';
 
 /** Where a contribution came from, when it did not come from a rule pack layer. */
 export type ContributionOrigin = 'pack' | 'operator-config' | 'builtin';

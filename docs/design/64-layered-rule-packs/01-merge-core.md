@@ -292,9 +292,7 @@ say _only_ what it changes. So:
 // src/rule-pack/schema.ts
 
 /** Unchanged. The contract a base pack satisfies. Existing packs keep parsing. */
-export const rulePackSchema = z.object({
-  /* …as today… */
-});
+export const rulePackSchema = z.object({/* …as today… */});
 
 /** What an `extend` layer may be. Everything optional except metadata. */
 export const rulePackLayerContentSchema = z.object({

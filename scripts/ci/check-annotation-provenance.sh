@@ -14,6 +14,12 @@
 # the change becomes a deliberate edit to this file, next to the diff that caused it, rather than
 # something a corpus can drift through unremarked.
 #
+# Totals alone are not enough, because they are an aggregate and aggregates are preserved by
+# rearrangement. Measured: moving one record's credit from `rewriter-a` to `rewriter-b` in one
+# annotation while moving one the other way in another leaves 36/34 exactly as declared, and passed.
+# So the per-fixture reviewer sets are declared too — each fixture names the runs that worked on it,
+# which the balanced swap changes even though the totals do not.
+#
 # Usage: scripts/ci/check-annotation-provenance.sh
 set -euo pipefail
 
@@ -29,6 +35,26 @@ export EXPECTED_CHANGE_REVIEWERS='rewriter-a=36,rewriter-b=34'
 # Every record in the corpus was produced by an agent run. A human-authored record is a real
 # possibility and the schema allows it; it is not something that should arrive unnoticed.
 export EXPECTED_KINDS='agent=175'
+# Which runs worked on which fixture. `sqlite-pragma-hard-negative` names one run because it emits
+# no candidates, so no adjudication reviewer ever touched it.
+export EXPECTED_PER_FIXTURE='curl-url-option-reference=reviewer-b+rewriter-a
+django-settings-configuration=reviewer-d+rewriter-a
+httpd-mod-ssl-directive-config=reviewer-a+rewriter-b
+httpd-mod-ssl-overview=reviewer-b+rewriter-a
+k8s-audit-log-troubleshooting=reviewer-c+rewriter-b
+k8s-debug-pod-troubleshooting=reviewer-c+rewriter-a
+llvm-getting-started-build=reviewer-a+rewriter-a
+llvm-standalone-build-table=reviewer-a+rewriter-b
+node-cli-hard-negative=reviewer-d+rewriter-b
+osha-lockout-tagout-warning=reviewer-c+rewriter-a
+osha-ppe-requirements=reviewer-d+rewriter-b
+postgres-vacuum-overview=reviewer-b+rewriter-b
+sqlite-cli-description=reviewer-a+rewriter-b
+sqlite-cli-dot-commands=reviewer-c+rewriter-a
+sqlite-pragma-hard-negative=rewriter-b
+sqlite-vacuum-space-reclaim=reviewer-d+rewriter-a
+zephyr-dependency-setup=reviewer-a+rewriter-a
+zephyr-dependency-table=reviewer-b+rewriter-b'
 
 node --input-type=module -e '
 import { readFileSync, readdirSync } from "node:fs";
@@ -43,6 +69,7 @@ let changes = 0;
 const byAdjudicationReviewer = new Map();
 const byChangeReviewer = new Map();
 const byKind = new Map();
+const perFixture = new Map();
 const bump = (map, k) => map.set(k, (map.get(k) ?? 0) + 1);
 
 for (const file of readdirSync(dir).toSorted()) {
@@ -67,6 +94,32 @@ for (const file of readdirSync(dir).toSorted()) {
   const derived = JSON.stringify([...named].toSorted((a, b) => a.localeCompare(b)));
   if (declared !== derived) {
     console.error(`${file}: reviewers ${declared} is not the set its records carry, ${derived}`);
+    process.exitCode = 1;
+  }
+  perFixture.set(file.replace(/\.json$/, ""), [...named].toSorted((a, b) => a.localeCompare(b)).join("+"));
+}
+
+// Per fixture, not just in total. A rearrangement that moves credit between fixtures in opposite
+// directions leaves every aggregate above untouched; it cannot leave these untouched.
+const expectedPerFixture = new Map(
+  (process.env.EXPECTED_PER_FIXTURE ?? "").split("\n").filter(Boolean).map((line) => {
+    const at = line.indexOf("=");
+    return [line.slice(0, at), line.slice(at + 1)];
+  }),
+);
+for (const [fixture, actual] of perFixture) {
+  const expected = expectedPerFixture.get(fixture);
+  if (expected === undefined) {
+    console.error(`${fixture}: no expected reviewer set is declared for this fixture`);
+    process.exitCode = 1;
+  } else if (expected !== actual) {
+    console.error(`${fixture}: expected reviewers ${expected}, found ${actual}`);
+    process.exitCode = 1;
+  }
+}
+for (const fixture of expectedPerFixture.keys()) {
+  if (!perFixture.has(fixture)) {
+    console.error(`${fixture}: declared here, but no such annotation was read`);
     process.exitCode = 1;
   }
 }

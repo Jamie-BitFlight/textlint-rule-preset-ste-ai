@@ -26,6 +26,8 @@
         "the rule pack still has no notion of a product/project proper noun; LLVM is exempt here only because another naming region in the same document happens to corroborate it, so the same name in a document with no such identifier would still be flagged"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -55,6 +57,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
@@ -83,6 +87,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
@@ -112,6 +118,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.96
     }
   ],

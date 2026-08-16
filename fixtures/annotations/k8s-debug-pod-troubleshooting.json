@@ -42,6 +42,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],

@@ -50,6 +50,14 @@ const jsonFiles = (dir) => readdirSync(dir).filter((f) => f.endsWith('.json'));
  */
 function describeDrift(fixtureId, committed, computed) {
   const out = [];
+  if (committed.length !== computed.length) {
+    // Named before the per-record messages, because a duplicated record collapses in the map below
+    // and would otherwise be reported as an ordering problem — sending the reader to look for a
+    // sort bug that is not there.
+    out.push(
+      `${fixtureId}: annotation holds ${committed.length} adjudication(s), the verdicts give ${computed.length}`,
+    );
+  }
   const remaining = new Map(
     committed.map((record) => [key(record.ruleId, record.span ?? { start: -1, end: -1 }), record]),
   );
@@ -61,19 +69,24 @@ function describeDrift(fixtureId, committed, computed) {
       continue;
     }
     remaining.delete(id);
-    for (const [field, value] of Object.entries(record)) {
-      if (JSON.stringify(found[field]) !== JSON.stringify(value)) {
-        out.push(
-          `${fixtureId}/${id}: annotation ${field} is ${JSON.stringify(found[field])}, the verdicts give ${JSON.stringify(value)}`,
-        );
-      }
+    // The union of both key sets, not just the computed record's. Iterating one side only means a
+    // field *added* by hand to a committed record is never visited: it passes the check and is then
+    // dropped without comment by the next write, which is the opposite of the guarantee this
+    // function exists to give.
+    for (const field of new Set([...Object.keys(record), ...Object.keys(found)])) {
+      if (JSON.stringify(found[field]) === JSON.stringify(record[field])) continue;
+      out.push(
+        `${fixtureId}/${id}: annotation ${field} is ${JSON.stringify(found[field])}, the verdicts give ${JSON.stringify(record[field])}`,
+      );
     }
   }
   for (const id of remaining.keys()) {
     out.push(`${fixtureId}: annotation holds an adjudication at ${id} that no verdict produces`);
   }
   // Order is part of the artefact — the records are sorted by span so the file is stable — so a
-  // reordered file is drift even when every record in it is right.
+  // reordered file is drift even when every record in it is right. Only worth reporting when
+  // nothing else differs; under real drift the order almost always differs too, and saying so adds
+  // noise to a message that already names the cause.
   if (out.length === 0) {
     const committedOrder = committed.map((record) => key(record.ruleId, record.span));
     const computedOrder = computed.map((record) => key(record.ruleId, record.span));
@@ -210,6 +223,15 @@ function main() {
 
   const manifest = JSON.parse(readFileSync(join(fixturesDir, 'manifest.json'), 'utf8'));
   const drift = [];
+  // A fixture with verdicts but no manifest entry would otherwise be validated and then dropped,
+  // since the loop below walks the manifest. Silently discarding a reviewer's work is worse than
+  // refusing it.
+  const manifestIds = new Set(manifest.fixtures.map((fixture) => fixture.id));
+  for (const fixtureId of merged.keys()) {
+    if (!manifestIds.has(fixtureId)) {
+      drift.push(`${fixtureId}: verdicts bind to this fixture, but it is not in manifest.json`);
+    }
+  }
   let written = 0;
   let total = 0;
   for (const fixture of manifest.fixtures) {
@@ -224,31 +246,67 @@ function main() {
     );
     total += records.length;
     const path = join(fixturesDir, fixture.annotationPath);
-    const annotation = JSON.parse(readFileSync(path, 'utf8'));
+    // Every other failure in this script arrives as a line in a collected list. A missing or
+    // unparseable annotation used to arrive as a raw stack trace from `readFileSync`, because
+    // `--check` returned before ever opening these files; now that it opens them, it has to fail
+    // the same way everything else does.
+    let annotation;
+    try {
+      annotation = JSON.parse(readFileSync(path, 'utf8'));
+    } catch (error) {
+      drift.push(
+        `${fixture.id}: cannot read ${fixture.annotationPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
+    }
     // `candidateAdjudications` carries `.default([])` in the schema, so an absent key and an empty
     // array are the same annotation. Read them as the same thing rather than reporting a
     // difference between two spellings of nothing.
     const committed = annotation.candidateAdjudications ?? [];
-    // `annotation` comes from `JSON.parse`, so its element types are unresolved (`any`) to the
-    // type checker even though every reviewer id is a string at runtime; give an explicit compare
-    // instead of relying on the (unprovable-here) string-array default.
+    if (!Array.isArray(committed)) {
+      drift.push(`${fixture.id}: candidateAdjudications is not an array`);
+      continue;
+    }
+    // Derived from the records, and **only** from the records — both populations, since a rewrite
+    // names its author too. Folding the committed array into the expectation is what made this
+    // check vacuous: the committed value was always a subset of the value it was compared against,
+    // so a fabricated name inserted in sorted order passed, a deleted name passed, and the next
+    // write recomputed the union against the shortened list and made the deletion permanent.
     const reviewers = [
-      ...new Set([...(annotation.reviewers ?? []), ...records.map((r) => r.reviewer)]),
-    ].toSorted((a, b) => String(a).localeCompare(String(b)));
+      ...new Set([
+        ...records.map((record) => record.reviewer),
+        ...(Array.isArray(annotation.changes) ? annotation.changes : []).map(
+          (change) => change.reviewer,
+        ),
+      ]),
+    ]
+      .filter((reviewer) => typeof reviewer === 'string' && reviewer.length > 0)
+      .toSorted((a, b) => a.localeCompare(b));
+    // `annotation` comes from `JSON.parse`, so its element types are unresolved (`any`) to the type
+    // checker even though every reviewer id is a string at runtime; `String()` keeps the compare
+    // explicit rather than relying on the (unprovable-here) string-array default.
+    const committedReviewers = (
+      Array.isArray(annotation.reviewers) ? annotation.reviewers : []
+    ).map((reviewer) => String(reviewer));
 
     if (checkOnly) {
       drift.push(...describeDrift(fixture.id, committed, records));
-      if (JSON.stringify(annotation.reviewers ?? []) !== JSON.stringify(reviewers)) {
+      if (JSON.stringify(committedReviewers) !== JSON.stringify(reviewers)) {
         drift.push(
-          `${fixture.id}: annotation reviewers are ${JSON.stringify(annotation.reviewers ?? [])}, the verdicts give ${JSON.stringify(reviewers)}`,
+          `${fixture.id}: annotation reviewers are ${JSON.stringify(committedReviewers)}, the records give ${JSON.stringify(reviewers)}`,
         );
       }
       continue;
     }
 
-    // Writing `"candidateAdjudications": []` into an annotation that never carried the key adds a
-    // diff that says nothing. Leave those alone; the two spellings already compare equal above.
-    if (records.length === 0 && !Object.hasOwn(annotation, 'candidateAdjudications')) continue;
+    // Rewriting a file that already holds the right bytes adds a diff that says nothing, and in one
+    // case does harm: an annotation with no records and no `changes` would be given
+    // `"reviewers": []`, which `annotationSchema` rejects (`.min(1)`), so the writer would emit a
+    // file its own validator refuses.
+    const unchanged =
+      JSON.stringify(committed) === JSON.stringify(records) &&
+      JSON.stringify(committedReviewers) === JSON.stringify(reviewers);
+    if (unchanged) continue;
     annotation.candidateAdjudications = records;
     annotation.reviewers = reviewers;
     writeFileSync(path, `${JSON.stringify(annotation, null, 2)}\n`);
@@ -265,9 +323,15 @@ function main() {
     return;
   }
 
+  // Both numbers are counted over the manifest. `merged.size` was the wrong second figure: it
+  // counts every fixture the verdicts mention, so the sentence reported its two halves over
+  // different sets whenever those disagreed — the one case where the reader most needs it not to.
+  const judgedFixtures = manifest.fixtures.filter(
+    (fixture) => (merged.get(fixture.id)?.size ?? 0) > 0,
+  ).length;
   process.stderr.write(
     checkOnly
-      ? `ok: ${total} verdicts bind to ${merged.size} fixtures and match the committed annotations\n`
+      ? `ok: ${total} verdicts bind to ${judgedFixtures} fixtures and match the committed annotations\n`
       : `${total} verdicts written to ${written} annotation files\n`,
   );
 }

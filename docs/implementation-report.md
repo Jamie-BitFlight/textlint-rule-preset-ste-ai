@@ -147,10 +147,10 @@ about the same classes of false positive.
 
 Two cautions on that sentence, both checkable against the data:
 
-- `annotationChangeSchema` records a `reviewerConfidence` and **no reviewer field**, so nothing in
-  these 70 records says what produced them. The `reviewerKind` provenance added for the 105
-  `candidateAdjudications` does not cover them. The attribution above comes from the bare strings in
-  each annotation's `reviewers` array, not from a field the schema enforces.
+- The attribution above is read from the records themselves: `annotationChangeSchema` requires
+  `reviewer` and `reviewerKind`, the same pair the 105 `candidateAdjudications` carry. It did not
+  until recently, and until then the sentence above rested on the annotation's `reviewers` array —
+  a list nothing pointed into and nothing checked.
 - Agreement between two agent runs is weaker evidence than the same agreement between separate
   people, since instances sharing a base model correlate. Treat it as one method applied
   consistently.

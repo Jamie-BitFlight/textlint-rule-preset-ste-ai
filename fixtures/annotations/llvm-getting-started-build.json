@@ -30,6 +30,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -58,6 +60,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -88,6 +92,8 @@
         "rule cannot distinguish a project's self-referential name from a true undefined abbreviation"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -111,6 +117,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 1
     },
     {
@@ -141,6 +149,8 @@
         "rule does not distinguish a step label from an executable instruction sentence"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.8
     }
   ],

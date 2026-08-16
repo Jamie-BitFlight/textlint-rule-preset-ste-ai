@@ -41,6 +41,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -70,6 +72,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -100,6 +104,8 @@
         "rule does not distinguish headings from instruction sentences"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     }
   ],

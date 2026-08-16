@@ -38,6 +38,20 @@ export const annotationChangeSchema = z.object({
   semanticInvariants: z.array(z.string().min(3)).min(1),
   unresolved: z.array(z.string()).default([]),
   status: z.enum(['accepted', 'disputed', 'deferred']),
+  /**
+   * Who produced this rewrite, and what they are.
+   *
+   * These records had no provenance at all while `candidateAdjudications` did, which left the
+   * annotation's `reviewers` array as the only trace of who wrote the 70 rewrites — an array no
+   * record pointed into and nothing could check. A reviewer name could be added to it, or removed
+   * from it, without contradicting any record in the file.
+   *
+   * With both populations naming their own author, `reviewers` becomes derivable rather than
+   * asserted: it is exactly the set of names the records carry, and `merge-candidate-verdicts.mjs`
+   * rejects a file where it is anything else.
+   */
+  reviewer: z.string().min(1),
+  reviewerKind: z.enum(['human', 'agent']),
   reviewerConfidence: z.number().min(0).max(1),
 });
 

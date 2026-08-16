@@ -31,6 +31,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -59,6 +61,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -88,6 +92,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -116,6 +122,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -140,6 +148,8 @@
         "the rule still has no general notion of a command name; VACUUM is exempt only because it is named in the default well-known list, so an undocumented command keyword would still be flagged"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
@@ -162,6 +172,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
@@ -186,6 +198,8 @@
         "the rule still has no general notion of a SQL keyword; PRAGMA is exempt here through config-fragment masking and the default well-known list, not through keyword recognition"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
@@ -208,6 +222,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],

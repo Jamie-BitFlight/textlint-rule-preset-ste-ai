@@ -133,6 +133,8 @@ touched.
   "semanticInvariants": ["the 500-hour interval", "the prohibition on removing the cover"],
   "unresolved": ["…anything a reviewer would not decide…"],
   "status": "accepted" | "disputed" | "deferred",
+  "reviewer": "rewriter-a",
+  "reviewerKind": "human" | "agent",   // required, like the adjudication records
   "reviewerConfidence": 0.9
 }
 ```
@@ -150,7 +152,7 @@ Conflating them is easy and the distinction matters, so state it first:
 | Records                  | Count | Produced by                | Partition              | Provenance in the data   |
 | ------------------------ | ----: | -------------------------- | ---------------------- | ------------------------ |
 | `candidateAdjudications` |   105 | `reviewer-a`…`reviewer-d`  | 5 / 4 / 4 / 4 fixtures | `reviewerKind`, required |
-| `changes`                |    70 | `rewriter-a`, `rewriter-b` | 9 fixtures each        | none recorded            |
+| `changes`                |    70 | `rewriter-a`, `rewriter-b` | 9 fixtures each        | `reviewerKind`, required |
 
 **`candidateAdjudications` — four independent agent reviewers**, one per `fixtures/verdicts/` file,
 each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
@@ -160,9 +162,12 @@ never omit it. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run
 never a person.
 
 **`changes` — the 70 rewrite records** behind the 32 accepted / 36 disputed / 2 deferred figures in
-`implementation-report.md`. `annotationChangeSchema` has a `reviewerConfidence` and no reviewer field
-at all, so who or what produced these is recorded nowhere except the bare strings in each annotation's
-`reviewers` array. The provenance discipline described above does **not** yet extend to them.
+`implementation-report.md`. These carry the same required `reviewer` and `reviewerKind` as the
+adjudications. They did not at first, and the gap was not cosmetic: while the only trace of who
+wrote a rewrite was the annotation's `reviewers` array, that array was an assertion no record
+pointed into, so a name could be added to it or removed from it without contradicting anything in
+the file. It is now derived — exactly the set of names the two record populations carry — and
+`merge-candidate-verdicts.mjs` refuses a file where it is anything else.
 
 What the adjudication method establishes, and what it does not:
 

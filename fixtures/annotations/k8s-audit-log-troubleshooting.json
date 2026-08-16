@@ -25,6 +25,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 1
     },
     {
@@ -53,6 +55,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     }
   ],

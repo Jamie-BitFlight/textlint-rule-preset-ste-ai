@@ -31,6 +31,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     },
     {
@@ -61,6 +63,8 @@
         "rule scans front-matter metadata as if it were prose"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -91,6 +95,8 @@
         "rule scans front-matter field values as if it were prose"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -121,6 +127,8 @@
         "rule misreads a version number's decimal point as a missing unit space"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -151,6 +159,8 @@
         "rule cannot distinguish a purpose clause with alternative infinitives from two sequential instructions"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     },
     {
@@ -217,6 +227,8 @@
         "rule does not distinguish literal scheme/protocol identifiers from prose abbreviations"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -247,6 +259,8 @@
         "rule misreads a three-part version number's dots as missing unit spaces"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],

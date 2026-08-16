@@ -44,6 +44,8 @@
         "a safe way to shorten this sentence without reordering or extracting clauses was not found; needs legal/SME sign-off before any rewrite is attempted"
       ],
       "status": "deferred",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.55
     },
     {
@@ -96,6 +98,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.98
     },
     {
@@ -136,6 +140,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -167,6 +173,8 @@
         "whether a split that preserves the trailing semicolon (e.g. two sentences before the semicolon) would still count as 'restructuring' under this fixture's safety constraint; declined without SME guidance"
       ],
       "status": "deferred",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.55
     },
     {
@@ -199,6 +207,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     }
   ],

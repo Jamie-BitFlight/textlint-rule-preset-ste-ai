@@ -30,6 +30,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     },
     {
@@ -52,6 +54,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -88,6 +92,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.93
     },
     {
@@ -110,6 +116,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 1
     },
     {
@@ -132,6 +140,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -162,6 +172,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     },
     {
@@ -202,6 +214,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],

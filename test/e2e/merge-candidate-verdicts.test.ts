@@ -7,16 +7,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 /**
  * `scripts/merge-candidate-verdicts.mjs` is the only thing that writes the ground truth the
- * semantic evaluators are scored against, and until this file existed nothing exercised it. That
- * was not a theoretical gap. Two of its guarantees could each be deleted outright with every gate
- * in the project still passing:
+ * semantic evaluators are scored against, and until this file existed nothing exercised it.
  *
- * - **`reviewerKind` is required.** The field exists so a record can say whether a person or an
- *   agent produced it; without a test, hard-coding `'agent'` at the write site and dropping the
- *   check on the input would have looked exactly like a working build.
- * - **`--check` compares against the committed annotations.** It used to validate that the
- *   verdicts bind to live passages and stop there, never opening `fixtures/annotations/`. A record
- *   edited by hand in the file the script writes passed CI untouched.
+ * The cases below are chosen by mutation: each one exists because deleting a specific line of the
+ * script leaves every other gate in the project green. The guarantees they hold down are that
+ * `reviewerKind` is required on input and stamped on output, that `--check` compares against the
+ * committed annotations rather than stopping at "the verdicts bind", that `reviewers` is derived
+ * from the records instead of folded together with what is already in the file, and that the write
+ * path neither leaves a stale record behind nor rewrites a file that already holds the right bytes.
  *
  * The corpus is not used here. These are properties of the tool, and asserting them against the
  * real 105-record corpus would make them fail for reasons that have nothing to do with the tool.
@@ -25,15 +23,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const script = 'scripts/merge-candidate-verdicts.mjs';
 
-const span = { start: 10, end: 14 };
-
 /** One candidate, and the verdict that binds to it. Enough for the tool; nothing more. */
 const candidate = {
   passageId: 'ambiguous-pronoun-candidate:s1:10',
   ruleId: 'ambiguous-pronoun-candidate',
   evaluatorId: 'pronoun-antecedent-ambiguity',
   quote: 'them',
-  span,
+  span: { start: 10, end: 14 },
 };
 
 const verdictRow = {
@@ -43,11 +39,32 @@ const verdictRow = {
   reviewerConfidence: 0.9,
 };
 
+/** A rewrite record, so the fixture has both populations the `reviewers` array is derived from. */
+const change = {
+  passageId: 'demo-p1',
+  originalText: 'utilise the utility',
+  rewrittenText: 'use the utility',
+  ruleIds: ['unapproved-vocabulary'],
+  originalSpans: [{ start: 0, end: 7 }],
+  expectedDiagnostics: [],
+  reason: 'Approved alternative, no change of meaning.',
+  semanticInvariants: ['the utility being referred to'],
+  unresolved: [],
+  status: 'accepted',
+  reviewer: 'rewriter-a',
+  reviewerKind: 'agent',
+  reviewerConfidence: 0.9,
+};
+
 interface Layout {
-  readonly root: string;
   readonly verdicts: string;
   readonly packets: string;
   readonly fixtures: string;
+}
+
+interface Options {
+  /** A second manifest fixture with no packet and no verdicts, carrying this annotation. */
+  readonly orphanedAnnotation?: Record<string, unknown>;
 }
 
 const roots: string[] = [];
@@ -56,7 +73,7 @@ const roots: string[] = [];
  * A three-directory corpus of one fixture, shaped the way the real one is: a packet holding the
  * candidate, a verdict file holding the judgement, and an annotation the merge writes into.
  */
-function makeCorpus(reviewerDoc: Record<string, unknown>): Layout {
+function makeCorpus(reviewerDoc: Record<string, unknown>, options: Options = {}): Layout {
   const root = mkdtempSync(join(tmpdir(), 'ste-ai-merge-'));
   roots.push(root);
   const verdicts = join(root, 'verdicts');
@@ -71,15 +88,21 @@ function makeCorpus(reviewerDoc: Record<string, unknown>): Layout {
     JSON.stringify({ fixtureId: 'demo', candidates: [candidate] }),
   );
   writeFileSync(join(verdicts, 'reviewer-a.json'), JSON.stringify(reviewerDoc));
-  writeFileSync(
-    join(fixtures, 'manifest.json'),
-    JSON.stringify({ fixtures: [{ id: 'demo', annotationPath: 'annotations/demo.json' }] }),
-  );
+
+  const manifest = [{ id: 'demo', annotationPath: 'annotations/demo.json' }];
   writeFileSync(
     join(fixtures, 'annotations', 'demo.json'),
-    JSON.stringify({ fixtureId: 'demo', reviewers: ['rewriter-a'], changes: [] }),
+    JSON.stringify({ fixtureId: 'demo', reviewers: ['rewriter-a'], changes: [change] }),
   );
-  return { root, verdicts, packets, fixtures };
+  if (options.orphanedAnnotation !== undefined) {
+    manifest.push({ id: 'gone', annotationPath: 'annotations/gone.json' });
+    writeFileSync(
+      join(fixtures, 'annotations', 'gone.json'),
+      `${JSON.stringify(options.orphanedAnnotation, null, 2)}\n`,
+    );
+  }
+  writeFileSync(join(fixtures, 'manifest.json'), JSON.stringify({ fixtures: manifest }));
+  return { verdicts, packets, fixtures };
 }
 
 function run(layout: Layout, ...extra: readonly string[]) {
@@ -100,104 +123,244 @@ function run(layout: Layout, ...extra: readonly string[]) {
   return { status: result.status, stderr: result.stderr };
 }
 
-function readAnnotation(layout: Layout): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(layout.fixtures, 'annotations', 'demo.json'), 'utf8'));
+const annotationPath = (layout: Layout, id = 'demo') =>
+  join(layout.fixtures, 'annotations', `${id}.json`);
+
+function readAnnotation(layout: Layout, id = 'demo'): Record<string, unknown> {
+  return JSON.parse(readFileSync(annotationPath(layout, id), 'utf8'));
 }
+
+/** The parts of a parsed annotation these tests edit. `JSON.parse` gives no types of its own. */
+interface MutableAnnotation {
+  reviewers: string[];
+  candidateAdjudications: Record<string, unknown>[];
+}
+
+/** The first adjudication, or a failure that names the reason rather than an index error. */
+function firstAdjudication(annotation: MutableAnnotation): Record<string, unknown> {
+  const [first] = annotation.candidateAdjudications;
+  if (first === undefined) throw new Error('the annotation has no adjudication to edit');
+  return first;
+}
+
+/** Edit a committed annotation the way a person with an editor would. */
+function editAnnotation(
+  layout: Layout,
+  mutate: (annotation: MutableAnnotation) => void,
+  id = 'demo',
+): void {
+  const path = annotationPath(layout, id);
+  const annotation = JSON.parse(readFileSync(path, 'utf8'));
+  mutate(annotation);
+  writeFileSync(path, `${JSON.stringify(annotation, null, 2)}\n`);
+}
+
+const agentVerdicts = { reviewer: 'reviewer-a', reviewerKind: 'agent', verdicts: { demo: [] } };
+const withRow = (doc: Record<string, unknown>) => ({ ...doc, verdicts: { demo: [verdictRow] } });
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 describe('merge-candidate-verdicts', () => {
-  it('stamps the declared reviewerKind onto every record it writes', () => {
-    const layout = makeCorpus({
-      reviewer: 'reviewer-a',
-      reviewerKind: 'agent',
-      verdicts: { demo: [verdictRow] },
+  describe('what it writes', () => {
+    it('stamps the declared reviewerKind onto every record', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+
+      expect(run(layout).status).toBe(0);
+
+      expect(readAnnotation(layout)['candidateAdjudications']).toEqual([
+        {
+          ...candidate,
+          verdict: 'non-violation',
+          reason: verdictRow.reason,
+          reviewer: 'reviewer-a',
+          reviewerKind: 'agent',
+          reviewerConfidence: 0.9,
+        },
+      ]);
+      expect(run(layout, '--check').status).toBe(0);
     });
 
-    expect(run(layout).status).toBe(0);
+    it('stamps human when that is what the reviewer file declares', () => {
+      const layout = makeCorpus(withRow({ ...agentVerdicts, reviewerKind: 'human' }));
 
-    const annotation = readAnnotation(layout);
-    expect(annotation['candidateAdjudications']).toEqual([
-      {
-        ...candidate,
-        verdict: 'non-violation',
-        reason: verdictRow.reason,
-        reviewer: 'reviewer-a',
-        reviewerKind: 'agent',
-        reviewerConfidence: 0.9,
-      },
-    ]);
-    // The reviewer that produced the verdict joins the ones already on the annotation.
-    expect(annotation['reviewers']).toEqual(['reviewer-a', 'rewriter-a']);
-    expect(run(layout, '--check').status).toBe(0);
-  });
+      expect(run(layout).status).toBe(0);
 
-  it('refuses a reviewer file that declares no reviewerKind', () => {
-    const layout = makeCorpus({ reviewer: 'reviewer-a', verdicts: { demo: [verdictRow] } });
-
-    const result = run(layout, '--check');
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('reviewer-a.json: reviewerKind must be "human" or "agent"');
-  });
-
-  it('refuses a reviewerKind outside the two it records', () => {
-    const layout = makeCorpus({
-      reviewer: 'reviewer-a',
-      reviewerKind: 'reviewer-a',
-      verdicts: { demo: [verdictRow] },
+      expect(readAnnotation(layout)['candidateAdjudications']).toEqual([
+        expect.objectContaining({ reviewerKind: 'human', reviewer: 'reviewer-a' }),
+      ]);
     });
 
-    const result = run(layout, '--check');
+    it('derives reviewers from both record populations', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('reviewerKind must be "human" or "agent"');
+      expect(run(layout).status).toBe(0);
+
+      // `reviewer-a` judged a candidate; `rewriter-a` wrote the rewrite. Neither is taken from what
+      // the file already said.
+      expect(readAnnotation(layout)['reviewers']).toEqual(['reviewer-a', 'rewriter-a']);
+    });
+
+    it('leaves a file that already holds the right bytes untouched', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      const before = readFileSync(annotationPath(layout), 'utf8');
+
+      const result = run(layout);
+
+      expect(readFileSync(annotationPath(layout), 'utf8')).toBe(before);
+      expect(result.stderr).toContain('written to 0 annotation files');
+    });
+
+    it('empties a fixture whose candidates have all disappeared', () => {
+      // The #54 failure: a rule change moves a span, the candidate is gone, and the verdict written
+      // about it stays in the annotation describing a passage that no longer exists.
+      const layout = makeCorpus(withRow(agentVerdicts), {
+        orphanedAnnotation: {
+          fixtureId: 'gone',
+          reviewers: ['reviewer-a', 'rewriter-a'],
+          changes: [change],
+          candidateAdjudications: [{ ...candidate, verdict: 'violation', reviewer: 'reviewer-a' }],
+        },
+      });
+
+      expect(run(layout).status).toBe(0);
+
+      const annotation = readAnnotation(layout, 'gone');
+      expect(annotation['candidateAdjudications']).toEqual([]);
+      expect(annotation['reviewers']).toEqual(['rewriter-a']);
+    });
   });
 
-  it('reports a committed annotation that was edited away from the verdicts', () => {
-    const layout = makeCorpus({
-      reviewer: 'reviewer-a',
-      reviewerKind: 'agent',
-      verdicts: { demo: [verdictRow] },
+  describe('what it refuses', () => {
+    it('refuses a reviewer file that declares no reviewerKind', () => {
+      const layout = makeCorpus({ reviewer: 'reviewer-a', verdicts: { demo: [verdictRow] } });
+
+      const result = run(layout, '--check');
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('reviewer-a.json: reviewerKind must be "human" or "agent"');
     });
-    expect(run(layout).status).toBe(0);
 
-    // The edit `--check` used to miss entirely: the verdicts still bind, the annotation now lies.
-    const path = join(layout.fixtures, 'annotations', 'demo.json');
-    const annotation = JSON.parse(readFileSync(path, 'utf8'));
-    annotation.candidateAdjudications[0].reviewerKind = 'human';
-    writeFileSync(path, JSON.stringify(annotation, null, 2));
+    it('refuses a reviewerKind outside the two it records', () => {
+      const layout = makeCorpus(withRow({ ...agentVerdicts, reviewerKind: 'reviewer-a' }));
 
-    const result = run(layout, '--check');
+      const result = run(layout, '--check');
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      'annotation reviewerKind is "human", the verdicts give "agent"',
-    );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('reviewerKind must be "human" or "agent"');
+    });
   });
 
-  it('reports an adjudication left behind after its candidate disappeared', () => {
-    const layout = makeCorpus({
-      reviewer: 'reviewer-a',
-      reviewerKind: 'agent',
-      verdicts: { demo: [verdictRow] },
+  describe('what --check catches in a committed annotation', () => {
+    const checked = (mutate: (annotation: MutableAnnotation) => void) => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      editAnnotation(layout, mutate);
+      return run(layout, '--check');
+    };
+
+    it('a field edited away from the verdicts', () => {
+      const result = checked((a) => {
+        firstAdjudication(a)['reviewerKind'] = 'human';
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'annotation reviewerKind is "human", the verdicts give "agent"',
+      );
     });
-    expect(run(layout).status).toBe(0);
 
-    // A rule change that moves a span leaves the old record in place — the #54 failure, where ten
-    // records across five annotations described passages that no longer existed.
-    const path = join(layout.fixtures, 'annotations', 'demo.json');
-    const annotation = JSON.parse(readFileSync(path, 'utf8'));
-    annotation.candidateAdjudications[0].span = { start: 900, end: 904 };
-    writeFileSync(path, JSON.stringify(annotation, null, 2));
+    it('a field added by hand, which no write would keep', () => {
+      const result = checked((a) => {
+        firstAdjudication(a)['note'] = 'actually disputed';
+      });
 
-    const result = run(layout, '--check');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('annotation note is "actually disputed"');
+    });
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      'annotation holds an adjudication at ambiguous-pronoun-candidate@900-904 that no verdict produces',
-    );
+    it('an adjudication left behind after its candidate moved', () => {
+      const result = checked((a) => {
+        firstAdjudication(a)['span'] = { start: 900, end: 904 };
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'annotation holds an adjudication at ambiguous-pronoun-candidate@900-904 that no verdict produces',
+      );
+    });
+
+    it('the right adjudications in the wrong order', () => {
+      const layout = makeCorpus({
+        ...agentVerdicts,
+        verdicts: {
+          demo: [verdictRow, { ...verdictRow, span: { start: 40, end: 44 }, quote: 'they' }],
+        },
+      });
+      writeFileSync(
+        join(layout.packets, 'demo.json'),
+        JSON.stringify({
+          fixtureId: 'demo',
+          candidates: [
+            candidate,
+            { ...candidate, span: { start: 40, end: 44 }, quote: 'they', passageId: 'p2' },
+          ],
+        }),
+      );
+      expect(run(layout).status).toBe(0);
+      editAnnotation(layout, (a) => {
+        a.candidateAdjudications.reverse();
+      });
+
+      const result = run(layout, '--check');
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the right adjudications in the wrong order');
+    });
+
+    it('a reviewer name added to the array that no record accounts for', () => {
+      // Inserted in sorted position on purpose: the previous implementation only ever noticed a
+      // name appended out of order, so it was checking alphabetisation rather than provenance.
+      const result = checked((a) => {
+        a.reviewers = ['dr-fabricated', 'reviewer-a', 'rewriter-a'];
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'annotation reviewers are ["dr-fabricated","reviewer-a","rewriter-a"], the records give ["reviewer-a","rewriter-a"]',
+      );
+    });
+
+    it('a reviewer name removed from the array', () => {
+      const result = checked((a) => {
+        a.reviewers = ['reviewer-a'];
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the records give ["reviewer-a","rewriter-a"]');
+    });
+
+    it('a duplicated record, named as a count rather than as an ordering problem', () => {
+      const result = checked((a) => {
+        a.candidateAdjudications.push({ ...firstAdjudication(a) });
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('annotation holds 2 adjudication(s), the verdicts give 1');
+    });
+
+    it('an unreadable annotation, as a message rather than a stack trace', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      writeFileSync(annotationPath(layout), '{ not json');
+
+      const result = run(layout, '--check');
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('demo: cannot read annotations/demo.json:');
+      expect(result.stderr).not.toContain('at JSON.parse');
+    });
   });
 });

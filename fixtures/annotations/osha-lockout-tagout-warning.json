@@ -69,6 +69,8 @@
         "converting the run-on into one-sentence-per-numbered-element is a judgment call about how far 'splitting an over-long sentence' may go for a verbatim regulatory Note; a more conservative reviewer might leave the whole Note untouched"
       ],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -99,6 +101,8 @@
         "rule does not recognize regulatory section-number notation and treats the dot as a number/unit boundary"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     }
   ],

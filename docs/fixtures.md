@@ -142,6 +142,33 @@ alone. A reviewer is not obliged to satisfy a heuristic, and the tests are built
 not fail the build — a fixture with no accepted change must simply be a `hard-negative` or carry a
 `notes` explanation, and must record something as `disputed` or `deferred`.
 
+## How the adjudication was run
+
+The corpus was adjudicated by **four independent agent reviewers**, one per `fixtures/verdicts/` file,
+each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
+reviewed the corpus. Every `candidateAdjudications` record carries `reviewerKind`, so this is
+answerable from the data rather than from this paragraph; the field is required and undefaulted
+precisely so a record can never omit it. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which
+run produced a verdict, never a person.
+
+What the method establishes, and what it does not:
+
+- **It is a real method, applied consistently.** Reviewers ran separately, the merge tool binds each
+  verdict to a `(ruleId, span, quote)` triple, and disagreement between reviewers yields `unlabelled`
+  rather than a coin flip. A verdict that does not bind to a live passage fails the build.
+- **Agreement between these reviewers is not independent corroboration.** Instances sharing a base
+  model correlate in ways separate people do not, so unanimity here is weaker evidence than the same
+  unanimity across human reviewers would be.
+- **The labels are model-authored ground truth for a model-based evaluator.** The semantic evaluators
+  are scored against these records, so a favourable score is partly a measure of agreement between
+  two applications of similar judgement, not an external check.
+- **The reference documents were not written as controlled language.** A "false positive" here means
+  a finding a reviewer judged wrong against the rule's stated intent — not a finding that contradicts
+  any standard. The corpus can therefore say a good deal about precision and very little about recall.
+
+Treat the resulting figures as the project's own measurement of its own heuristics. They are reported
+because a rule set with no measurement at all is worse, not because they are independent evidence.
+
 `originalSpans`, and the `candidateAdjudications` merged in from `fixtures/verdicts/` (see
 [`provisional-rules.md`](./provisional-rules.md#measured-precision-of-the-candidate-heuristics)),
 both bind a verdict to a specific `(ruleId, span, quote)`, on the assumption that spans are derived

@@ -146,6 +146,7 @@
       "verdict": "non-violation",
       "reason": "All three pre-modifiers are adjectival and scope left to right over the single head 'versions'; 'minimum required version' is a conventional term in software dependency documentation.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -160,6 +161,7 @@
       "verdict": "non-violation",
       "reason": "Inside a note, 'Python 3.12 is strongly recommended' states a status of the release rather than directing an action, and the recommender is self-evidently the document; the following sentence supplies the reason.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     }
   ]

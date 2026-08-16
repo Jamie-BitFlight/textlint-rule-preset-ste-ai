@@ -140,9 +140,12 @@ copyleft source is present; the validator rejects them, and CC-BY sources propag
 confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
-documentation, more than half of what these provisional rules flag was judged wrong by a reviewer.**
-Two independent reviewers worked on disjoint halves of the corpus and reached the same conclusion
-about the same classes of false positive, which is corroboration rather than a single opinion.
+documentation, more than half of what these provisional rules flag was judged wrong at
+adjudication.** The adjudication was run as independent agent reviewers on disjoint halves of the
+corpus, which reached the same conclusion about the same classes of false positive. Agreement across
+agent reviewers is weaker evidence than the same agreement across separate people — instances sharing
+a base model correlate — so treat it as one method applied consistently, not as independent
+corroboration. See [`fixtures.md`](./fixtures.md#how-the-adjudication-was-run).
 
 ## Defects found and fixed during implementation
 

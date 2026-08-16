@@ -127,6 +127,7 @@
       "verdict": "non-violation",
       "reason": "A reader groups this as [command-line] [Zephyr development environment]; the hyphenated modifier and the established product name 'Zephyr' fix the structure without guesswork.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     },
     {
@@ -141,6 +142,7 @@
       "verdict": "non-violation",
       "reason": "'instructions for other Linux distributions are discussed in :ref:`installation_linux`' is a parenthetical cross-reference about the document itself, not part of the instruction; the agent is the documentation and is irrelevant.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     }
   ]

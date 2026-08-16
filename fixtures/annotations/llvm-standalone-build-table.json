@@ -144,6 +144,7 @@
       "verdict": "non-violation",
       "reason": "'the original folder where LLVM was built' is a descriptive relative clause identifying a folder; the builder is the reader and is already obvious, and the sentence is about location, not about who acted.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -158,6 +159,7 @@
       "verdict": "non-violation",
       "reason": "'if llvm is installed into /usr/bin' is a conditional describing an existing installation state; how it got there and who installed it are irrelevant to the condition.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -172,6 +174,7 @@
       "verdict": "non-violation",
       "reason": "'options are required' is an adjectival predicate stating a requirement, not a passive verb with a suppressed actor.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -186,6 +189,7 @@
       "verdict": "non-violation",
       "reason": "'can be found in the table below' is a descriptive cross-reference, not an instruction; the sentence points at a table rather than assigning an action to anyone.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -200,6 +204,7 @@
       "verdict": "non-violation",
       "reason": "'build targets are supported for the sub-projects listed' describes a capability of the build system; there is no actor a reader needs to know.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     }
   ]

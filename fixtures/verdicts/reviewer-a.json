@@ -1,5 +1,6 @@
 {
   "reviewer": "reviewer-a",
+  "reviewerKind": "agent",
   "verdicts": {
     "httpd-mod-ssl-directive-config": [
       {

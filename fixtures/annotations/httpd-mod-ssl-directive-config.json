@@ -233,6 +233,7 @@
       "verdict": "non-violation",
       "reason": "The span joins the directive name SSLEngine to its title line 'SSL Engine Operation Switch' and the following 'Syntax: SSLEngine' declaration across line breaks; all three are component identity and reference-page boilerplate (a directive name, its title, and its syntax label), not a prose noun pile a reader must parse.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -247,6 +248,7 @@
       "verdict": "non-violation",
       "reason": "'Context: server config, virtual host' is a labelled metadata field listing two established httpd configuration scopes, comma-separated; there is no ambiguous grouping for a reader to guess.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -261,6 +263,7 @@
       "verdict": "non-violation",
       "reason": "'Support ... was removed in 2.4.64' is descriptive release history, not an instruction; the actor (the httpd developers) is irrelevant and naming them would add nothing.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -275,6 +278,7 @@
       "verdict": "non-violation",
       "reason": "The only sensible referent for 'It enabled RFC 2817 support' is the 'optional' argument (or, equivalently, support for it); reading 'It' as the version 2.4.64 contradicts the same sentence, so the competing readings do not change the meaning.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -289,6 +293,7 @@
       "verdict": "non-violation",
       "reason": "'SSL/TLS Protocol Engine' is the capitalised component name mod_ssl uses for itself; component identity outranks simplification.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -303,6 +308,7 @@
       "verdict": "non-violation",
       "reason": "The bare 'This' parallels 'This directive' in the immediately preceding sentence, and only a directive can be 'used inside a VirtualHost section'; the engine and the usage do not fit the predicate.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.65
     },
     {
@@ -317,6 +323,7 @@
       "verdict": "non-violation",
       "reason": "Second occurrence of the established component name 'SSL/TLS Protocol Engine'; a real product/component name is never a noun-cluster defect.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -331,6 +338,7 @@
       "verdict": "non-violation",
       "reason": "Re-reviewed after the leading 'SSLFIPS' and 'SSL FIPS' identifiers became protected regions, which shortened this candidate from 777-821 to 794-821. What is left is the tail of the directive's title line ('... mode Switch') stitched across a line break onto the following 'Syntax: SSLFIPS' declaration label. 'mode Switch' alone is two words and under the limit; the run only reaches four content words by crossing the newline into a reference-page metadata field. Two adjacent layout fields, not a noun pile a reader must parse — the same structural artefact as the SSLEngine heading above, on a narrower span.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -345,6 +353,7 @@
       "verdict": "violation",
       "reason": "'It must be set in the global server context' follows a sentence containing both 'This directive' and 'the SSL library FIPS_mode flag'; proximity favours the flag but the truth is the SSLFIPS directive, and the two readings tell the reader to configure different things.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -359,6 +368,7 @@
       "verdict": "non-violation",
       "reason": "The passive states a placement constraint on the directive (where it must appear), not an action assigned to an actor; who edits the configuration file is immaterial to the constraint.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.6
     },
     {
@@ -373,6 +383,7 @@
       "verdict": "non-violation",
       "reason": "'If httpd was compiled against an SSL library ...' is a descriptive condition about an existing build; whoever compiled httpd is genuinely unknown and naming an actor would be misleading.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -387,6 +398,7 @@
       "verdict": "non-violation",
       "reason": "'may be described as ...' is a careful compliance statement in descriptive prose where the describing party is deliberately unnamed; supplying an actor would change the claim.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -401,6 +413,7 @@
       "verdict": "non-violation",
       "reason": "'when all components are assembled and operated under the guidelines' is a compliance condition, not an instruction; the agent is intentionally generic because the condition holds regardless of who performs it.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.8
     }
   ]

@@ -57,6 +57,7 @@ const adjudication = (
   verdict,
   reason: 'a reviewer looked at it',
   reviewer: 't',
+  reviewerKind: 'agent' as const,
   reviewerConfidence: 0.9,
 });
 

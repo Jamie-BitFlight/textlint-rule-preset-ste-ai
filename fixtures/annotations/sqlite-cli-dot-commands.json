@@ -267,6 +267,7 @@
       "verdict": "non-violation",
       "reason": "'named' is a participle introducing the database name, not part of a noun pile; the real phrase 'new SQLite database' is an adjective plus a product name plus its head noun and needs no unpacking.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -281,6 +282,7 @@
       "verdict": "non-violation",
       "reason": "This is SQL column definitions and a shell prompt inside an unfenced terminal transcript, not English prose; there is no noun phrase for a reader to group, so the heuristic misfired on unmarked code.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.88
     },
     {
@@ -295,6 +297,7 @@
       "verdict": "non-violation",
       "reason": "'your system End-Of-File character' groups as [your system's] [End-Of-File character], a conventional CLI term of art, and the parenthetical '(usually a Control-D)' resolves any residual doubt on the spot.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     }
   ]

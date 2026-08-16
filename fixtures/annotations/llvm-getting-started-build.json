@@ -170,6 +170,7 @@
       "verdict": "non-violation",
       "reason": "'you can filter them from your git fetch' can only refer to the user branches named as the topic of the same sentence; nothing else in context is filterable from a fetch refspec.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ]

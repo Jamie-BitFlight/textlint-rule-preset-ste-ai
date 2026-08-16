@@ -235,6 +235,7 @@
       "verdict": "non-violation",
       "reason": "In \"rebuilds the database file, repacking it into a minimal amount of disk space\", the only thing that can be repacked into disk space is the database file; the command itself is not a plausible object. The heuristic's antecedent list is a bag of content words, not competing referents.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -249,6 +250,7 @@
       "verdict": "non-violation",
       "reason": "Descriptive prose about what happens to the file when data is removed, not an instruction; the deleting agent is any application and is genuinely irrelevant to the point being made. Naming an actor would narrow a general statement.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -263,6 +265,7 @@
       "verdict": "non-violation",
       "reason": "The \"it\" in \"it leaves behind empty space\" is loose — it could be read as the deletion or as the database file — but both readings deliver the same fact to the reader, that free pages remain in the file, so the choice does not change the meaning. Weakest of the sqlite pronouns and I would not defend it as clean writing, only as non-defective.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.6
     },
     {
@@ -277,6 +280,7 @@
       "verdict": "non-violation",
       "reason": "\"This means the database file might be larger than strictly necessary\" refers to the whole preceding proposition about leftover free pages, which is the only available reading and a standard discourse move. No competing referent is on offer.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.8
     },
     {
@@ -291,6 +295,7 @@
       "verdict": "non-violation",
       "reason": "\"where data for a single table or index is scattered around the database file\" describes a resulting state of fragmentation, closer to an adjectival property than to a verb with a suppressed actor, and it is descriptive prose rather than an instruction.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -305,6 +310,7 @@
       "verdict": "non-violation",
       "reason": "Descriptive statement of the guarantee VACUUM provides about on-disk layout; the storing agent is the database engine and is both obvious and beside the point. Not an instruction to the reader.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -319,6 +325,7 @@
       "verdict": "non-violation",
       "reason": "\"When content is deleted from an SQLite database\" is a general precondition in descriptive prose; the deleter is any application and naming one would wrongly narrow the scope of the statement.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -333,6 +340,7 @@
       "verdict": "non-violation",
       "reason": "Describes internal engine behaviour — the space is flagged reusable by SQLite itself — in prose contrasted against \"is not usually erased\". The agent is the database engine and is irrelevant to the security point being made.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -347,6 +355,7 @@
       "verdict": "non-violation",
       "reason": "\"This can allow deleted content to be recovered\" points at the preceding whole fact that space is marked reusable rather than erased. That is the only reading that makes sense of \"can allow\", so there is no competing antecedent.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.8
     },
     {
@@ -361,6 +370,7 @@
       "verdict": "non-violation",
       "reason": "The agent is stated explicitly — \"by a hacker or by forensic analysis\" — so nothing is hidden, and the sentence is descriptive risk prose rather than an instruction. The passive is what keeps the deleted content in subject position where the reader's attention belongs.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -375,6 +385,7 @@
       "verdict": "non-violation",
       "reason": "The run spans a comma and a clause boundary, joining the object of one clause to the participle opening the next; it is not a noun cluster anyone would try to parse as a unit.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     }
   ]

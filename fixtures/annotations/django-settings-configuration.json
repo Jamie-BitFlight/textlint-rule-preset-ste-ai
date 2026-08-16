@@ -114,6 +114,7 @@
       "verdict": "non-violation",
       "reason": "The lead-in \"Because a settings file is a Python module, the following apply:\" establishes the settings file as the subject of every bullet, so \"It doesn't allow for Python syntax errors\" has one referent. No competing candidate is grammatically available.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -128,6 +129,7 @@
       "verdict": "non-violation",
       "reason": "Second bullet in a parallel list sharing the same lead-in; \"It\" is the settings file, exactly as in the bullet above. The parallel structure removes any ambiguity the local word count suggests.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -142,6 +144,7 @@
       "verdict": "non-violation",
       "reason": "This is the object-and-manner tail of \"It can assign settings dynamically using normal Python syntax\": a direct object ('settings'), an adverb ('dynamically'), and a gerund phrase with its own object ('using normal Python syntax'). It is ordinary clause structure, not a stacked noun run, and the only real noun group in it, 'normal Python syntax', is a transparent adjective-adjective-noun phrase with one obvious reading. The heuristic's word count triggered on a verb phrase, not a noun pile.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -156,6 +159,7 @@
       "verdict": "non-violation",
       "reason": "Third bullet of the same parallel list; the intervening code block makes the heuristic see \"For example::\" as the previous sentence, but a reader tracks the list structure and resolves \"It\" to the settings file. Referent is unambiguous.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -170,6 +174,7 @@
       "verdict": "non-violation",
       "reason": "\"When you use Django, you have to tell it which settings you're using\" — only Django can be told something, and it is the immediately preceding subject of the clause. The settings are the content of the telling, not the addressee.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ]

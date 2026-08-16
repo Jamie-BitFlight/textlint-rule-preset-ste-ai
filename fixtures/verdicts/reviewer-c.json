@@ -1,5 +1,6 @@
 {
   "reviewer": "reviewer-c",
+  "reviewerKind": "agent",
   "verdicts": {
     "k8s-audit-log-troubleshooting": [
       {

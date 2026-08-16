@@ -124,6 +124,7 @@
       "verdict": "violation",
       "reason": "'Procedures shall be developed' is a mandatory requirement with the duty-holder suppressed, and in safety content who is accountable for producing the procedure matters; the following note confirms the actor is the employer, so naming it would be neither wrong nor misleading.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.65
     },
     {
@@ -138,6 +139,7 @@
       "verdict": "non-violation",
       "reason": "'when employees are engaged in the activities' is a scope condition describing a state that employees are in, with the actor already named as the subject; there is no suppressed agent and no instruction here.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -152,6 +154,7 @@
       "verdict": "non-violation",
       "reason": "'a single energy source which can be readily identified and isolated' states a property of the energy source that qualifies the exception, not an instruction; the point is the source's identifiability, and pinning an actor to it would narrow a deliberately general condition.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.78
     },
     {
@@ -166,6 +169,7 @@
       "verdict": "non-violation",
       "reason": "Element (4) sits in a list of elements that must 'exist', so 'is isolated ... and locked out' describes the required state of the machine rather than instructing anyone to isolate it; this is an adjectival state reading.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     }
   ]

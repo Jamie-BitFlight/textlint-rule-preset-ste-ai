@@ -77,6 +77,18 @@ export const candidateAdjudicationSchema = z.object({
    */
   verdict: z.enum(['violation', 'non-violation', 'undecidable']),
   reason: z.string().min(10),
+  /**
+   * What produced this verdict. Required, and deliberately not defaulted.
+   *
+   * `reviewer` is a free-form label (`reviewer-a`), never an identity, and prose elsewhere in the
+   * repository described these records as the work of "four independent reviewers" — wording a
+   * reader takes to mean four people. The adjudication was in fact run as four independent agent
+   * reviewers, which is a real method with a real limitation: agents sharing a base model correlate
+   * in ways separate humans do not, so unanimity across them is weaker evidence than the same
+   * unanimity across people. Recording the method on the record itself means that limitation is
+   * answerable from the data rather than from prose that can drift away from it.
+   */
+  reviewerKind: z.enum(['human', 'agent']),
   reviewer: z.string().min(1),
   reviewerConfidence: z.number().min(0).max(1),
 });

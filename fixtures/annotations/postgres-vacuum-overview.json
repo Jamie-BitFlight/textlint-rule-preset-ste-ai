@@ -213,6 +213,7 @@
       "verdict": "non-violation",
       "reason": "This is a full clause (subject VACUUM, verb reclaims, object storage, participle occupied), not a noun run; the heuristic misfires because the command name and the verbs are not recognised as such.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -227,6 +228,7 @@
       "verdict": "non-violation",
       "reason": "The span crosses a comma: 'normal PostgreSQL operation' is a transparent three-word phrase containing a product name, and 'tuples' begins the following clause.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -241,6 +243,7 @@
       "verdict": "non-violation",
       "reason": "Descriptive prose about storage internals; 'tuples that are deleted or obsoleted by an update' characterises the state of a row version, and the deleting agent (any client transaction) is genuinely irrelevant here.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -255,6 +258,7 @@
       "verdict": "non-violation",
       "reason": "'They remain present' can only be the tuples: it is the subject of the immediately preceding clause and the only plural candidate, since 'table' and 'an update' are singular.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -269,6 +273,7 @@
       "verdict": "non-violation",
       "reason": "'until a VACUUM is done' deliberately leaves the actor open, because the vacuum may be run manually or by autovacuum. Naming a single actor would be misleading.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -283,6 +288,7 @@
       "verdict": "non-violation",
       "reason": "'reclaims space and makes it available for re-use' binds 'it' to 'space' by the immediate coordination; no other candidate produces a coherent reading.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -297,6 +303,7 @@
       "verdict": "violation",
       "reason": "'It also allows us to leverage multiple CPUs' must mean plain VACUUM, but the intervening sentence uses 'it's' for 'extra space', so the same pronoun shape has just been bound to a different referent and the intended antecedent is three clauses back. A reader can plausibly attach the capability to the space-retention behaviour rather than to the command, which changes what the sentence claims.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     }
   ]

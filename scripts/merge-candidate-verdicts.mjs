@@ -81,6 +81,14 @@ function main() {
       problems.push(`${file}: missing reviewer id`);
       continue;
     }
+    // Declared once per reviewer file and stamped onto every record it produces. Required rather
+    // than defaulted: `reviewer` is a label, so without this the records cannot say what made them,
+    // and prose elsewhere has already drifted into implying they were written by people.
+    const reviewerKind = doc.reviewerKind;
+    if (reviewerKind !== 'human' && reviewerKind !== 'agent') {
+      problems.push(`${file}: reviewerKind must be "human" or "agent"`);
+      continue;
+    }
     for (const [fixtureId, rows] of Object.entries(doc.verdicts ?? {})) {
       const candidates = packets.get(fixtureId);
       if (candidates === undefined) {
@@ -125,6 +133,7 @@ function main() {
           verdict: row.verdict,
           reason: row.reason,
           reviewer,
+          reviewerKind,
           reviewerConfidence: row.reviewerConfidence,
         });
         merged.set(fixtureId, byFixture);

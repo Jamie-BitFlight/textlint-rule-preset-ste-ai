@@ -80,6 +80,7 @@
       "verdict": "non-violation",
       "reason": "'Further details, discussion, and examples are provided in the SSL documentation' is a document cross-reference; the provider is the documentation itself and naming an actor would add nothing.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -94,6 +95,7 @@
       "verdict": "non-violation",
       "reason": "'The generated variables are listed in the table below' is a pointer to document structure; the agent is the document and is genuinely irrelevant.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -108,6 +110,7 @@
       "verdict": "non-violation",
       "reason": "'the information can be made available under different names' states an available compatibility behaviour and immediately refers the reader to the Compatibility chapter for the how; it is descriptive, not an instruction with a suppressed actor.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     }
   ]

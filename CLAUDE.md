@@ -108,12 +108,16 @@ Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScrip
 
 **In a fresh worktree, run the repo's own binaries from `node_modules/.bin/`, not `npx`.** A worktree
 created by `git worktree add` or by `isolation: "worktree"` has no `node_modules`, so `npx <tool>`
-silently downloads the _latest_ published version instead of the pinned one. That is not a
-hypothetical: `npx prettier --write` in such a worktree reformatted two embedded TypeScript blocks
-the way prettier 4 wants them, reported the tree clean, and CI — which runs the pinned 3.9.6 — failed
-on exactly those two files. Either `npm ci` in the worktree first, or invoke the main checkout's
-binary by path. A tool that reports success against a version the project does not use has verified
-nothing.
+silently resolves some _other_ version — whatever it fetches or already has cached — rather than the
+pinned one. Do not assume that is the newest: measured here, `npx prettier --version` outside the
+project reports **3.8.1** while the project pins **3.9.6**, so the drift can go backwards.
+
+That is not a hypothetical. `npx prettier --write` in such a worktree reformatted two embedded
+TypeScript blocks the way its version wanted them, then `npx prettier --check` in the same worktree
+pronounced the tree clean; CI, running the pinned version, failed on exactly those two files. Either
+`npm ci` in the worktree first, or invoke the main checkout's binary by path. A tool that reports
+success against a version the project does not use has verified nothing — and the check that
+confirms it is clean is running the same wrong version, so it agrees.
 
 ## `send_later` (self-scheduled check-ins)
 

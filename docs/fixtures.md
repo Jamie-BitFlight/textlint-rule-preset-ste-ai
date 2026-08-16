@@ -144,21 +144,37 @@ not fail the build — a fixture with no accepted change must simply be a `hard-
 
 ## How the adjudication was run
 
-The corpus was adjudicated by **four independent agent reviewers**, one per `fixtures/verdicts/` file,
+The corpus holds two populations of record, produced by different runs over different partitions.
+Conflating them is easy and the distinction matters, so state it first:
+
+| Records                  | Count | Produced by                | Partition              | Provenance in the data   |
+| ------------------------ | ----: | -------------------------- | ---------------------- | ------------------------ |
+| `candidateAdjudications` |   105 | `reviewer-a`…`reviewer-d`  | 5 / 4 / 4 / 4 fixtures | `reviewerKind`, required |
+| `changes`                |    70 | `rewriter-a`, `rewriter-b` | 9 fixtures each        | none recorded            |
+
+**`candidateAdjudications` — four independent agent reviewers**, one per `fixtures/verdicts/` file,
 each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
-reviewed the corpus. Every `candidateAdjudications` record carries `reviewerKind`, so this is
-answerable from the data rather than from this paragraph; the field is required and undefaulted
-precisely so a record can never omit it. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which
-run produced a verdict, never a person.
+produced any of these 105 records. Every one carries `reviewerKind`, so that is answerable from the
+data rather than from this paragraph; the field is required and undefaulted precisely so a record can
+never omit it. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run produced a verdict,
+never a person.
 
-What the method establishes, and what it does not:
+**`changes` — the 70 rewrite records** behind the 32 accepted / 36 disputed / 2 deferred figures in
+`implementation-report.md`. `annotationChangeSchema` has a `reviewerConfidence` and no reviewer field
+at all, so who or what produced these is recorded nowhere except the bare strings in each annotation's
+`reviewers` array. The provenance discipline described above does **not** yet extend to them.
 
-- **It is a real method, applied consistently.** Reviewers ran separately, the merge tool binds each
-  verdict to a `(ruleId, span, quote)` triple, and disagreement between reviewers yields `unlabelled`
-  rather than a coin flip. A verdict that does not bind to a live passage fails the build.
-- **Agreement between these reviewers is not independent corroboration.** Instances sharing a base
-  model correlate in ways separate people do not, so unanimity here is weaker evidence than the same
-  unanimity across human reviewers would be.
+What the adjudication method establishes, and what it does not:
+
+- **Each passage was judged exactly once.** The four reviewers' fixture sets are pairwise disjoint —
+  measured: zero fixtures shared between any pair — and `merge-candidate-verdicts.mjs` rejects a
+  second verdict on the same `(ruleId, span)` as a duplicate. So there is no cross-check to appeal
+  to: no passage was independently confirmed, and `goldLabelFor`'s disagreement path
+  (`labels.size !== 1 → unlabelled`) never fires on this corpus. Agreement between reviewers is not
+  weak evidence here; it is absent, because no two reviewers looked at the same thing.
+- **The binding is enforced even though the judgement is not corroborated.** The merge tool binds
+  each verdict to a `(ruleId, span, quote)` triple, and a verdict that does not bind to a live
+  passage fails the build.
 - **The labels are model-authored ground truth for a model-based evaluator.** The semantic evaluators
   are scored against these records, so a favourable score is partly a measure of agreement between
   two applications of similar judgement, not an external check.
@@ -169,6 +185,8 @@ What the method establishes, and what it does not:
 Treat the resulting figures as the project's own measurement of its own heuristics. They are reported
 because a rule set with no measurement at all is worse, not because they are independent evidence.
 
+## What the records are bound to, and what would break the binding
+
 `originalSpans`, and the `candidateAdjudications` merged in from `fixtures/verdicts/` (see
 [`provisional-rules.md`](./provisional-rules.md#measured-precision-of-the-candidate-heuristics)),
 both bind a verdict to a specific `(ruleId, span, quote)`, on the assumption that spans are derived
@@ -178,6 +196,13 @@ from a real parser instead; if that change moves a span, the verdict recorded ag
 no longer describes the new one and needs fresh review.
 `scripts/ci/check-candidate-ground-truth.sh` already enforces this for candidate verdicts; a parser
 adoption would need the same discipline applied to `originalSpans`.
+
+That check runs `scripts/merge-candidate-verdicts.mjs --check`, which does two things: it refuses a
+verdict that binds to no live passage, and it compares every record the verdicts produce against
+what is committed in `fixtures/annotations/`. The second half is what makes the annotation files
+themselves checked rather than merely generated — an adjudication edited by hand there, or left
+behind after its candidate moved, fails the build instead of sitting in the corpus unnoticed. To
+regenerate rather than check, run the same script without `--check` and review the diff.
 
 ## Corpus tests
 

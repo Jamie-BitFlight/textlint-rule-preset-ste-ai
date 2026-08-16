@@ -141,11 +141,23 @@ confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
 documentation, more than half of what these provisional rules flag was judged wrong at
-adjudication.** The adjudication was run as independent agent reviewers on disjoint halves of the
-corpus, which reached the same conclusion about the same classes of false positive. Agreement across
-agent reviewers is weaker evidence than the same agreement across separate people — instances sharing
-a base model correlate — so treat it as one method applied consistently, not as independent
-corroboration. See [`fixtures.md`](./fixtures.md#how-the-adjudication-was-run).
+adjudication.** These 70 records were produced by two agent runs, `rewriter-a` and `rewriter-b`,
+working on disjoint halves of the corpus — nine fixtures each — which reached the same conclusion
+about the same classes of false positive.
+
+Two cautions on that sentence, both checkable against the data:
+
+- `annotationChangeSchema` records a `reviewerConfidence` and **no reviewer field**, so nothing in
+  these 70 records says what produced them. The `reviewerKind` provenance added for the 105
+  `candidateAdjudications` does not cover them. The attribution above comes from the bare strings in
+  each annotation's `reviewers` array, not from a field the schema enforces.
+- Agreement between two agent runs is weaker evidence than the same agreement between separate
+  people, since instances sharing a base model correlate. Treat it as one method applied
+  consistently.
+
+The 105 `candidateAdjudications` are a separate population with a separate partition and their own
+provenance field. See [`fixtures.md`](./fixtures.md#how-the-adjudication-was-run), which sets the two
+side by side.
 
 ## Defects found and fixed during implementation
 

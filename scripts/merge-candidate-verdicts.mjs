@@ -3,8 +3,12 @@
  *
  * Input is a directory of reviewer files, each shaped:
  *
- *   { "reviewer": "<id>", "verdicts": { "<fixtureId>": [ { passageId, ruleId, evaluatorId,
- *     quote, span, verdict, reason, reviewerConfidence }, ... ] } }
+ *   { "reviewer": "<id>", "reviewerKind": "human" | "agent",
+ *     "verdicts": { "<fixtureId>": [ { passageId, ruleId, evaluatorId,
+ *       quote, span, verdict, reason, reviewerConfidence }, ... ] } }
+ *
+ * `reviewerKind` is declared once per file and stamped onto every record it produces. It is required
+ * and undefaulted: `reviewer` is a free-form label, so without this a record cannot say what made it.
  *
  * Verdicts are joined to candidates on **(ruleId, span, quote)** — where the passage is and what it
  * says. `passageId` is deliberately not the join key. It embeds a sentence ordinal, and a sentence
@@ -21,7 +25,11 @@
  * Usage:
  *   node scripts/merge-candidate-verdicts.mjs --verdicts DIR --packets DIR [--check]
  *
- * `--check` validates and reports without writing, which is what CI runs.
+ * `--check` validates and reports without writing, which is what CI runs. It reads the annotation
+ * files too, and reports any difference between what the verdicts imply and what is committed. The
+ * annotation is the artefact; this script is only what produces it, so a check that stopped at "the
+ * verdicts bind to live passages" would leave the artefact itself unchecked — a `reviewerKind`
+ * flipped by hand in `fixtures/annotations/`, or a reason rewritten there, would survive CI intact.
  */
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -32,6 +40,49 @@ import { parseArgs } from 'node:util';
 const key = (ruleId, span) => `${ruleId}@${span.start}-${span.end}`;
 
 const jsonFiles = (dir) => readdirSync(dir).filter((f) => f.endsWith('.json'));
+
+/**
+ * Every way a committed annotation can differ from what the verdicts produce, named field by field.
+ *
+ * "The file does not match" is true but useless in CI output: the interesting cases are a single
+ * altered field on one record, and a record left behind after the candidate under it moved. Both
+ * are reported as themselves, so the log says what to look at rather than which file to re-read.
+ */
+function describeDrift(fixtureId, committed, computed) {
+  const out = [];
+  const remaining = new Map(
+    committed.map((record) => [key(record.ruleId, record.span ?? { start: -1, end: -1 }), record]),
+  );
+  for (const record of computed) {
+    const id = key(record.ruleId, record.span);
+    const found = remaining.get(id);
+    if (found === undefined) {
+      out.push(`${fixtureId}: annotation has no adjudication at ${id}`);
+      continue;
+    }
+    remaining.delete(id);
+    for (const [field, value] of Object.entries(record)) {
+      if (JSON.stringify(found[field]) !== JSON.stringify(value)) {
+        out.push(
+          `${fixtureId}/${id}: annotation ${field} is ${JSON.stringify(found[field])}, the verdicts give ${JSON.stringify(value)}`,
+        );
+      }
+    }
+  }
+  for (const id of remaining.keys()) {
+    out.push(`${fixtureId}: annotation holds an adjudication at ${id} that no verdict produces`);
+  }
+  // Order is part of the artefact — the records are sorted by span so the file is stable — so a
+  // reordered file is drift even when every record in it is right.
+  if (out.length === 0) {
+    const committedOrder = committed.map((record) => key(record.ruleId, record.span));
+    const computedOrder = computed.map((record) => key(record.ruleId, record.span));
+    if (JSON.stringify(committedOrder) !== JSON.stringify(computedOrder)) {
+      out.push(`${fixtureId}: annotation holds the right adjudications in the wrong order`);
+    }
+  }
+  return out;
+}
 
 // `process.exitCode` inside a wrapping function, not `process.exit()` mid-script, keeps the
 // distinct "problems found" exit code without skipping the summary line every run (including a
@@ -158,33 +209,65 @@ function main() {
   }
 
   const manifest = JSON.parse(readFileSync(join(fixturesDir, 'manifest.json'), 'utf8'));
+  const drift = [];
   let written = 0;
   let total = 0;
   for (const fixture of manifest.fixtures) {
-    const judged = merged.get(fixture.id);
-    if (judged === undefined) continue;
+    // An empty record set is a real answer, not a reason to skip: a fixture whose candidates have
+    // all disappeared still has an annotation holding the verdicts written about them, and
+    // treating "no verdicts now" as "nothing to say" is exactly what leaves those records behind.
+    const judged = merged.get(fixture.id) ?? new Map();
     // Sort by span so the file is stable regardless of which reviewer produced which row.
     const records = [...judged.values()].toSorted(
       (a, b) =>
         a.span.start - b.span.start || a.span.end - b.span.end || a.ruleId.localeCompare(b.ruleId),
     );
     total += records.length;
-    if (checkOnly) continue;
     const path = join(fixturesDir, fixture.annotationPath);
     const annotation = JSON.parse(readFileSync(path, 'utf8'));
-    annotation.candidateAdjudications = records;
-    const reviewers = new Set([...(annotation.reviewers ?? []), ...records.map((r) => r.reviewer)]);
+    // `candidateAdjudications` carries `.default([])` in the schema, so an absent key and an empty
+    // array are the same annotation. Read them as the same thing rather than reporting a
+    // difference between two spellings of nothing.
+    const committed = annotation.candidateAdjudications ?? [];
     // `annotation` comes from `JSON.parse`, so its element types are unresolved (`any`) to the
     // type checker even though every reviewer id is a string at runtime; give an explicit compare
     // instead of relying on the (unprovable-here) string-array default.
-    annotation.reviewers = [...reviewers].toSorted((a, b) => String(a).localeCompare(String(b)));
+    const reviewers = [
+      ...new Set([...(annotation.reviewers ?? []), ...records.map((r) => r.reviewer)]),
+    ].toSorted((a, b) => String(a).localeCompare(String(b)));
+
+    if (checkOnly) {
+      drift.push(...describeDrift(fixture.id, committed, records));
+      if (JSON.stringify(annotation.reviewers ?? []) !== JSON.stringify(reviewers)) {
+        drift.push(
+          `${fixture.id}: annotation reviewers are ${JSON.stringify(annotation.reviewers ?? [])}, the verdicts give ${JSON.stringify(reviewers)}`,
+        );
+      }
+      continue;
+    }
+
+    // Writing `"candidateAdjudications": []` into an annotation that never carried the key adds a
+    // diff that says nothing. Leave those alone; the two spellings already compare equal above.
+    if (records.length === 0 && !Object.hasOwn(annotation, 'candidateAdjudications')) continue;
+    annotation.candidateAdjudications = records;
+    annotation.reviewers = reviewers;
     writeFileSync(path, `${JSON.stringify(annotation, null, 2)}\n`);
     written += 1;
   }
 
+  if (drift.length > 0) {
+    for (const problem of drift) process.stderr.write(`${problem}\n`);
+    process.stderr.write(
+      `\n${drift.length} difference(s) between the verdicts and the committed annotations.\n` +
+        'Re-run without --check to rewrite them, then review the diff.\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   process.stderr.write(
     checkOnly
-      ? `ok: ${total} verdicts bind to ${merged.size} fixtures with no problems\n`
+      ? `ok: ${total} verdicts bind to ${merged.size} fixtures and match the committed annotations\n`
       : `${total} verdicts written to ${written} annotation files\n`,
   );
 }

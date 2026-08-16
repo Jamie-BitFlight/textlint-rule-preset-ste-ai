@@ -70,10 +70,54 @@ Un-drafting a PR is what makes it visible to automated review (`chatgpt-codex-co
 repo — see PR #32). Un-draft, then wait a real interval before merging — never merge in the same
 action as un-drafting, even on a change that looks obviously safe.
 
+**Independent review is required before every merge.** Not a courtesy, and not conditional on the
+external reviewer being available. Two routes satisfy the requirement equally: the automated external
+reviewer, or a local subagent review. What is never acceptable is merging with neither.
+
+The external reviewer fails in two ways, and one of them is quiet. It declines when the account is
+over its usage limit, replying "You have reached your Codex usage limits for code reviews" instead of
+a review — that one is visible. It can also simply stay silent, which is easy to read as approval.
+Treat both as "no review has happened", and check for a real review rather than for the absence of
+complaints.
+
+When the external reviewer has not produced one, dispatch a subagent before merging:
+
+- **Code changes** — the `dh:code-reviewer` agent, which detects the stack and loads the matching
+  `dh:code-review-{stack}` skill (`dh:code-review-typescript` here).
+- **Docs and design changes** — a fact-check instead of a code review. Documents in this repo cite
+  files and line numbers, and a design doc that misdescribes the code is worse than none, because
+  implementers trust it. Ask for every citation to be opened and verified.
+- **Substantial or risky changes** — a set of reviewers rather than one, via
+  `dh:multi-perspective-review`, which runs security, quality, performance and accessibility
+  perspectives in parallel and returns a verdict per perspective. One reviewer sees one way; several
+  reviewing independently is the point of review, and is what the external reviewer cannot offer.
+
+Dispatch with `isolation: "worktree"` per the section above, tell the agent to `git checkout --detach`
+the PR head commit first, give it the base commit so it can diff, and tell it explicitly that it is
+the review of record so it reviews critically rather than confirming. Require the same evidence
+discipline the rest of this file demands: cite the file and line, state uncertainty rather than
+guessing, and say what was checked when nothing was found — otherwise an empty review is
+indistinguishable from no review.
+
+Then address the findings, the same as for a human or Codex review.
+
 ## Local verification tools
 
 Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScript checks, or rebuild
 `dist/` immediately before using it. Never run stale `dist/` output with plain `node`.
+
+**In a fresh worktree, run the repo's own binaries from `node_modules/.bin/`, not `npx`.** A worktree
+created by `git worktree add` or by `isolation: "worktree"` has no `node_modules`, so `npx <tool>`
+silently resolves some _other_ version — whatever it fetches or already has cached — rather than the
+pinned one. Do not assume that is the newest: measured here, `npx prettier --version` outside the
+project reports **3.8.1** while the project pins **3.9.6**, so the drift can go backwards.
+
+That is not a hypothetical. `npx prettier --write` in such a worktree reformatted two embedded
+TypeScript blocks the way its version wanted them, then `npx prettier --check` in the same worktree
+pronounced the tree clean; CI, running the pinned version, failed on exactly those two files. Either
+`npm ci` in the worktree first, or invoke the main checkout's binary by path. A tool that reports
+success against a version the project does not use has verified nothing — and the check that
+confirms it is clean is running the same wrong version, so it agrees.
 
 ## `send_later` (self-scheduled check-ins)
 

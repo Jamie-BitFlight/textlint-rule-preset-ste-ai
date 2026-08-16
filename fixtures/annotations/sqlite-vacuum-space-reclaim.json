@@ -131,19 +131,13 @@
           "end": 172
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "VACUUM"
-        }
-      ],
-      "reason": "VACUUM is the SQL command name being documented, not an abbreviation that requires spelling out on first use.",
+      "expectedDiagnostics": [],
+      "reason": "VACUUM is the SQL command name being documented, not an abbreviation that requires spelling out on first use. Reconciled after #56: the rule no longer reports this occurrence, because VACUUM was added to the rule's default well-known list, so the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the command name VACUUM is unchanged"
       ],
       "unresolved": [
-        "rule does not distinguish command names from true abbreviations"
+        "the rule still has no general notion of a command name; VACUUM is exempt only because it is named in the default well-known list, so an undocumented command keyword would still be flagged"
       ],
       "status": "disputed",
       "reviewerConfidence": 0.95
@@ -161,20 +155,12 @@
           "end": 363
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "FULL"
-        }
-      ],
-      "reason": "FULL is a literal PRAGMA value inside the config fragment auto_vacuum=FULL, not a prose abbreviation.",
+      "expectedDiagnostics": [],
+      "reason": "FULL is a literal PRAGMA value inside the config fragment auto_vacuum=FULL, not a prose abbreviation. Reconciled after #56: the config-fragment pass now masks the whole assignment auto_vacuum=FULL as a protected region, so the rule never sees this token and the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the literal auto_vacuum=FULL config value is unchanged"
       ],
-      "unresolved": [
-        "rule tokenizes inside a config literal instead of skipping it"
-      ],
+      "unresolved": [],
       "status": "disputed",
       "reviewerConfidence": 0.95
     },
@@ -191,19 +177,13 @@
           "end": 1527
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "PRAGMA"
-        }
-      ],
-      "reason": "PRAGMA is a SQLite SQL keyword, not an abbreviation that needs to be introduced.",
+      "expectedDiagnostics": [],
+      "reason": "PRAGMA is a SQLite SQL keyword, not an abbreviation that needs to be introduced. Reconciled after #56: this occurrence is inside the config-fragment region PRAGMA secure_delete=ON, which is now masked as protected, and PRAGMA was additionally added to the default well-known list; either alone suppresses the finding, so the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the keyword PRAGMA is unchanged"
       ],
       "unresolved": [
-        "rule does not distinguish SQL keywords from true abbreviations"
+        "the rule still has no general notion of a SQL keyword; PRAGMA is exempt here through config-fragment masking and the default well-known list, not through keyword recognition"
       ],
       "status": "disputed",
       "reviewerConfidence": 0.95
@@ -221,20 +201,12 @@
           "end": 1544
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "ON"
-        }
-      ],
-      "reason": "\"ON\" is the literal boolean value of the secure_delete PRAGMA, not an abbreviation needing introduction.",
+      "expectedDiagnostics": [],
+      "reason": "\"ON\" is the literal boolean value of the secure_delete PRAGMA, not an abbreviation needing introduction. Reconciled after #56: the config-fragment pass now masks the whole assignment PRAGMA secure_delete=ON as a protected region, so short words inside a config literal are no longer tokenized as prose and the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the literal secure_delete=ON config value is unchanged"
       ],
-      "unresolved": [
-        "rule flags common short words like ON inside config literals as abbreviations"
-      ],
+      "unresolved": [],
       "status": "disputed",
       "reviewerConfidence": 0.9
     }

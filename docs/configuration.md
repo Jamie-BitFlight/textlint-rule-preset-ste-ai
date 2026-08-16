@@ -29,7 +29,7 @@ found, and the whole configuration silently loads no rules at all.
       "sentence-length-descriptive": { "maxGradeLevel": 7 },
       "no-contractions": true,
       "abbreviation-introduction": {
-        "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL"]
+        "additionalWellKnown": ["WAL"]
       },
       "punctuation-constraints": { "maxCommas": 2 },
       "passive-voice-candidate": false

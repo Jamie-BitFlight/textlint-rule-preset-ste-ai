@@ -194,12 +194,21 @@ count, so `not not` is reported without a fix. `had` and `that` are allow-listed
 **Triggers** on the _first_ use of an abbreviation-shaped token (2–6 upper-case letters) that is not
 introduced as `Full Name (ABC)` or `ABC (Full Name)`, and is not in the well-known list.
 
-**Known failure modes — significant**
+**Known failure modes — narrowed, not eliminated**
 
-- **Command and keyword names are misread as abbreviations.** `VACUUM`, `FULL`, `ANALYZE`, `WAL`,
-  `PRAGMA` are flagged on the SQLite and PostgreSQL fixtures. They are command names, not
-  abbreviations, and "introducing" them would damage the text. Add them to `additionalWellKnown` or
-  to `approvedTerms`. Several fixture annotations record this finding as `disputed`.
+- **Command and keyword names in ordinary prose are still misread as abbreviations.** The corpus-wide
+  false positives on `VACUUM`, `ANALYZE`, `PRAGMA`, `FIPS` and `RFC` are gone: `VACUUM`, `ANALYZE`
+  and `PRAGMA` are now in the default well-known list, config assignments such as
+  `PRAGMA secure_delete=ON` are masked as protected regions, standards citations such as `RFC 2817`
+  and `FIPS 140-2` are masked as identifiers, and a bare all-caps token is masked when another
+  naming region in the same document corroborates it. What remains is the case none of those
+  mechanisms reach — a command or product name in running prose with nothing nearby to corroborate
+  it. Three such findings survive on the corpus: `FULL` in "Plain VACUUM (without FULL)"
+  (`postgres-vacuum-overview`), `LLVM` in "Building LLVM" (`llvm-getting-started-build`), and `ON`
+  in the upper-case CMake assignment `LLVM_INSTALL_UTILS=ON` (`llvm-standalone-build-table`), whose
+  key is upper-case and so does not match the lower-case config-fragment pattern. All three are
+  recorded as `disputed` in the fixture annotations. Add such terms to `additionalWellKnown` or to
+  `approvedTerms`.
 - The default well-known list is a judgement call, not a standard.
 
 ### number-unit-format
@@ -411,14 +420,14 @@ participles rather than selectable nouns.
 These were found by running the rule set over `fixtures/original/` and are recorded as `disputed`
 findings in the adjudication records. They are the honest known limits of the current rule set.
 
-| What fires                                   | On what                                                                   | Why it is wrong                                                                                                     | Mitigation                                                                         |
-| -------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `abbreviation-introduction`                  | `VACUUM`, `FULL`, `ANALYZE`, `PRAGMA`, `WAL`, `LLVM`, `FIPS`, `RFC`, `ON` | Command names, keywords, product names, directive names and CMake literals are not abbreviations of a longer phrase | `additionalWellKnown`, or `approvedTerms`                                          |
-| `number-unit-format`                         | `3.20.5`, `2.4.64`, `140-2`, `1910.132`                                   | Version strings, standard designations and regulatory citations are not quantity+unit pairs                         | none needed — report only, never fixed; add to `extraProtectedPatterns` to silence |
-| `punctuation-constraints`                    | `SSL/TLS`                                                                 | A fixed compound protocol name, not an ambiguous `and/or`                                                           | `approvedTerms`                                                                    |
-| `punctuation-constraints`                    | semicolons in an `(i)/(ii)/(iii)` legal list                              | List separators in a regulatory enumeration, not run-on joins                                                       | `forbidSemicolon: false` for such documents                                        |
-| `punctuation-constraints`, `no-contractions` | `'hello!'` inside an **unfenced** terminal transcript                     | If the source does not mark a transcript as code, the linter has no way to know it is not prose                     | fence the transcript, or use `extraProtectedPatterns`                              |
-| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names rendered as text                      | Not a sentence at all; there is no punctuation for the segmenter to use                                             | none — inherent to unstructured input                                              |
+| What fires                                   | On what                                               | Why it is wrong                                                                                 | Mitigation                                                                         |
+| -------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `abbreviation-introduction`                  | `FULL`, `LLVM`, `ON`                                  | Command names, product names and CMake literals are not abbreviations of a longer phrase        | `additionalWellKnown`, or `approvedTerms`                                          |
+| `number-unit-format`                         | `3.20.5`, `2.4.64`, `1910.132`                        | Version strings and regulatory citations are not quantity+unit pairs                            | none needed — report only, never fixed; add to `extraProtectedPatterns` to silence |
+| `punctuation-constraints`                    | `SSL/TLS`                                             | A fixed compound protocol name, not an ambiguous `and/or`                                       | `approvedTerms`                                                                    |
+| `punctuation-constraints`                    | semicolons in an `(i)/(ii)/(iii)` legal list          | List separators in a regulatory enumeration, not run-on joins                                   | `forbidSemicolon: false` for such documents                                        |
+| `punctuation-constraints`, `no-contractions` | `'hello!'` inside an **unfenced** terminal transcript | If the source does not mark a transcript as code, the linter has no way to know it is not prose | fence the transcript, or use `extraProtectedPatterns`                              |
+| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names rendered as text  | Not a sentence at all; there is no punctuation for the segmenter to use                         | none — inherent to unstructured input                                              |
 
 The general shape of the first two rows is the same: **a token that looks like an abbreviation or a
 quantity but is an identifier.** The rule pack's `approvedTechnicalTerms` and the config's

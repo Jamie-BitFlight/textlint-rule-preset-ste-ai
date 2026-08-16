@@ -17,19 +17,13 @@
           "end": 338
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "abbreviation-introduction",
-          "category": "deterministic-violation",
-          "quote": "LLVM"
-        }
-      ],
-      "reason": "LLVM is the proper name of the project/product this document is about, not an abbreviation being introduced for a general term. There is no full expansion to write out on first use (analogous to 'SQLite' or 'Zephyr' elsewhere in this corpus); spelling out 'Low Level Virtual Machine (LLVM)' would be both historically inaccurate (the project disavows that expansion) and would not aid comprehension.",
+      "expectedDiagnostics": [],
+      "reason": "LLVM is the proper name of the project/product this document is about, not an abbreviation being introduced for a general term. There is no full expansion to write out on first use (analogous to 'SQLite' or 'Zephyr' elsewhere in this corpus); spelling out 'Low Level Virtual Machine (LLVM)' would be both historically inaccurate (the project disavows that expansion) and would not aid comprehension. Reconciled after #56: the corroborated-constant pass now masks the bare token, because the identifier region LLVM_INSTALL_UTILS elsewhere in this document establishes LLVM as a deliberate naming segment, so the expected diagnostic has been removed.",
       "semanticInvariants": [
         "the product name LLVM must remain unchanged everywhere it appears"
       ],
       "unresolved": [
-        "whether the rule pack should special-case known product/project proper nouns the way it already special-codes for command names"
+        "the rule pack still has no notion of a product/project proper noun; LLVM is exempt here only because another naming region in the same document happens to corroborate it, so the same name in a document with no such identifier would still be flagged"
       ],
       "status": "disputed",
       "reviewerConfidence": 0.9

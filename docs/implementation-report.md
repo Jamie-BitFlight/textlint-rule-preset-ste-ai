@@ -84,7 +84,7 @@ Every command below was run in this session; the output is what it printed.
 | End-to-end textlint            | `npx vitest run test/e2e`                                                       | 16 kernel tests + 29 `textlint-tester` cases, all passed                                                                                             |
 | Deterministic-only, no service | `test/integration/semantic-service.test.ts`                                     | fake server received **0** requests; run notice `semantic-disabled` emitted                                                                          |
 | Semantic mode vs fake server   | same file                                                                       | 22 integration tests passed over real HTTP                                                                                                           |
-| CLI on the corpus              | `node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json` | 18 files, **111 diagnostics**, `conformance.claim: "none"`                                                                                           |
+| CLI on the corpus              | `node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json` | 18 files, **121 deterministic violations** (226 diagnostics in total, the rest `review-required`), `conformance.claim: "none"`                       |
 
 Test suite composition: 15 files — unit (rules, protected regions, offsets, fix safety, broker,
 response schema, prompts, evaluation, pipeline smoke), architecture (module boundaries), integration
@@ -137,7 +137,7 @@ copyleft source is present; the validator rejects them, and CC-BY sources propag
 ### Adjudication
 
 70 change records across 18 fixtures: **32 accepted, 36 disputed, 2 deferred**. Mean reviewer
-confidence 0.893. 107 semantic invariants and 22 unresolved findings recorded.
+confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
 documentation, more than half of what these provisional rules flag was judged wrong by a reviewer.**

@@ -350,6 +350,62 @@ describe('abbreviation-introduction', () => {
   it('does not flag abbreviations that are inside protected content', () => {
     expect(run('Set `ECU_MODE` to 1.\n').forRule(id)).toHaveLength(0);
   });
+
+  it('does not flag SQL keyword tokens used bare in prose with no config context', () => {
+    const result = run(
+      'Run VACUUM to reclaim space. Then run ANALYZE and PRAGMA integrity_check.\n',
+    );
+    expect(result.forRule(id)).toHaveLength(0);
+  });
+
+  it('does not flag a config-value token inside a quoted mid-sentence literal', () => {
+    const result = run(
+      'Unless running in "auto_vacuum=FULL" mode, the database keeps free pages.\n',
+    );
+    expect(result.forRule(id)).toHaveLength(0);
+  });
+
+  it('does not flag a config-value token inside an unquoted mid-sentence assignment', () => {
+    expect(run('Set PRAGMA secure_delete=ON.\n').forRule(id)).toHaveLength(0);
+  });
+
+  it('does not flag RFC or FIPS used as a citation number', () => {
+    // Note: the original bug report's sample sentence for RFC also contained "URI", a
+    // genuinely unintroduced abbreviation unrelated to this fix, which would fail this
+    // assertion for reasons that have nothing to do with citation-number handling — reworded
+    // to isolate the citation-number behaviour under test.
+    expect(run('See RFC 3986 for grammar rules.\n').forRule(id)).toHaveLength(0);
+    expect(run('Enable FIPS 140-2 mode.\n').forRule(id)).toHaveLength(0);
+  });
+
+  it('does not flag a bare token corroborated by an identifier-shaped occurrence elsewhere in the document', () => {
+    const result = run(
+      'Set LLVM_ENABLE_PROJECTS to configure the build. Building LLVM from source takes a while.\n',
+    );
+    expect(result.forRule(id)).toHaveLength(0);
+  });
+
+  it('does not flag a bare token corroborated by a config-fragment occurrence elsewhere in the document', () => {
+    const result = run(
+      'Set journal_mode=WAL for better concurrency. WAL reduces write contention.\n',
+    );
+    expect(result.forRule(id)).toHaveLength(0);
+  });
+
+  it('still flags a genuinely fabricated, uncorroborated all-caps token', () => {
+    const result = run('The ZQX module failed during startup.\n');
+    expect(result.forRule(id)).toHaveLength(1);
+    expect(result.forRule(id)[0]?.meta?.['abbreviation']).toBe('ZQX');
+  });
+
+  // Table-cell prose is treated identically to ordinary prose by the protected-region layer
+  // (see test/unit/protected-regions.test.ts's 'protects table pipes but keeps cell prose
+  // visible'), so this case is closed by the same config-fragment/corroboration mechanism as
+  // the mid-sentence FULL/ON cases above, not by any table-specific logic.
+  it('does not flag a false-positive token inside a markdown table cell', () => {
+    const result = run('| Option | Value |\n| --- | --- |\n| Mode | auto_vacuum=FULL |\n');
+    expect(result.forRule(id)).toHaveLength(0);
+  });
 });
 
 describe('number-unit-format', () => {

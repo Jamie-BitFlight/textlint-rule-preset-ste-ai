@@ -22,8 +22,22 @@ interface Pass {
   readonly kind: ProtectedRegionKind;
   readonly opaque: boolean;
   readonly note: string;
-  /** Runs against the progressively-masked text so a pattern can never match inside code. */
-  readonly find: (masked: string, raw: string, options: ProtectedRegionOptions) => SourceRange[];
+  /**
+   * Runs against the progressively-masked text so a pattern can never match inside code.
+   *
+   * `priorRegions` accumulates every region produced by passes that ran earlier in this same
+   * `extractProtectedRegions` call (in the same pass array), so a pass placed late in the order
+   * can corroborate a bare token against naming decisions earlier passes already made. Optional
+   * so the many existing `find` implementations and `regexPass`-closure call sites that only ever
+   * supply the first three arguments keep type-checking unmodified; `extractProtectedRegions`
+   * always supplies it.
+   */
+  readonly find: (
+    masked: string,
+    raw: string,
+    options: ProtectedRegionOptions,
+    priorRegions?: readonly ProtectedRegion[],
+  ) => SourceRange[];
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +439,13 @@ const configFragmentPass: Pass = {
       masked,
       defaultProtectedRegionOptions,
     ),
+    // Mid-sentence assignment, e.g. `PRAGMA secure_delete=ON` or a quoted `auto_vacuum=FULL`.
+    // Unlike the two alternatives above, this one is not anchored to line start/end. The key
+    // must have at least one `_`/`.` separator (so a bare single word can never satisfy it) and
+    // the value grammar never absorbs a trailing `.`, so a sentence-final period stays prose.
+    ...regexPass(
+      /\b(?:[A-Z]{2,12}[ \t]+)?[a-z][a-z0-9]*(?:[_.][a-z0-9]+)+=[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*/g,
+    )(masked, masked, defaultProtectedRegionOptions),
   ],
 };
 
@@ -452,6 +473,8 @@ const identifierPass: Pass = {
       // part numbers / mixed alphanumerics with a digit and a letter and a separator
       /\b[A-Z]{1,6}[0-9]{1,6}(?:[-/][A-Z0-9]{1,6})+\b/g,
       /\b[A-Z]{2,}[0-9]{2,}\b/g,
+      // Standards-body citation numbers, e.g. `RFC 3986`, `FIPS 140-2`, `ISO 9001`.
+      /\b[A-Z]{2,6}[ \t]\d{1,6}(?:[.-]\d+)*\b/g,
     ];
     const out: SourceRange[] = [];
     for (const re of patterns) {
@@ -631,6 +654,70 @@ const credentialPass: Pass = {
   },
 };
 
+/**
+ * Region kinds whose matched literal text represents a name a document author chose deliberately
+ * (a config key/value, an identifier, a quoted literal, project terminology, or a product name) —
+ * as opposed to a kind such as `url` or `credential` whose text is not a naming decision at all.
+ * Used by {@link corroboratedConstantPass} to decide which earlier regions are eligible evidence.
+ */
+const NAMING_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
+  'config-fragment',
+  'identifier',
+  'quoted-literal',
+  'approved-term',
+  'product-identifier',
+]);
+
+/** Shortest literal or segment {@link buildProtectedLiteralIndex} will index. */
+const MIN_SEGMENT_LENGTH = 2;
+
+/**
+ * Builds the set of literal strings a bare all-caps token can be corroborated against: the full
+ * text of every eligible naming region, plus each `_`/`.`/whitespace/quote/`=`-delimited segment
+ * of that text that is itself all-caps (so `LLVM_ENABLE_PROJECTS` also indexes bare `LLVM`).
+ */
+function buildProtectedLiteralIndex(
+  raw: string,
+  priorRegions: readonly ProtectedRegion[],
+): ReadonlySet<string> {
+  const index = new Set<string>();
+  for (const region of priorRegions) {
+    if (!region.opaque || !NAMING_KINDS.has(region.kind)) continue;
+    const literal = raw.slice(region.range.start, region.range.end).trim();
+    if (literal.length >= MIN_SEGMENT_LENGTH) index.add(literal);
+    for (const segment of literal.split(/[_.\-\s"'=]+/)) {
+      if (segment.length >= MIN_SEGMENT_LENGTH && /^[A-Z0-9]+$/.test(segment)) {
+        index.add(segment);
+      }
+    }
+  }
+  return index;
+}
+
+/**
+ * Protects a bare all-caps token (e.g. `LLVM`, `FULL`, `ON`) that is not, on its own, shaped like
+ * any other protected kind, but is corroborated elsewhere in the same document by a region a
+ * naming-shaped pass already recognised (e.g. an `identifier` region `LLVM_ENABLE_PROJECTS`, or a
+ * `config-fragment` region containing `=FULL`). A single non-iterative sweep: it only consults
+ * `priorRegions` as accumulated by passes earlier in the same pass array, never spans it itself
+ * produces, and never re-runs against its own output.
+ */
+const corroboratedConstantPass: Pass = {
+  kind: 'constant',
+  opaque: true,
+  note: 'Bare token corroborated by a naming region elsewhere in the document.',
+  find: (masked, raw, _options, priorRegions = []) => {
+    const index = buildProtectedLiteralIndex(raw, priorRegions);
+    const out: SourceRange[] = [];
+    for (const m of masked.matchAll(/\b[A-Z][A-Z0-9]{1,9}\b/g)) {
+      if (containsMask(m[0])) continue;
+      if (!index.has(m[0])) continue;
+      out.push({ start: m.index, end: m.index + m[0].length });
+    }
+    return out;
+  },
+};
+
 const MARKDOWN_PASSES: readonly Pass[] = [
   frontMatterPass,
   fencedCodePass,
@@ -668,6 +755,7 @@ const MARKDOWN_PASSES: readonly Pass[] = [
   // region and an intact identifier region.
   emphasisMarkerPass,
   quotedLiteralPass,
+  corroboratedConstantPass,
 ];
 
 /** Plain text has no markdown structure, so structural passes are omitted. */
@@ -680,9 +768,11 @@ const PLAIN_TEXT_PASSES: readonly Pass[] = [
   placeholderPass,
   shellCommandPass,
   filePathPass,
+  configFragmentPass,
   identifierPass,
   numericPass,
   quotedLiteralPass,
+  corroboratedConstantPass,
 ];
 
 /**
@@ -702,7 +792,7 @@ export function extractProtectedRegions(
   let masked = text;
 
   for (const pass of passes) {
-    const found = pass.find(masked, text, options);
+    const found = pass.find(masked, text, options, regions);
     const clean = found.filter((r) => r.end > r.start && r.start >= 0 && r.end <= text.length);
     if (clean.length === 0) continue;
     for (const range of mergeRanges(clean)) {

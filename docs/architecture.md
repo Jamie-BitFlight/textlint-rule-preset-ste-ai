@@ -524,6 +524,16 @@ syntax — confirmed by reading each: `shellCommandPass`, for example, matches
 to a table cell's text, a list item's text, or a plain-text document's paragraph, so they belong
 beside the checker, applied per `TextUnit.text`, not inside the reader.
 
+Also in this bucket, but not interchangeable with the rest of it: `corroboratedConstantPass`
+(`src/core/protected-regions.ts:705-719`), which protects a bare all-caps token (e.g. `LLVM`, `ON`)
+when it is corroborated elsewhere in the same document by a region a naming-shaped pass already
+recognised. Unlike the other passes named above, it is order-dependent — it consults
+`priorRegions`, the regions already produced by earlier naming-shaped passes (`configFragmentPass`,
+`identifierPass`, `quotedLiteralPass`, `approvedTermPass`, and the `product-identifier`-kind passes)
+within the same `extractProtectedRegions` call, so it cannot run standalone the way the rest of this
+bucket can. Its placement last in both `MARKDOWN_PASSES` and `PLAIN_TEXT_PASSES` is load-bearing,
+not incidental: it must run after every pass whose output it reads.
+
 **Probably retired, not yet confirmed.** Bare URL/email in prose, outside markdown link syntax —
 `urlPass`, `emailPass`. `@textlint/markdown-to-ast` carries `remark-gfm` as a dependency, which
 recognises bare autolinks (GFM's autolink-literal extension) as `Link` nodes without `[]()` syntax.

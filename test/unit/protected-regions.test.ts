@@ -253,6 +253,72 @@ describe('protected-region extraction', () => {
   });
 });
 
+describe('configFragmentPass mid-sentence alternative, identifierPass citations, and corroboratedConstantPass', () => {
+  it('protects a mid-sentence quoted config literal via configFragmentPass', () => {
+    const text = 'Unless running in "auto_vacuum=FULL" mode, verify the setting.\n';
+    expect(kindsAt(text, 'auto_vacuum=FULL')).toContain('config-fragment');
+  });
+
+  it('protects a mid-sentence bare-keyword assignment, leaving the sentence-final period as prose', () => {
+    const text = 'Set PRAGMA secure_delete=ON.\n';
+    expect(kindsAt(text, 'PRAGMA secure_delete=ON')).toContain('config-fragment');
+    const doc = analyse(text);
+    const periodIndex = text.indexOf('.');
+    expect(doc.maskedText[periodIndex]).toBe('.');
+  });
+
+  it('rejects a single-word label before "=" as a config fragment (second admonition-shaped regression)', () => {
+    const text = 'Note = see section 4 for details.\n';
+    const kinds = extractProtectedRegions(text, defaultProtectedRegionOptions).map((r) => r.kind);
+    expect(kinds).not.toContain('config-fragment');
+  });
+
+  it('protects standards-body citation numbers as identifiers', () => {
+    expect(kindsAt('as described in RFC 3986 for details', 'RFC 3986')).toContain('identifier');
+    expect(kindsAt('enable FIPS 140-2 mode', 'FIPS 140-2')).toContain('identifier');
+  });
+
+  it('corroborates a bare constant via an exact-match config-fragment value', () => {
+    const text = 'Enable secure_delete=ON now. ON is the recommended value for most systems.\n';
+    expect(kindsAt(text, 'secure_delete=ON')).toContain('config-fragment');
+    expect(kindsAt(text, 'ON is the recommended')).toContain('constant');
+  });
+
+  it('corroborates a bare constant via a segment of an identifier region', () => {
+    const text =
+      'Set LLVM_ENABLE_PROJECTS to clang. LLVM is the compiler infrastructure used here.\n';
+    expect(kindsAt(text, 'LLVM_ENABLE_PROJECTS')).toContain('identifier');
+    expect(kindsAt(text, 'LLVM is the compiler')).toContain('constant');
+  });
+
+  it('corroborates a bare constant via a config-fragment occurrence of WAL', () => {
+    const text = 'Set journal_mode=WAL for better concurrency. WAL is the write-ahead log mode.\n';
+    expect(kindsAt(text, 'journal_mode=WAL')).toContain('config-fragment');
+    expect(kindsAt(text, 'WAL is the write-ahead')).toContain('constant');
+  });
+
+  it('does not protect an uncorroborated bare all-caps token as a constant', () => {
+    const text = 'The XYZ approach was discussed today.\n';
+    const doc = analyse(text);
+    const at = text.indexOf('XYZ');
+    expect(doc.isProtected({ start: at, end: at + 3 })).toBe(false);
+  });
+
+  it('protects the mid-sentence config-fragment span under the plain-text format too', () => {
+    const text = 'Unless running in "auto_vacuum=FULL" mode, verify the setting.\n';
+    const regions = extractProtectedRegions(text, {
+      ...defaultProtectedRegionOptions,
+      format: 'text',
+    });
+    const start = text.indexOf('auto_vacuum=FULL');
+    const end = start + 'auto_vacuum=FULL'.length;
+    const kinds = regions
+      .filter((r) => r.range.start < end && start < r.range.end)
+      .map((r) => r.kind);
+    expect(kinds).toContain('config-fragment');
+  });
+});
+
 describe('word tokenisation', () => {
   it('counts a content-bearing protected region as exactly one word', () => {
     const doc = analyse('Torque the bolt to 25 Nm now.\n');

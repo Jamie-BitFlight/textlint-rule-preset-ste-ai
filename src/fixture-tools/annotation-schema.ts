@@ -39,16 +39,21 @@ export const annotationChangeSchema = z.object({
   unresolved: z.array(z.string()).default([]),
   status: z.enum(['accepted', 'disputed', 'deferred']),
   /**
-   * Who produced this rewrite, and what they are.
+   * The run that produced this annotation's rewrites — **not** necessarily the author of the text
+   * as it stands today.
+   *
+   * The distinction is real and measured: 11 of the 70 records have had their content edited since
+   * the run named here, by later reconciliation commits that left no trace of their own. Nothing in
+   * the data says who made those edits, so this field names the originating run and stops there.
+   * Reading it as "who wrote this sentence" is wrong for those 11.
    *
    * These records had no provenance at all while `candidateAdjudications` did, which left the
-   * annotation's `reviewers` array as the only trace of who wrote the 70 rewrites — an array no
-   * record pointed into and nothing could check. A reviewer name could be added to it, or removed
-   * from it, without contradicting any record in the file.
-   *
-   * With both populations naming their own author, `reviewers` becomes derivable rather than
-   * asserted: it is exactly the set of names the records carry, and `merge-candidate-verdicts.mjs`
-   * rejects a file where it is anything else.
+   * annotation's `reviewers` array as the only trace of who wrote the rewrites — an array no record
+   * pointed into and nothing could check. A name could be added to it, or removed from it, without
+   * contradicting anything in the file. With both populations naming their own run, `reviewers`
+   * becomes derived rather than asserted, and `merge-candidate-verdicts.mjs` rejects a file where
+   * it is anything else. The records themselves are still self-asserted; what pins those is
+   * `scripts/ci/check-annotation-provenance.sh`.
    */
   reviewer: z.string().min(1),
   reviewerKind: z.enum(['human', 'agent']),

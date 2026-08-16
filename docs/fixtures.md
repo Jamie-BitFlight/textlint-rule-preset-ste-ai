@@ -169,6 +169,21 @@ pointed into, so a name could be added to it or removed from it without contradi
 the file. It is now derived — exactly the set of names the two record populations carry — and
 `merge-candidate-verdicts.mjs` refuses a file where it is anything else.
 
+Be precise about what that buys, because it is less than it sounds. The adjudications are pinned to
+something outside their own file: each one binds to a live candidate passage, so it cannot be
+invented. The rewrite records are not. Editing every `changes[].reviewer` in an annotation _and_ its
+`reviewers` array together is self-consistent, and so is adding a rewrite that never happened or
+deleting four that did — measured, all three pass the merge tool untouched. What refuses them is
+`scripts/ci/check-annotation-provenance.sh`, which pins the totals (105 adjudications, 70 rewrites,
+the per-run split, and the fact that every record says `agent`) the way `check-rules-provisional.sh`
+pins the rule count. Those numbers are expected to change when the corpus does; the point is that
+changing them is an edit somebody makes on purpose.
+
+One more limit, since the field name invites the wrong reading. `reviewer` names the run that
+produced an annotation's rewrites, not the author of the text as it stands: 11 of the 70 records
+have had their content edited since, by later reconciliation commits that recorded nothing about
+themselves.
+
 What the adjudication method establishes, and what it does not:
 
 - **Each passage was judged exactly once.** The four reviewers' fixture sets are pairwise disjoint —

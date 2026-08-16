@@ -133,13 +133,24 @@ function readAnnotation(layout: Layout, id = 'demo'): Record<string, unknown> {
 /** The parts of a parsed annotation these tests edit. `JSON.parse` gives no types of its own. */
 interface MutableAnnotation {
   reviewers: string[];
-  candidateAdjudications: Record<string, unknown>[];
+  /**
+   * Deliberately not `Record<string, unknown>[]`. Two cases below put a shape here that a valid
+   * annotation never holds — an object instead of an array, and an array holding `null` — because
+   * both reach the comparison and used to abort the run on a raw `TypeError`. Typing the field as
+   * what a *file* can contain, rather than what a correct file contains, lets the tests write those
+   * without a cast.
+   */
+  candidateAdjudications: unknown;
 }
 
 /** The first adjudication, or a failure that names the reason rather than an index error. */
 function firstAdjudication(annotation: MutableAnnotation): Record<string, unknown> {
-  const [first] = annotation.candidateAdjudications;
-  if (first === undefined) throw new Error('the annotation has no adjudication to edit');
+  const records = annotation.candidateAdjudications;
+  if (!Array.isArray(records)) throw new Error('candidateAdjudications is not an array');
+  const [first] = records;
+  if (first === undefined || typeof first !== 'object' || first === null) {
+    throw new Error('the annotation has no adjudication to edit');
+  }
   return first;
 }
 
@@ -213,6 +224,37 @@ describe('merge-candidate-verdicts', () => {
       expect(result.stderr).toContain('written to 0 annotation files');
     });
 
+    it('repairs drifted records even when the reviewer set already matches', () => {
+      // The guard that skips an unchanged file compares two things. Deleting either half leaves the
+      // suite green unless both directions are asserted, and this is the half that does damage: a
+      // record edited without touching `reviewers` would never be repaired, so `--check` would go on
+      // failing with no way to fix it short of hand-editing.
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      editAnnotation(layout, (a) => {
+        firstAdjudication(a)['reason'] = 'rewritten by hand, reviewers untouched';
+      });
+
+      expect(run(layout).status).toBe(0);
+
+      expect(readAnnotation(layout)['candidateAdjudications']).toEqual([
+        expect.objectContaining({ reason: verdictRow.reason }),
+      ]);
+      expect(run(layout, '--check').status).toBe(0);
+    });
+
+    it('repairs a reviewer set that drifted while the records did not', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      editAnnotation(layout, (a) => {
+        a.reviewers = ['reviewer-a'];
+      });
+
+      expect(run(layout).status).toBe(0);
+
+      expect(readAnnotation(layout)['reviewers']).toEqual(['reviewer-a', 'rewriter-a']);
+    });
+
     it('empties a fixture whose candidates have all disappeared', () => {
       // The #54 failure: a rule change moves a span, the candidate is gone, and the verdict written
       // about it stays in the annotation describing a passage that no longer exists.
@@ -281,6 +323,44 @@ describe('merge-candidate-verdicts', () => {
       expect(result.stderr).toContain('annotation note is "actually disputed"');
     });
 
+    it('a field deleted by hand, the other direction of the same comparison', () => {
+      const result = checked((a) => {
+        delete firstAdjudication(a)['reviewerConfidence'];
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'annotation reviewerConfidence is undefined, the verdicts give 0.9',
+      );
+    });
+
+    it('candidateAdjudications that is not an array at all', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      expect(run(layout).status).toBe(0);
+      editAnnotation(layout, (a) => {
+        // An object, so the `?? []` fallback does not fire and every array method below it throws.
+        a.candidateAdjudications = {};
+      });
+
+      const result = run(layout, '--check');
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('demo: candidateAdjudications is not an array');
+      expect(result.stderr).not.toContain('TypeError');
+    });
+
+    it('an adjudication that is not an object, rather than crashing on it', () => {
+      // `[null]` is valid JSON and passes `Array.isArray`, so it reaches the comparison. Before the
+      // guard it aborted the run on a raw TypeError, which left every later fixture unchecked.
+      const result = checked((a) => {
+        a.candidateAdjudications = [null];
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('demo: 1 adjudication(s) are not objects');
+      expect(result.stderr).not.toContain('TypeError');
+    });
+
     it('an adjudication left behind after its candidate moved', () => {
       const result = checked((a) => {
         firstAdjudication(a)['span'] = { start: 900, end: 904 };
@@ -311,6 +391,7 @@ describe('merge-candidate-verdicts', () => {
       );
       expect(run(layout).status).toBe(0);
       editAnnotation(layout, (a) => {
+        if (!Array.isArray(a.candidateAdjudications)) throw new Error('not an array');
         a.candidateAdjudications.reverse();
       });
 
@@ -344,7 +425,9 @@ describe('merge-candidate-verdicts', () => {
 
     it('a duplicated record, named as a count rather than as an ordering problem', () => {
       const result = checked((a) => {
-        a.candidateAdjudications.push({ ...firstAdjudication(a) });
+        const records = a.candidateAdjudications;
+        if (!Array.isArray(records)) throw new Error('not an array');
+        records.push({ ...firstAdjudication(a) });
       });
 
       expect(result.status).toBe(1);

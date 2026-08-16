@@ -58,6 +58,15 @@ function describeDrift(fixtureId, committed, computed) {
       `${fixtureId}: annotation holds ${committed.length} adjudication(s), the verdicts give ${computed.length}`,
     );
   }
+  // `[null]` is valid JSON and is an array, so neither the parse guard nor the `Array.isArray`
+  // guard upstream sees it. Without this the map below dereferences it, the run aborts on a raw
+  // `TypeError`, and every fixture after this one goes unchecked — one shape of malformed
+  // annotation failing loudly while another fails the way everything else does.
+  const malformed = committed.filter((record) => typeof record !== 'object' || record === null);
+  if (malformed.length > 0) {
+    out.push(`${fixtureId}: ${malformed.length} adjudication(s) are not objects`);
+    return out;
+  }
   const remaining = new Map(
     committed.map((record) => [key(record.ruleId, record.span ?? { start: -1, end: -1 }), record]),
   );
@@ -224,8 +233,11 @@ function main() {
   const manifest = JSON.parse(readFileSync(join(fixturesDir, 'manifest.json'), 'utf8'));
   const drift = [];
   // A fixture with verdicts but no manifest entry would otherwise be validated and then dropped,
-  // since the loop below walks the manifest. Silently discarding a reviewer's work is worse than
-  // refusing it.
+  // because the loop below walks the manifest. Silently discarding a reviewer's work is worse than
+  // refusing it. In the real pipeline this cannot fire: `build-candidate-packets.mjs` derives
+  // packets from the same manifest, so such a verdict already dies at "no candidate packet for
+  // fixture". It guards a hand-made or stale `--packets` directory, which is the only way to get
+  // here.
   const manifestIds = new Set(manifest.fixtures.map((fixture) => fixture.id));
   for (const fixtureId of merged.keys()) {
     if (!manifestIds.has(fixtureId)) {
@@ -315,17 +327,23 @@ function main() {
 
   if (drift.length > 0) {
     for (const problem of drift) process.stderr.write(`${problem}\n`);
+    // Write mode reaches here too — an unreadable annotation is collected rather than thrown, so a
+    // run can both repair some files and report a difference it could not repair. Telling that
+    // operator to "re-run without --check" would be telling them to do what they just did.
     process.stderr.write(
-      `\n${drift.length} difference(s) between the verdicts and the committed annotations.\n` +
-        'Re-run without --check to rewrite them, then review the diff.\n',
+      checkOnly
+        ? `\n${drift.length} difference(s) between the verdicts and the committed annotations.\n` +
+            'Re-run without --check to rewrite them, then review the diff.\n'
+        : `\n${written} annotation file(s) rewritten; ${drift.length} difference(s) left unresolved.\n`,
     );
     process.exitCode = 1;
     return;
   }
 
-  // Both numbers are counted over the manifest. `merged.size` was the wrong second figure: it
-  // counts every fixture the verdicts mention, so the sentence reported its two halves over
-  // different sets whenever those disagreed — the one case where the reader most needs it not to.
+  // Both numbers are counted over the manifest. `merged.size` counts every fixture the verdicts
+  // mention, which is the same set by the time this line runs — a bound fixture outside the
+  // manifest pushes drift above and returns. Counting the manifest anyway keeps the sentence true
+  // by construction rather than by the reachability of a guard fifty lines away.
   const judgedFixtures = manifest.fixtures.filter(
     (fixture) => (merged.get(fixture.id)?.size ?? 0) > 0,
   ).length;

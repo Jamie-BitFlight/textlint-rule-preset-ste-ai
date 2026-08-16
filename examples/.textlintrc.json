@@ -13,7 +13,7 @@
       "punctuation-constraints": { "maxCommas": 3 },
       "no-repeated-words": true,
       "abbreviation-introduction": {
-        "additionalWellKnown": ["VACUUM", "PRAGMA", "WAL", "ANALYZE"],
+        "additionalWellKnown": ["WAL"],
         "severity": "warning"
       },
       "number-unit-format": { "severity": "warning" },

@@ -70,6 +70,28 @@ Un-drafting a PR is what makes it visible to automated review (`chatgpt-codex-co
 repo — see PR #32). Un-draft, then wait a real interval before merging — never merge in the same
 action as un-drafting, even on a change that looks obviously safe.
 
+**If the automated reviewer cannot review, substitute a subagent review — never skip the review.**
+Codex declines when the account is over its usage limit, replying "You have reached your Codex usage
+limits for code reviews" instead of a review; it can also stay silent. Either way the PR has had no
+independent look, and merging it means merging unreviewed work.
+
+When that happens, dispatch a subagent to review it before merging:
+
+- **Code changes** — the `dh:code-reviewer` agent, which detects the stack and loads the matching
+  `dh:code-review-{stack}` skill (`dh:code-review-typescript` here).
+- **Docs and design changes** — a fact-check instead of a code review. Documents in this repo cite
+  files and line numbers, and a design doc that misdescribes the code is worse than none, because
+  implementers trust it. Ask for every citation to be opened and verified.
+
+Dispatch with `isolation: "worktree"` per the section above, tell the agent to `git checkout --detach`
+the PR head commit first, give it the base commit so it can diff, and tell it explicitly that it is
+the review of record so it reviews critically rather than confirming. Require the same evidence
+discipline the rest of this file demands: cite the file and line, state uncertainty rather than
+guessing, and say what was checked when nothing was found — otherwise an empty review is
+indistinguishable from no review.
+
+Then address the findings, the same as for a human or Codex review.
+
 ## Local verification tools
 
 Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScript checks, or rebuild

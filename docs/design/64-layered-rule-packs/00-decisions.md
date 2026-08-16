@@ -17,9 +17,9 @@ unqualified in the spec that proposed it:
 
 | Overturned                                   | Still asserted in                       |
 | -------------------------------------------- | --------------------------------------- |
-| `rulePacks` as a new config key              | `01:178`, the config table, conflict C1 |
-| Composed output satisfies `RulePack` exactly | `01:14`, its opening premise            |
-| `replace` mode, and replace-only-at-index-0  | `01` (C2, C5, C6); depended on by `02`  |
+| `rulePacks` as a new config key              | `01:186`, the config table, conflict C1 |
+| Composed output satisfies `RulePack` exactly | `01:22-23`, its opening premise         |
+| `replace` mode, and replace-only-at-index-0  | `01` (C2, C6); depended on by `02`      |
 | Conformance claims are in scope              | most of `02`                            |
 
 Each spec carries a banner pointing here, so a reader who opens one directly is not led into an
@@ -34,7 +34,7 @@ substitutes instead — its three branches each return one pack, and none combin
 So the documented behaviour and the implemented behaviour already disagree — with one qualifier that
 sentence conjoins two keys and only one of them layers today: `config.approvedTerms` really is spread
 together with `pack.approvedTechnicalTerms` at `analyse.ts:255`. `rulePack` is the half that
-substitutes. `03:477` states this precisely; the claim here is the same one, narrowed to the key it
+substitutes. `03:494-495` states this precisely; the claim here is the same one, narrowed to the key it
 actually applies to. Layering closes that gap rather than adding something new. `03` found a second instance of the same drift: `README.md` is not
 alone, and the reconciliation list in that spec names the rest.
 
@@ -78,10 +78,12 @@ for having produced `03` at all.
 
 ## Agreed across specs
 
-- **The bundled pack becomes layer 0**, present unless displaced by a `replace` entry, rather than a
-  fallback used when nothing is configured.
-- **`replace` is legal only as the first layer.** A later `replace` makes every preceding entry dead
-  config, which is better rejected than honoured.
+- **The bundled pack becomes layer 0**, rather than a fallback used when nothing is configured.
+  ~~present unless displaced by a `replace` entry~~ — struck: `replace` is removed by "Superseded by
+  project stage" below, so nothing displaces it.
+- ~~**`replace` is legal only as the first layer.**~~ Struck for the same reason. The specs agreed on
+  this validation rule, and it has no subject once the mode is gone; it is recorded here because the
+  agreement was real and would need reinstating with the mode.
 - **Merge keys are per-field, not global.** Verified: `termPattern` (`helpers.ts:10`) matches with
   flags `giu` and collapses whitespace, while `approvedTerms` protection
   (`protected-regions.ts:552`) matches with flags `gu`, case-sensitively and without folding. A single
@@ -131,12 +133,15 @@ exact command so the number can be re-derived rather than trusted:
 
 ```bash
 grep -vE '^\s*(//|\*|/\*)' <file> \
-  | grep -coE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority'
+  | grep -oE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority' \
+  | wc -l
 ```
 
 That is occurrences of the removal candidates, with comment-only lines excluded — a rule worth
 stating, because counting matching _lines_ instead, or leaving comments in, gives materially
-different totals, and the scope of the proposed removal is argued from this table.
+different totals, and the scope of the proposed removal is argued from this table. The `| wc -l` is
+the load-bearing part: `grep -c` counts matching **lines** and ignores `-o`, which yields 28 rather
+than 35 on the same files.
 
 | File                                | References |
 | ----------------------------------- | ---------: |

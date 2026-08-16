@@ -412,9 +412,8 @@ Every one of the following calls `analyseTextDeterministic(text)` **with no conf
 (`docs/fixtures.md:179-180`). The correct posture is therefore _not_ to update the fixture
 expectations, but to treat any movement in them as a stop-the-line signal.
 
-**One documentation dependency:** the "Corpus tests" table in `docs/fixtures.md` ("violation count never increases after a
-rewrite") and the surrounding invariant table at `:189-201` describe corpus assertions accurately
-today. They stay accurate. No fixture, manifest, annotation or verdict file needs to change.
+**One documentation dependency:** the "Corpus tests" table in `docs/fixtures.md` ("violation count
+never increases after a rewrite", `:159-171`) describes corpus assertions accurately today. They stay accurate. No fixture, manifest, annotation or verdict file needs to change.
 
 ---
 
@@ -685,8 +684,8 @@ Things that could go wrong which the tests above would **not** catch.
    `licence` or `notice` in output at all (grep: no consumer outside the schema/type), so a merge
    that drops them loses an audit trail **without any test failing** — the field is validated on the
    way in and never read on the way out. Given this repo's posture on provenance
-   (`docs/DISCLAIMER.md`, the "How the adjudication was run" section of `docs/fixtures.md`), silently losing per-layer licence text is a
-   real harm that the test suite is structurally incapable of detecting. **Mitigation:** the
+   (`docs/DISCLAIMER.md`, and the "How the adjudication was run" section `docs/fixtures.md` gains with
+   #59), silently losing per-layer licence text is a real harm that the test suite is structurally incapable of detecting. **Mitigation:** the
    provenance model must retain per-layer `licence`/`notice`, and a test must assert they survive
    the merge even though nothing consumes them yet.
 

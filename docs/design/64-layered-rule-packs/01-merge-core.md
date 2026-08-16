@@ -11,7 +11,9 @@ Out of scope (owned elsewhere): authority/trust, `trustedRulePackIds`, `verified
 per-entry provenance reporting, migration, fixtures, pack distribution. Seams are marked
 **[AUTHORITY-SEAM]** and stop at the seam.
 
-All line citations are against commit `9d78a8b` (this worktree, detached HEAD).
+Line citations were written against commit `9d78a8b`, which turned out to be a sibling of this
+branch rather than an ancestor, and have since been re-checked against the branch with `main` merged
+in. Any that still name `9d78a8b` describe that commit, not this tree.
 
 ---
 
@@ -126,7 +128,7 @@ Two call sites bind the result directly and neither has a channel for load-time 
   `structure-rules.ts:43`, `candidate-rules.ts:331`, `sentence-length.ts:28-30`.
 - `rules` → indexed by `ruleId` in `runDeterministicRules` (`src/core/runner.ts:51`), then used for
   `enabled` (`:59`), options base (`:62-65`, a **shallow spread**:
-  `{...packSpec?.options, ...stripControlKeys(userConfig)}`), `severity` (`:78`), and
+  `{...packSpec?.options, ...stripControlKeys(userConfig)}`), `severity` (`:79`), and
   `status`/`sourceRef` on emitted diagnostics (`:93-113`).
 - `dictionary.approved` → **no production reader at this commit.** A grep over `src/` for
   `.approved` (excluding `approvedTerms`/`approvedTechnicalTerms`) returns nothing. The

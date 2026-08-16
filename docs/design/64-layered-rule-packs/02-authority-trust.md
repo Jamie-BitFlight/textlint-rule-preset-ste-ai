@@ -11,7 +11,9 @@ syntax, conflict detection and the config zod shape are **out of scope** and are
 given. Where this spec depends on a decision the merge-algorithm spec owns, it is flagged as a
 dependency, not designed.
 
-All line citations are against commit `9d78a8b`.
+Line citations were written against commit `9d78a8b`, which turned out to be a sibling of this
+branch rather than an ancestor, and have since been re-checked against the branch with `main` merged
+in. Any that still name `9d78a8b` describe that commit, not this tree.
 
 ---
 
@@ -222,9 +224,9 @@ export type ContributionOrigin = 'pack' | 'operator-config' | 'builtin';
  * `rulePackSchema`, and it lives on `ComposedRulePack`, a type no parse path produces.
  *
  * Required and deliberately not defaulted, on the same principle as `reviewerKind` in
- * `src/fixture-tools/annotation-schema.ts` (which arrives with #59, not in this tree): an optional
- * origin makes "nothing produced this" indistinguishable from "we forgot to record what produced
- * this".
+ * `src/fixture-tools/annotation-schema.ts` — that file is in this tree, but the `reviewerKind` field
+ * arrives with #59, so there is no line to cite yet. An optional origin makes "nothing produced
+ * this" indistinguishable from "we forgot to record what produced this".
  */
 export interface EntryProvenance {
   readonly origin: ContributionOrigin;
@@ -339,7 +341,7 @@ authority only, not about _which_ entry wins.
 - **A5.** Field-level merge (if the merge algorithm does any): the composite entry's
   `verifiedAuthority` is the **weakest** across every layer that contributed any surviving field,
   under the lattice `normative > supplementary > provisional` — which is a proposal, not an existing
-  fact: `ruleStatusSchema` (`schema.ts:14`) is a bare `z.enum` and declares no ordering. `01:435`
+  fact: `ruleStatusSchema` (`schema.ts:14`) is a bare `z.enum` and declares no ordering. `01:441-445`
   carries the same caveat. `packId`/`packVersion`/`layer` name
   the top contributing layer; every other contributor appears in `displaces` with
   `kind: 'field-merge'`.
@@ -578,7 +580,7 @@ export interface Diagnostic {
    * What put the rule data behind this finding into the run.
    *
    * Required and not defaulted, on the `reviewerKind` principle
-   * (`src/fixture-tools/annotation-schema.ts`, arriving with #59): "record what produced a record, on the
+   * (the `reviewerKind` field `src/fixture-tools/annotation-schema.ts` gains with #59): "record what produced a record, on the
    * record". An optional field makes "this finding has no pack origin" and "we forgot to set it"
    * the same value, and the second is the one that laundered authority.
    *
@@ -704,7 +706,7 @@ All three are single-pack scalars and all three become false under layering. Rep
 `retractions` appears once at the top level alongside `conformance`, since it is a stack property,
 not a per-file one.
 
-The top-level `conformance` block (`main.ts:218-220`) keeps `disclaimer` verbatim and takes
+The top-level `conformance` block (`main.ts:218-223`) keeps `disclaimer` verbatim and takes
 `claim`/`packAuthority` from the composed stack rather than `results[0]`.
 
 **Separately**: `main.ts:266` prints, unconditionally,

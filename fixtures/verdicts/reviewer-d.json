@@ -1,5 +1,6 @@
 {
   "reviewer": "reviewer-d",
+  "reviewerKind": "agent",
   "verdicts": {
     "sqlite-vacuum-space-reclaim": [
       {

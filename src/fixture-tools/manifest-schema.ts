@@ -15,7 +15,7 @@ export const licenceEvidenceSchema = z.object({
   quote: z.string().min(10),
   /** How the evidence was obtained. */
   method: z.enum(['licence-page', 'repository-licence-file', 'page-footer', 'statute']),
-});
+}).strict();
 
 export const fixtureCategorySchema = z.enum([
   'installation',
@@ -87,10 +87,12 @@ export const fixtureEntrySchema = z.object({
   split: z.enum(['dev', 'heldout']),
   /** SHA-256 of the original fixture file as committed, lower-case hex. */
   originalSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  /** SHA-256 of the rewritten fixture file as committed, lower-case hex. */
+  compliantSha256: z.string().regex(/^[0-9a-f]{64}$/),
   /** Key in `provenance.lock.json` proving the upstream fetch. */
   provenanceKey: z.string().min(1),
   notes: z.string().optional(),
-});
+}).strict();
 
 export const fixtureManifestSchema = z.object({
   $schema: z.string().optional(),
@@ -98,7 +100,7 @@ export const fixtureManifestSchema = z.object({
   /** Statement of why every fixture may be redistributed here. */
   licenceStatement: z.string().min(40),
   fixtures: z.array(fixtureEntrySchema).min(1),
-});
+}).strict();
 
 export const provenanceRecordSchema = z.object({
   url: z.url(),
@@ -107,12 +109,12 @@ export const provenanceRecordSchema = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   bytes: z.number().int().nonnegative(),
   contentType: z.string().optional(),
-});
+}).strict();
 
 export const provenanceLockSchema = z.object({
   generatedAt: z.string().min(4),
   records: z.record(z.string(), provenanceRecordSchema),
-});
+}).strict();
 
 export type FixtureEntry = z.output<typeof fixtureEntrySchema>;
 export type FixtureManifest = z.output<typeof fixtureManifestSchema>;

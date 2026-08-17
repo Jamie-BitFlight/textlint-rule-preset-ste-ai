@@ -158,7 +158,8 @@ Conflating them is easy and the distinction matters, so state it first:
 each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
 produced any of these 105 records. Every one carries `reviewerKind`, so that is answerable from the
 data rather than from this paragraph; the field is required and undefaulted precisely so a record can
-never omit it. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run produced a verdict,
+never omit it, and duplicate keys are refused so that the answer a reader gets from the bytes is the
+answer every consumer gets from the parse. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run produced a verdict,
 never a person.
 
 **`changes` — the 70 rewrite records** behind the 32 accepted / 36 disputed / 2 deferred figures in
@@ -200,9 +201,18 @@ and quietly changed which passages the semantic evaluators are scored against.
 
 Two smaller things follow from hashing parsed values rather than bytes. Duplicate JSON keys make the
 file on disk and the value every check sees disagree — `JSON.parse` keeps the last and says nothing —
-so annotations are read through `scripts/lib/parse-json-strict.mjs`, which refuses them. Bytes are
-not hashed directly because the repository sets no `.gitattributes` and a CRLF checkout would then
-fail for everyone on Windows.
+so every JSON file under `fixtures/` is read through `scripts/lib/parse-json-strict.mjs`, which
+refuses them. That scan covers the whole tree rather than the annotations alone, and the reason is
+worth recording: a revision that guarded only the annotations argued the rest was defence in depth,
+and a review disproved it by moving the identical forgery one directory over. `fixtures/verdicts/` is
+what the adjudications are _derived from_, so a duplicated `reviewer` pair there flows the last value
+into every record while the committed annotation and its digest stay byte-identical — the file reads
+as human-audited and `agent=175` still matches. The same trick on `manifest.json` makes the manifest
+document a share-alike licence while the validator reads the permissive duplicate, walking through
+the gate that exists to refuse copyleft.
+
+Bytes are not hashed directly, which would also catch that, because the repository sets no
+`.gitattributes` and a CRLF checkout would then fail for everyone on Windows.
 
 All of these numbers and digests are expected to change when the corpus does; the point is that
 changing them is an edit somebody makes on purpose, in the same commit as the edit that caused it.

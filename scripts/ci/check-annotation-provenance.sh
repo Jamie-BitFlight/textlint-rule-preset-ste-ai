@@ -44,9 +44,10 @@
 # keys no check reads at all (`notes`, `original`, `compliant`) rather than leaving them to be
 # noticed one at a time.
 #
-# Every declaration below is overridable from the environment, and `ANNOTATIONS_DIR` redirects the
-# corpus, so `test/e2e/check-annotation-provenance.test.ts` can point the script at a synthetic
-# corpus and assert what it refuses. CI invokes it with none of those set and gets the values here.
+# Every declaration below is overridable from the environment, and `ANNOTATIONS_DIR` / `FIXTURES_DIR`
+# redirect the corpus, so `test/e2e/check-annotation-provenance.test.ts` can point the script at a
+# synthetic corpus and assert what it refuses. CI invokes it with none of those set and gets the
+# values here — checked: no workflow `env:`, no `.env`, and no other script exports these names.
 # That indirection exists because a review deleted every check in this file one at a time and the
 # project stayed green each time: nothing tested the gate that tests the corpus.
 #
@@ -91,7 +92,7 @@ zephyr-dependency-table=reviewer-b+rewriter-b|fb1f6d85d91b22f46089aaedf4218580e9
 
 node --input-type=module -e '
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseJsonStrict } from "./scripts/lib/parse-json-strict.mjs";
 
@@ -117,18 +118,32 @@ const byKind = new Map();
 const perFixture = new Map();
 const bump = (map, k) => map.set(k, (map.get(k) ?? 0) + 1);
 
-for (const file of readdirSync(dir).toSorted()) {
-  // A duplicate key arrives here as a thrown error. Report it the way every other failure in this
-  // script is reported, rather than as a stack trace that buries which file is at fault.
-  let annotation;
-  try {
-    annotation = parseJsonStrict(readFileSync(join(dir, file), "utf8"), file);
-  } catch (error) {
-    // The message already names the file, since parseJsonStrict was given it as the label.
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-    continue;
+// Every committed fixture JSON, not just the annotations. A previous revision guarded the
+// annotations alone and argued the rest was defence in depth; a review disproved that by moving the
+// identical forgery one directory over. `fixtures/verdicts/` is where the adjudications are
+// *derived from*, so a duplicated `reviewer`/`reviewerKind` there flows the last value into every
+// record while the committed annotation and its digest stay byte-identical — the file reads as
+// human-audited and `agent=175` still matches. The same trick on `fixtures/manifest.json` makes the
+// manifest document a share-alike licence while `validate.ts` reads the permissive duplicate,
+// walking straight through the gate that exists to refuse copyleft. Scanning the whole tree also
+// covers files added later without anyone remembering this.
+const fixturesDir = process.env.FIXTURES_DIR ?? "fixtures";
+if (existsSync(fixturesDir)) {
+  for (const entry of readdirSync(fixturesDir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const path = join(entry.parentPath ?? fixturesDir, entry.name);
+    try {
+      parseJsonStrict(readFileSync(path, "utf8"), path);
+    } catch (error) {
+      // Reported the way every other failure here is, rather than as a stack trace.
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
   }
+}
+
+for (const file of readdirSync(dir).toSorted()) {
+  const annotation = JSON.parse(readFileSync(join(dir, file), "utf8"));
   for (const change of annotation.changes) {
     changes += 1;
     bump(byChangeReviewer, change.reviewer);

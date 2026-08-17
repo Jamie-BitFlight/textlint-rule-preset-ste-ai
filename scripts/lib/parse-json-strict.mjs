@@ -41,6 +41,12 @@ function readString(text, start) {
  * Throw if any object in `text` names the same key twice. A string is a key when the container it
  * sits in is an object and the next non-space character is a colon; every `{` gets its own set, so
  * repeating a key in a *sibling* object is fine and repeating it in the same one is not.
+ *
+ * The `isObject` half of that test is unreachable when the caller is `parseJsonStrict`, which runs
+ * `JSON.parse` first: a string sitting directly inside an array can never be followed by a colon in
+ * valid JSON — `{"a":["x": 1]}` is a syntax error. A review flagged that no test pins it, and none
+ * can without invalid input, so it is recorded here rather than covered by a case that would only
+ * appear to test something. It is kept for any caller that scans text `JSON.parse` has not seen.
  */
 export function assertNoDuplicateKeys(text, label) {
   const stack = [];

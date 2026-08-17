@@ -29,7 +29,8 @@ const change = {
   originalSpans: [{ start: 0, end: 7 }],
   expectedDiagnostics: [],
   reason: 'Approved alternative, no change of meaning.',
-  semanticInvariants: ['the utility being referred to'],
+  // Two entries, so a case below can reverse them and change nothing but the order.
+  semanticInvariants: ['the utility being referred to', 'the reason it is referred to'],
   unresolved: [],
   status: 'accepted',
   reviewer: 'rewriter-a',
@@ -73,6 +74,8 @@ const roots: string[] = [];
 
 interface Corpus {
   readonly dir: string;
+  /** The tree the duplicate-key scan walks. Holds `annotations/`, and `verdicts/` where a case adds it. */
+  readonly root: string;
   readonly env: Record<string, string>;
 }
 
@@ -96,8 +99,10 @@ function makeCorpus(overrides: Partial<Record<string, string>> = {}, raw?: strin
 
   return {
     dir,
+    root,
     env: {
       ANNOTATIONS_DIR: dir,
+      FIXTURES_DIR: root,
       EXPECTED_ADJUDICATIONS: '1',
       EXPECTED_ADJUDICATION_REVIEWERS: 'reviewer-a=1',
       EXPECTED_CHANGES: '1',
@@ -268,5 +273,109 @@ describe('check-annotation-provenance', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('adjudication reviewers: expected reviewer-b=1');
+  });
+
+  it('refuses a reordered array, because array order is part of the digest', () => {
+    const corpus = makeCorpus();
+    // A list of strings, deliberately. Reordering an array of *objects* would not catch a
+    // canonicaliser that sorts arrays as well as keys: sorting objects compares them as
+    // "[object Object]", so it is stable and changes nothing. Strings reorder for real.
+    tamper(corpus, (annotation) => {
+      annotation['changes'] = [
+        { ...change, semanticInvariants: [...change.semanticInvariants].toReversed() },
+      ];
+    });
+
+    const result = run(corpus);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('demo: annotation content changed.');
+  });
+
+  /**
+   * The duplicate-key scan covers every JSON file under the fixtures tree, not just the annotations.
+   * A previous revision guarded the annotations alone and argued the rest was defence in depth; the
+   * two cases below are the forgeries that disproved it, reduced to their mechanism.
+   */
+  describe('the duplicate-key scan over the whole fixtures tree', () => {
+    it('refuses a duplicate in a verdict file, which is what annotations are derived from', () => {
+      const corpus = makeCorpus();
+      mkdirSync(join(corpus.root, 'verdicts'));
+      writeFileSync(
+        join(corpus.root, 'verdicts', 'reviewer-a.json'),
+        [
+          '{',
+          '  "reviewer": "dr-jane-doe-cert-ste-auditor",',
+          '  "reviewerKind": "human",',
+          '  "reviewer": "reviewer-a",',
+          '  "reviewerKind": "agent",',
+          '  "verdicts": {}',
+          '}',
+          '',
+        ].join('\n'),
+      );
+
+      const result = run(corpus);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('duplicate key "reviewer"');
+    });
+
+    it('refuses a duplicate in any other fixture JSON, such as the manifest', () => {
+      const corpus = makeCorpus();
+      writeFileSync(
+        join(corpus.root, 'manifest.json'),
+        [
+          '{',
+          '  "fixtures": [',
+          '    {',
+          '      "licence": "GPL-3.0-or-later (share-alike)",',
+          '      "licence": "Public Domain"',
+          '    }',
+          '  ]',
+          '}',
+          '',
+        ].join('\n'),
+      );
+
+      const result = run(corpus);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('duplicate key "licence"');
+    });
+
+    it('fails the run on a malformed file even when nothing declares it', () => {
+      const corpus = makeCorpus();
+      writeFileSync(join(corpus.root, 'stray.json'), '{ not json');
+
+      const result = run(corpus);
+
+      // The point is the exit code: a parse failure on an undeclared file reaches no other check,
+      // so without its own `process.exitCode = 1` the run would report success.
+      expect(result.status).toBe(1);
+    });
+
+    it('registers a key written with space before its colon, so a duplicate there is caught', () => {
+      const corpus = makeCorpus();
+      writeFileSync(
+        join(corpus.root, 'spaced.json'),
+        '{\n  "reviewer" : "first",\n  "reviewer" : "second"\n}\n',
+      );
+
+      const result = run(corpus);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('duplicate key "reviewer"');
+    });
+
+    it('does not mistake a repeated string inside an array for a repeated key', () => {
+      const corpus = makeCorpus();
+      writeFileSync(
+        join(corpus.root, 'array.json'),
+        '{\n  "notes": ["reviewer", "reviewer"],\n  "pairs": [{ "a": 1 }, { "a": 2 }]\n}\n',
+      );
+
+      expect(run(corpus).status).toBe(0);
+    });
   });
 });

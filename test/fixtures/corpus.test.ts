@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
@@ -47,6 +48,47 @@ describe('fixture provenance', () => {
     const report = validateFixtureCorpus(FIXTURES);
     expect(report.failures).toEqual([]);
     expect(report.ok).toBe(true);
+  });
+
+
+  it('refuses a rewritten fixture whose committed content changed', () => {
+    const copy = mkdtempSync(join(tmpdir(), 'ste-ai-fixtures-'));
+    try {
+      cpSync(FIXTURES, copy, { recursive: true });
+      const fixture = manifest.fixtures[0];
+      if (fixture === undefined) throw new Error('fixture corpus is empty');
+      const path = join(copy, fixture.compliantPath);
+      writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
+
+      const report = validateFixtureCorpus(copy);
+
+      expect(report.ok).toBe(false);
+      expect(report.failures).toContainEqual(
+        expect.stringContaining(`${fixture.id}": compliantSha256 mismatch`),
+      );
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unknown fields in fixture and annotation records', () => {
+    const manifestInput = JSON.parse(readFileSync(join(FIXTURES, 'manifest.json'), 'utf8'));
+    const annotationInput = JSON.parse(
+      readFileSync(join(FIXTURES, manifest.fixtures[0]!.annotationPath), 'utf8'),
+    );
+
+    expect(fixtureManifestSchema.safeParse({ ...manifestInput, unrecognised: true }).success).toBe(
+      false,
+    );
+    expect(annotationSchema.safeParse({ ...annotationInput, unrecognised: true }).success).toBe(
+      false,
+    );
+    expect(
+      annotationSchema.safeParse({
+        ...annotationInput,
+        changes: [{ ...annotationInput.changes[0], unrecognised: true }],
+      }).success,
+    ).toBe(false);
   });
 
   it('every fixture carries a licence quote long enough to be evidence', () => {

@@ -69,6 +69,224 @@ function containsMask(text: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Operator-supplied pattern screening
+// ---------------------------------------------------------------------------
+
+/**
+ * Longest accepted `extraPatterns` source, in characters.
+ *
+ * A protected pattern describes the shape of an identifier — a part number, a document code — so
+ * 200 characters is far more than any such shape needs. The bound exists so that a pathological
+ * source cannot reach the engine at all, independently of the shape checks below.
+ */
+export const MAX_PROTECTED_PATTERN_LENGTH = 200;
+
+/** Why a `extraPatterns` entry was refused. Reported verbatim in the run notice's `detail`. */
+export type ProtectedPatternRejectionReason =
+  /** `new RegExp(source, 'gu')` threw: the source is not a valid regular expression. */
+  | 'invalid-syntax'
+  /** The source is longer than {@link MAX_PROTECTED_PATTERN_LENGTH}. */
+  | 'source-too-long'
+  /** A repetition quantifier applied to a group whose body already repeats, e.g. `(\d+)+`. */
+  | 'nested-quantifier'
+  /** A repetition quantifier applied to a group containing an alternation, e.g. `(a|ab)*`. */
+  | 'quantified-alternation';
+
+export interface ProtectedPatternRejection {
+  /** The offending source, exactly as configured. */
+  readonly source: string;
+  readonly reason: ProtectedPatternRejectionReason;
+  /** One sentence naming the defect, suitable for a user-facing message. */
+  readonly explanation: string;
+}
+
+export interface ScreenedProtectedPatterns {
+  /** Sources that compiled and passed the complexity screen, in configured order. */
+  readonly accepted: readonly string[];
+  /** Sources that were refused, in configured order. Never silently dropped by the caller. */
+  readonly rejected: readonly ProtectedPatternRejection[];
+}
+
+interface QuantifierAt {
+  /** Largest number of repetitions the quantifier permits; `Infinity` for `*`, `+` and `{n,}`. */
+  readonly max: number;
+  /** Characters consumed by the quantifier, so the scanner can step over it. */
+  readonly length: number;
+}
+
+/**
+ * Read a quantifier at `index`, or `undefined` when no quantifier starts there.
+ *
+ * `?` is a quantifier but not a *repetition*: `(\d+)?` cannot backtrack more than `\d+` alone, so
+ * only quantifiers whose maximum exceeds one are of interest here. A lazy or possessive modifier
+ * (`+?`, `*+`) changes match semantics, not the size of the search space, and is counted the same.
+ */
+function quantifierAt(source: string, index: number): QuantifierAt | undefined {
+  const ch = source[index];
+  if (ch === '*' || ch === '+') return { max: Number.POSITIVE_INFINITY, length: 1 };
+  if (ch === '?') return { max: 1, length: 1 };
+  if (ch !== '{') return undefined;
+  const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(index));
+  if (m === null) return undefined;
+  const min = Number(m[1]);
+  const max = m[2] === undefined ? min : m[3] === '' ? Number.POSITIVE_INFINITY : Number(m[3]);
+  return { max, length: m[0].length };
+}
+
+/** One group's accumulated shape, used to judge the quantifier that may follow its `)`. */
+interface GroupShape {
+  /** A repetition quantifier occurs somewhere inside this group, at any depth. */
+  repeats: boolean;
+  /** An alternation occurs somewhere inside this group, at any depth. */
+  alternates: boolean;
+}
+
+/**
+ * Refuse the regular-expression shapes whose match time is not bounded by document length.
+ *
+ * This is static inspection, chosen over a time bound (JavaScript regular expressions cannot be
+ * interrupted once `matchAll` has entered the engine, so a "bound" would only be observed after
+ * the hang it was meant to prevent) and over a linear-time engine (a second engine for one config
+ * field). It costs a single scan of the source and no match time at all.
+ *
+ * Two shapes are refused: a repetition applied to a group that already repeats — `(\d+)+`,
+ * `(a*)*`, `(?:x+|y)+`, the classic exponential forms — and a repetition applied to a group
+ * containing an alternation — `(a|ab)*` — because deciding whether the branches are ambiguous is
+ * exactly the analysis this cheap screen does not do.
+ *
+ * The screen is deliberately syntactic, and therefore both over- and under-approximates. It refuses
+ * `(?:foo|bar)+`, which is harmless in practice, and it does not refuse shapes whose cost comes
+ * from two adjacent repetitions rather than nesting (`\d+\d+x`, polynomial rather than exponential).
+ * `docs/configuration.md` documents both, together with the workaround: rewrite the repeated group
+ * so its body neither repeats nor alternates.
+ */
+function complexityRejection(source: string): ProtectedPatternRejection | undefined {
+  // Index 0 is the whole pattern, which nothing can quantify; each `(` pushes a frame.
+  const stack: GroupShape[] = [{ repeats: false, alternates: false }];
+  let i = 0;
+
+  while (i < source.length) {
+    const ch = source[i];
+    const frame = stack[stack.length - 1];
+    if (frame === undefined) break; // Unbalanced `)`: `new RegExp` has already rejected it.
+
+    if (ch === '\\') {
+      // An escape sequence is one atom; skipping both characters keeps `\(`, `\[`, `\|` and `\*`
+      // from being read as structure.
+      i += 2;
+      continue;
+    }
+    if (ch === '[') {
+      i += 1;
+      while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
+      i += 1;
+      continue;
+    }
+    if (ch === '|') {
+      frame.alternates = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '(') {
+      stack.push({ repeats: false, alternates: false });
+      i += 1;
+      continue;
+    }
+    if (ch === ')') {
+      const closed = stack.pop();
+      const parent = stack[stack.length - 1];
+      if (closed === undefined || parent === undefined) break;
+      const quantifier = quantifierAt(source, i + 1);
+      if (quantifier !== undefined && quantifier.max > 1) {
+        if (closed.repeats) {
+          return {
+            source,
+            reason: 'nested-quantifier',
+            explanation:
+              'a repetition quantifier is applied to a group whose body already repeats, so match ' +
+              'time can grow exponentially with document length',
+          };
+        }
+        if (closed.alternates) {
+          return {
+            source,
+            reason: 'quantified-alternation',
+            explanation:
+              'a repetition quantifier is applied to a group containing an alternation, whose ' +
+              'branches this screen cannot prove unambiguous',
+          };
+        }
+        parent.repeats = true;
+      }
+      // A group's shape is part of its parent's shape: `((\d+))+` must read as nested repetition.
+      parent.repeats = parent.repeats || closed.repeats;
+      parent.alternates = parent.alternates || closed.alternates;
+      i += 1 + (quantifier?.length ?? 0);
+      continue;
+    }
+
+    const quantifier = quantifierAt(source, i);
+    if (quantifier !== undefined) {
+      if (quantifier.max > 1) frame.repeats = true;
+      i += quantifier.length;
+      continue;
+    }
+    i += 1;
+  }
+
+  return undefined;
+}
+
+/**
+ * Split configured `extraPatterns` into the ones that may run and the ones that must be reported.
+ *
+ * Both defects this addresses are invisible by construction, which is why nothing here returns a
+ * bare filtered list: a pattern that does not run means the literals it named are matched as
+ * ordinary prose by every vocabulary rule *and* are no longer masked out of the passages sent to
+ * the semantic service. The caller owes the operator a notice for every entry in `rejected`;
+ * {@link ../analysis/analyse.ts} emits `invalid-protected-pattern` at `error` level.
+ */
+export function screenExtraPatterns(sources: readonly string[]): ScreenedProtectedPatterns {
+  const accepted: string[] = [];
+  const rejected: ProtectedPatternRejection[] = [];
+
+  for (const source of sources) {
+    if (source.length > MAX_PROTECTED_PATTERN_LENGTH) {
+      rejected.push({
+        source,
+        reason: 'source-too-long',
+        explanation:
+          `the source is ${String(source.length)} characters, over the ` +
+          `${String(MAX_PROTECTED_PATTERN_LENGTH)}-character limit for a protected pattern`,
+      });
+      continue;
+    }
+    try {
+      // Compiling is the check. The compiled instance is discarded because each consumer needs its
+      // own — a shared global regex carries `lastIndex` between documents.
+      void new RegExp(source, 'gu');
+    } catch (error) {
+      rejected.push({
+        source,
+        reason: 'invalid-syntax',
+        explanation: `it is not a valid regular expression (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      });
+      continue;
+    }
+    const complexity = complexityRejection(source);
+    if (complexity !== undefined) {
+      rejected.push(complexity);
+      continue;
+    }
+    accepted.push(source);
+  }
+
+  return { accepted, rejected };
+}
+
+// ---------------------------------------------------------------------------
 // Individual passes, in application order.
 // ---------------------------------------------------------------------------
 
@@ -558,19 +776,24 @@ const approvedTermPass: Pass = {
   },
 };
 
+/**
+ * Operator-supplied patterns.
+ *
+ * `find` returns `SourceRange[]` and has no channel for a notice, so it cannot be the place a
+ * refusal is *reported* — {@link screenExtraPatterns} is called once per run by the analysis entry
+ * point, which does have one. It is called again here so that the decision about which patterns may
+ * reach the engine lives in exactly one function: `extractProtectedRegions` is public and is called
+ * with unscreened sources by the evaluation harness (`src/evaluation/evaluate.ts`) and by tests.
+ * Re-screening an already-accepted list is idempotent and costs one scan of each source.
+ */
 const extraPatternPass: Pass = {
   kind: 'identifier',
   opaque: true,
   note: 'User-supplied protected pattern.',
   find: (masked, _raw, options) => {
     const out: SourceRange[] = [];
-    for (const source of options.extraPatterns) {
-      let re: RegExp;
-      try {
-        re = new RegExp(source, 'gu');
-      } catch {
-        continue;
-      }
+    for (const source of screenExtraPatterns(options.extraPatterns).accepted) {
+      const re = new RegExp(source, 'gu');
       for (const m of masked.matchAll(re)) {
         if (m[0].length === 0) continue;
         out.push({ start: m.index, end: m.index + m[0].length });

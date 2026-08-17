@@ -3,7 +3,9 @@ import { analyseDocument, STRUCTURAL_MARKER_KINDS } from '../core/document.js';
 import {
   defaultProtectedRegionOptions,
   extractProtectedRegions,
+  type ProtectedPatternRejection,
   type ProtectedRegionOptions,
+  screenExtraPatterns,
 } from '../core/protected-regions.js';
 import { runDeterministicRules } from '../core/runner.js';
 import { defaultStructureOptions, detectMode, type StructureOptions } from '../core/structure.js';
@@ -239,6 +241,8 @@ function prepareRun(
   readonly document: AnalysedDocument;
   readonly run: ReturnType<typeof runDeterministicRules>;
   readonly pass: CandidateSuppressionPass;
+  /** One per refused `extraProtectedPatterns` entry. Empty for a configuration with none. */
+  readonly patternNotices: readonly RunNotice[];
 } {
   const config = resolveConfig(options.config ?? {});
   const pack = resolveRulePack(config.rulePack, options.baseDir ?? process.cwd());
@@ -251,9 +255,14 @@ function prepareRun(
     ...(options.path === undefined ? {} : { path: options.path }),
   };
   const structureOptions = structureOptionsFor(format, config);
+  // Screened once, here, because this is the outermost place a refusal can still be *reported*:
+  // `Pass.find` returns ranges only. Only the accepted sources are threaded onwards, so the two
+  // extractions below (this call's document and `readerBlocksFor`'s mode recomputation) agree on
+  // exactly which patterns ran.
+  const screenedPatterns = screenExtraPatterns(config.extraProtectedPatterns);
   const protectedRegionOptions: Partial<ProtectedRegionOptions> = {
     approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
-    extraPatterns: config.extraProtectedPatterns,
+    extraPatterns: screenedPatterns.accepted,
   };
   const document = analyseDocument(sourceDoc, {
     protectedRegions: protectedRegionOptions,
@@ -273,7 +282,37 @@ function prepareRun(
 
   const pass = suppressCandidates(document, run.candidates, config);
 
-  return { config, pack, document, run, pass };
+  return {
+    config,
+    pack,
+    document,
+    run,
+    pass,
+    patternNotices: screenedPatterns.rejected.map(protectedPatternNotice),
+  };
+}
+
+/**
+ * Report a refused `extraProtectedPatterns` entry.
+ *
+ * `error`, not `warning`: the field is how an operator declares that a project literal is not
+ * prose, and a refused entry silently withdraws two guarantees at once — the literals it named are
+ * matched as ordinary words by every vocabulary rule, and they are no longer masked out of the
+ * passages sent to the semantic service (`test/integration/redaction.test.ts` asserts that
+ * everything transmitted is built from masked text). One code covers both defects, with the
+ * specific ground in `detail.reason`, so a consumer can distinguish a typo from a refused shape
+ * without parsing the message.
+ */
+function protectedPatternNotice(rejection: ProtectedPatternRejection): RunNotice {
+  return {
+    code: 'invalid-protected-pattern',
+    level: 'error',
+    message:
+      `extraProtectedPatterns entry ${JSON.stringify(rejection.source)} was rejected because ` +
+      `${rejection.explanation}. It protected nothing: text it would have matched is analysed as ` +
+      'ordinary prose and is not withheld from the semantic service.',
+    detail: { pattern: rejection.source, reason: rejection.reason },
+  };
 }
 
 /** Deterministic-only analysis. Never performs I/O beyond reading the rule pack. */
@@ -281,7 +320,7 @@ export function analyseTextDeterministic(
   text: string,
   options: AnalyseTextOptions = {},
 ): AnalysisResult {
-  const { config, pack, document, run, pass } = prepareRun(text, options);
+  const { config, pack, document, run, pass, patternNotices } = prepareRun(text, options);
 
   // Candidates are passages no deterministic rule could decide. Returning only `run.diagnostics`
   // discarded them, so a document whose only findings needed adjudication reported clean — the
@@ -311,7 +350,13 @@ export function analyseTextDeterministic(
         a.range.end - b.range.end ||
         a.ruleId.localeCompare(b.ruleId),
     ),
-    notices: [...run.notices, ...undecided.notices, ...suppressed.notices, ...resolved.notices],
+    notices: [
+      ...patternNotices,
+      ...run.notices,
+      ...undecided.notices,
+      ...suppressed.notices,
+      ...resolved.notices,
+    ],
     traces: [],
     pack,
     config,
@@ -581,7 +626,7 @@ export async function analyseText(
   text: string,
   options: AnalyseTextOptions = {},
 ): Promise<AnalysisResult> {
-  const { config, pack, document, run, pass } = prepareRun(text, options);
+  const { config, pack, document, run, pass, patternNotices } = prepareRun(text, options);
 
   // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the
   // semantic fixes anyway, and a withheld finding must not veto a surviving finding's fix.
@@ -631,7 +676,13 @@ export async function analyseText(
     candidates: pass.candidates,
     suppressions: suppressed.suppressions,
     diagnostics,
-    notices: [...run.notices, ...semantic.notices, ...suppressed.notices, ...merged.notices],
+    notices: [
+      ...patternNotices,
+      ...run.notices,
+      ...semantic.notices,
+      ...suppressed.notices,
+      ...merged.notices,
+    ],
     traces: semantic.traces,
     pack,
     config,

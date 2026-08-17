@@ -81,7 +81,8 @@ They are read once from a shared file, resolved in this order (first hit wins):
   // never rewritten, and excluded from noun-cluster and abbreviation heuristics.
   "approvedTerms": ["Acme WidgetPro", "Node.js", "PostgreSQL", "VACUUM", "PRAGMA"],
 
-  // Extra regular expressions protected as identifiers.
+  // Extra regular expressions protected as identifiers. Screened before use; see
+  // "Protected patterns are screened before they run" below.
   "extraProtectedPatterns": ["PN\\d{4,}", "DOC-[A-Z]{2}-\\d+"],
 
   // Verbs that mark a passage as an instruction, added to the built-in list.
@@ -146,6 +147,34 @@ They are read once from a shared file, resolved in this order (first hit wins):
   },
 }
 ```
+
+### Protected patterns are screened before they run
+
+Every `extraProtectedPatterns` entry is checked once per run, before any of them is matched against
+a document. An entry that fails the check does not run, and each failure produces an
+`invalid-protected-pattern` run notice at `error` level — reported in `--json`, in the CLI's text
+output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the document start.
+`detail.reason` names the specific ground:
+
+| `detail.reason`          | Refused because                                               | Example      |
+| ------------------------ | ------------------------------------------------------------- | ------------ |
+| `invalid-syntax`         | `new RegExp(source, 'gu')` throws                             | `([unclosed` |
+| `source-too-long`        | the source exceeds 200 characters                             | —            |
+| `nested-quantifier`      | a repetition is applied to a group whose body already repeats | `(\d+)+`     |
+| `quantified-alternation` | a repetition is applied to a group containing an alternation  | `(a\|ab)*`   |
+
+A refused entry is never silently ignored, because the consequence is not local: the literals it
+named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
+of the passages sent to the semantic service. Silence there would look exactly like a clean run.
+
+The last two grounds bound match time. A repetition nested inside a repetition can take time
+exponential in document length, and a JavaScript regular expression cannot be interrupted once
+matching has begun, so the shape is refused up front rather than timed. The check is syntactic and
+therefore blunt in both directions: it refuses `(?:foo|bar)+`, which is harmless in practice, and it
+does not refuse a cost that comes from adjacent rather than nested repetitions (`\d+\d+x`, which is
+polynomial, not exponential). Rewrite a refused pattern so the repeated group's body neither repeats
+nor alternates — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the
+shape without the outer repetition.
 
 ### Option precedence
 

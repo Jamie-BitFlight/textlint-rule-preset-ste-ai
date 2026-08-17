@@ -98,11 +98,7 @@ function makeCorpus(overrides: Partial<Record<string, string>> = {}, raw?: strin
   writeFileSync(join(dir, 'demo.json'), raw ?? `${JSON.stringify(annotation, null, 2)}\n`);
   writeFileSync(
     join(root, 'manifest.json'),
-    `${JSON.stringify(
-      { fixtures: [{ id: 'demo', split: 'dev' }] },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify({ fixtures: [{ id: 'demo', split: 'dev' }] }, null, 2)}\n`,
   );
 
   return {
@@ -288,11 +284,7 @@ describe('check-annotation-provenance', () => {
     const corpus = makeCorpus();
     writeFileSync(
       join(corpus.root, 'manifest.json'),
-      `${JSON.stringify(
-        { fixtures: [{ id: 'demo', split: 'heldout' }] },
-        null,
-        2,
-      )}\n`,
+      `${JSON.stringify({ fixtures: [{ id: 'demo', split: 'heldout' }] }, null, 2)}\n`,
     );
 
     const result = run(corpus);

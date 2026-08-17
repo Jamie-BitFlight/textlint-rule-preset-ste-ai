@@ -159,8 +159,8 @@ literals and you have thought about what that transmits.
 Then check the corpus-wide invariants still hold:
 
 ```bash
-npx vitest run test/fixtures      # no diagnostic lands in a code fence; no fix lands in an admonition
-npx vitest run test/architecture  # boundaries intact
+vp test test/fixtures      # no diagnostic lands in a code fence; no fix lands in an admonition
+vp test test/architecture  # boundaries intact
 ```
 
 If your rule fires on the `hard-negative` fixtures, that is a signal to investigate before shipping —

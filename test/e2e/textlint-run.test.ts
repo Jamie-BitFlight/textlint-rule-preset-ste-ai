@@ -2,7 +2,7 @@ import { TextlintKernel, type TextlintPluginCreator } from '@textlint/kernel';
 import markdownPluginModule from '@textlint/textlint-plugin-markdown';
 import textPluginModule from '@textlint/textlint-plugin-text';
 import type { TextlintRuleModule } from '@textlint/types';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vite-plus/test';
 
 /**
  * Whether `value` is really `TextlintPluginCreator`-shaped: an object with a constructable

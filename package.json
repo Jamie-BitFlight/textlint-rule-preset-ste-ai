@@ -2,12 +2,32 @@
   "name": "textlint-rule-preset-ste-ai",
   "version": "0.1.0",
   "description": "Auditable Simplified Technical English linter for textlint: deterministic rules plus an optional local llama.cpp semantic-adjudication subsystem. Not certified for, and does not claim, ASD-STE100 conformance.",
+  "keywords": [
+    "controlled-language",
+    "llama.cpp",
+    "simplified-technical-english",
+    "ste",
+    "technical-writing",
+    "textlint",
+    "textlintrule"
+  ],
   "license": "MIT",
   "author": "Jamie Nelson",
-  "type": "module",
-  "engines": {
-    "node": ">=24"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai.git"
   },
+  "bin": {
+    "ste-ai": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "prompts",
+    "docs/DISCLAIMER.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
   "main": "./dist/textlint/preset.js",
   "types": "./dist/textlint/preset.d.ts",
   "exports": {
@@ -53,51 +73,8 @@
       "default": "./dist/evaluation/index.js"
     }
   },
-  "bin": {
-    "ste-ai": "./dist/cli/main.js"
-  },
-  "files": [
-    "dist",
-    "prompts",
-    "docs/DISCLAIMER.md",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist .tsbuildinfo coverage",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "oxlint && prettier --check .",
-    "format": "prettier --write .",
-    "test": "vitest run",
-    "test:unit": "vitest run test/unit",
-    "test:integration": "vitest run test/integration",
-    "test:fixtures": "vitest run test/fixtures",
-    "test:e2e": "npm run build && vitest run test/e2e",
-    "test:coverage": "vitest run --coverage",
-    "fixtures:fetch": "node scripts/fetch-sources.mjs",
-    "fixtures:validate": "npm run build && node scripts/validate-fixtures.mjs",
-    "eval:semantic": "npm run build && node scripts/evaluate-semantic.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run fixtures:validate",
-    "prepublishOnly": "npm run clean && npm run build",
-    "build:clean": "npm run clean && npm run build"
-  },
-  "keywords": [
-    "textlint",
-    "textlintrule",
-    "simplified-technical-english",
-    "ste",
-    "controlled-language",
-    "technical-writing",
-    "llama.cpp"
-  ],
-  "peerDependencies": {
-    "textlint": ">=13"
-  },
-  "peerDependenciesMeta": {
-    "textlint": {
-      "optional": true
-    }
+    "prepublishOnly": "vp pack"
   },
   "dependencies": {
     "@textlint/ast-node-types": "^15.8.0",
@@ -110,18 +87,38 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@textlint/kernel": "^15.8.0",
     "@textlint/textlint-plugin-markdown": "^15.8.0",
     "@textlint/textlint-plugin-text": "^15.8.0",
     "@textlint/types": "^15.8.0",
-    "@types/node": "^26.2.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "oxlint": "^1.77.0",
-    "oxlint-tsgolint": "^7.0.2001",
-    "prettier": "^3.9.6",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "semantic-release": "^25.0.9",
     "textlint": "^15.8.0",
     "textlint-tester": "^15.8.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
-  }
+    "typescript": "^5.9.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
+    "vite-plus": "0.2.9",
+    "vitest": "4.1.10"
+  },
+  "peerDependencies": {
+    "textlint": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "textlint": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@11.5.1"
 }

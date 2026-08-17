@@ -106,18 +106,10 @@ Then address the findings, the same as for a human or Codex review.
 Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScript checks, or rebuild
 `dist/` immediately before using it. Never run stale `dist/` output with plain `node`.
 
-**In a fresh worktree, run the repo's own binaries from `node_modules/.bin/`, not `npx`.** A worktree
-created by `git worktree add` or by `isolation: "worktree"` has no `node_modules`, so `npx <tool>`
-silently resolves some _other_ version — whatever it fetches or already has cached — rather than the
-pinned one. Do not assume that is the newest: measured here, `npx prettier --version` outside the
-project reports **3.8.1** while the project pins **3.9.6**, so the drift can go backwards.
-
-That is not a hypothetical. `npx prettier --write` in such a worktree reformatted two embedded
-TypeScript blocks the way its version wanted them, then `npx prettier --check` in the same worktree
-pronounced the tree clean; CI, running the pinned version, failed on exactly those two files. Either
-`npm ci` in the worktree first, or invoke the main checkout's binary by path. A tool that reports
-success against a version the project does not use has verified nothing — and the check that
-confirms it is clean is running the same wrong version, so it agrees.
+**Use the repository-pinned Vite+ toolchain, not standalone formatter, linter, compiler, or test
+commands.** Install it with `vp install --frozen-lockfile`, then use `vp check`, `vp test`, and
+`vp pack`. A fresh worktree has no `node_modules`; run `vp install` there or invoke the main
+checkout's pinned `vp` binary by path. Do not use `npx` to fetch an unrelated tool version.
 
 ## `send_later` (self-scheduled check-ins)
 

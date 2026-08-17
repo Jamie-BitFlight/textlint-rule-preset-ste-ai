@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
 import { z } from 'zod';
 import { analyseText, analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { LlamaCppClient } from '../../src/model-client/llama-client.js';

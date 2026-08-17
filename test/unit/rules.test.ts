@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { resolveConfig, type SteAiConfigInput } from '../../src/core/config.js';
 import { analyseDocument } from '../../src/core/document.js';
 import { runDeterministicRules } from '../../src/core/runner.js';

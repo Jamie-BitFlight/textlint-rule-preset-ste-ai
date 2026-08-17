@@ -14,7 +14,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 if [ ! -d dist ]; then
-  echo "dist/ is missing. Run 'npm run build' first." >&2
+  echo "dist/ is missing. Run 'vp pack' first." >&2
   exit 2
 fi
 
@@ -28,7 +28,7 @@ fi
 newest_source="$(find src -name '*.ts' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
 newest_build="$(find dist -name '*.js' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
 if [ -z "$newest_build" ] || [ "$newest_source" -nt "$newest_build" ]; then
-  echo "dist/ is stale: $newest_source is newer than the build. Run 'npm run build' first." >&2
+  echo "dist/ is stale: $newest_source is newer than the build. Run 'vp pack' first." >&2
   exit 2
 fi
 

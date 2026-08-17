@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { semanticConfigSchema } from '../../src/core/config.js';
 import type { CandidatePassage, SemanticEvaluatorId } from '../../src/core/types.js';
 import { buildEvaluatorRequest, evaluatorDefinitions } from '../../src/semantic/evaluators.js';

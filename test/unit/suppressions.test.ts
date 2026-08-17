@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { analyseDocument } from '../../src/core/document.js';
 import { applySuppressions, directiveFor, scanSuppressions } from '../../src/core/suppressions.js';
 import type {

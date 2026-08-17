@@ -1,12 +1,12 @@
 /**
- * `npm run eval:semantic` — opt-in semantic-evaluator measurement against a real llama.cpp server.
+ * `vp run eval:semantic` — opt-in semantic-evaluator measurement against a real llama.cpp server.
  *
  * This is NOT part of the default test suite: it needs a running model. The default suite proves the
  * integration path with a fake service instead.
  *
  * Usage:
- *   npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080 --model my-model
- *   npm run eval:semantic -- --split dev --json > eval-dev.json
+ *   vp run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080 --model my-model
+ *   vp run eval:semantic -- --split dev --json > eval-dev.json
  *
  * Split discipline: `dev` is for tuning prompts and thresholds; `heldout` is for reporting. The
  * default is `heldout` and mixing splits requires `--split all` explicitly.
@@ -34,7 +34,7 @@ function distImport(...segments) {
 // three early `process.exit(2)` guards were the outliers).
 async function main() {
   if (!existsSync(join(root, 'dist', 'evaluation', 'evaluate.js'))) {
-    console.error('dist/ is missing. Run "npm run build" first.');
+    console.error('dist/ is missing. Run "vp pack" first.');
     process.exitCode = 2;
     return;
   }

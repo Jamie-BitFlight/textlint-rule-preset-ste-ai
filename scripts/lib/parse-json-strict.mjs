@@ -7,7 +7,7 @@
  *     "reviewer": "rewriter-a",
  *     "reviewerKind": "agent",
  *
- * into a committed annotation. `prettier --check` called the file clean, every gate passed, the
+ * into a committed annotation. A formatter check called the file clean, every gate passed, the
  * content digest was unchanged — and the file reads to a person as though a named human auditor
  * signed off on it. Anything that hashes parsed values rather than bytes inherits this, so the
  * duplicate has to be refused at the point of reading.

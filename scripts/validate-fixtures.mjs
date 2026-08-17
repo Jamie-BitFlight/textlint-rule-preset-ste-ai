@@ -1,10 +1,10 @@
 /**
- * `npm run fixtures:validate`
+ * `vp run fixtures:validate`
  *
  * Thin entry point. All logic lives in `src/fixture-tools/validate.ts` so it is type-checked and
  * covered by `test/fixtures/corpus.test.ts`; this file only handles process concerns.
  *
- * Requires a build: run `npm run build` first, or use `npm run fixtures:validate` which does.
+ * Requires a build: run `vp pack` first, or use `vp run fixtures:validate` which does.
  */
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -29,7 +29,7 @@ async function main() {
   const built = join(root, 'dist', 'fixture-tools', 'validate.js');
 
   if (!existsSync(built)) {
-    console.error('dist/ is missing. Run "npm run build" first.');
+    console.error('dist/ is missing. Run "vp pack" first.');
     process.exitCode = 2;
     return;
   }

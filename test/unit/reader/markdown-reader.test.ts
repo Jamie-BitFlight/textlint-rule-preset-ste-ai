@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { readMarkdownUnitsSync } from '../../../src/reader/markdown-reader.js';
 import type { TextUnit } from '../../../src/reader/types.js';
 

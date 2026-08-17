@@ -1,0 +1,44 @@
+name: Publish package
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: voidzero-dev/setup-vp@313600b80b104eadebb9111787d37a2e83e014ca # v1.17.0
+        with:
+          node-version: 22
+          cache: false
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Confirm tag and package versions match
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/ci/assert-release-version.mjs "$RELEASE_TAG"
+
+      - name: Verify source
+        run: vp check && vp test
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+
+      - name: Publish package
+        # npm runs prepublishOnly, whose direct `vp pack` command produces the distributed files.
+        run: npm publish --access public --provenance

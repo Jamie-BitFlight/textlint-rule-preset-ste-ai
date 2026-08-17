@@ -56,6 +56,26 @@ export default defineConfig({
     semi: true,
     arrowParens: 'always',
   },
+  run: {
+    tasks: {
+      'fixtures:fetch': {
+        command: 'node scripts/fetch-sources.mjs',
+        cache: false,
+      },
+      'fixtures:validate': {
+        command: ['vp pack', 'node scripts/validate-fixtures.mjs'],
+        cache: false,
+      },
+      'eval:semantic': {
+        command: ['vp pack', 'node scripts/evaluate-semantic.mjs'],
+        cache: false,
+      },
+      verify: {
+        command: ['vp check', 'vp test', 'vp run fixtures:validate'],
+        cache: false,
+      },
+    },
+  },
   test: {
     include: ['test/**/*.test.ts'],
     environment: 'node',

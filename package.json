@@ -74,23 +74,7 @@
     }
   },
   "scripts": {
-    "dev": "vp pack --watch",
-    "build": "vp pack",
-    "clean": "rm -rf dist coverage",
-    "check": "vp check",
-    "lint": "vp lint",
-    "format": "vp fmt",
-    "test": "vp test",
-    "test:unit": "vp test test/unit",
-    "test:integration": "vp test test/integration",
-    "test:fixtures": "vp test test/fixtures",
-    "test:e2e": "vp run build && vp test test/e2e",
-    "test:coverage": "vp test --coverage",
-    "fixtures:fetch": "node scripts/fetch-sources.mjs",
-    "fixtures:validate": "vp run build && node scripts/validate-fixtures.mjs",
-    "eval:semantic": "vp run build && node scripts/evaluate-semantic.mjs",
-    "verify": "vp check && vp test && vp run fixtures:validate",
-    "prepublishOnly": "vp run clean && vp run build"
+    "prepublishOnly": "vp pack"
   },
   "dependencies": {
     "@textlint/ast-node-types": "^15.8.0",

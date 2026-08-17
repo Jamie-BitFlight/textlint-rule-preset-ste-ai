@@ -34,7 +34,7 @@ function distImport(...segments) {
 // three early `process.exit(2)` guards were the outliers).
 async function main() {
   if (!existsSync(join(root, 'dist', 'evaluation', 'evaluate.js'))) {
-    console.error('dist/ is missing. Run "vp run build" first.');
+    console.error('dist/ is missing. Run "vp pack" first.');
     process.exitCode = 2;
     return;
   }

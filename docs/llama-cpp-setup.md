@@ -97,7 +97,7 @@ attempt count, cache-hit flag and latency. That is the audit trail for a semanti
 The default test suite never needs a model. To measure evaluator quality against a real one:
 
 ```bash
-vp run build
+vp pack
 
 # tune prompts and thresholds here
 vp run eval:semantic -- --split dev --endpoint http://127.0.0.1:8080 --model my-model

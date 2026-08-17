@@ -31,7 +31,7 @@ jobs:
         run: vp check
 
       - name: Build from a clean state
-        run: vp run clean && vp run build
+        run: vp pack
 
       # The default suite must never need a model service. If this step starts requiring network
       # access, that is a regression in the deterministic-only guarantee.

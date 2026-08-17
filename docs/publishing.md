@@ -16,7 +16,7 @@ trusted publisher:
 1. Sign in to npm with an account that owns the package name and has two-factor authentication
    enabled.
 2. From a clean checkout of the commit to release, run `vp install --frozen-lockfile`, `vp check`,
-   `vp test`, and `vp run build`.
+   `vp test`, and `vp pack`.
 3. Confirm the tarball with `npm pack --dry-run`, then run `npm publish --access public`. This is the
    only publish that needs interactive npm authentication. Provenance starts with the subsequent
    CI publishes because the local bootstrap does not have GitHub's OIDC identity.

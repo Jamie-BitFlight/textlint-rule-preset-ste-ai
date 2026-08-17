@@ -21,7 +21,7 @@ report="${RUNNER_TEMP:-/tmp}/ste-ai-corpus.json"
 clean_doc="${RUNNER_TEMP:-/tmp}/ste-ai-clean.md"
 
 if [ ! -f "$cli" ]; then
-  echo "dist/ is missing. Run 'vp run build' first." >&2
+  echo "dist/ is missing. Run 'vp pack' first." >&2
   exit 2
 fi
 

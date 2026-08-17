@@ -66,6 +66,26 @@ export EXPECTED_CHANGE_REVIEWERS="${EXPECTED_CHANGE_REVIEWERS:-rewriter-a=36,rew
 # Every record in the corpus was produced by an agent run. A human-authored record is a real
 # possibility and the schema allows it; it is not something that should arrive unnoticed.
 export EXPECTED_KINDS="${EXPECTED_KINDS:-agent=175}"
+# The evaluation partition is a corpus decision, not a mutable label. Pin each assignment so a
+# balanced dev/heldout rearrangement cannot preserve the aggregate split checks and pass.
+export EXPECTED_SPLITS="${EXPECTED_SPLITS:-curl-url-option-reference=heldout
+django-settings-configuration=dev
+httpd-mod-ssl-directive-config=heldout
+httpd-mod-ssl-overview=heldout
+k8s-audit-log-troubleshooting=dev
+k8s-debug-pod-troubleshooting=dev
+llvm-getting-started-build=dev
+llvm-standalone-build-table=dev
+node-cli-hard-negative=heldout
+osha-lockout-tagout-warning=dev
+osha-ppe-requirements=heldout
+postgres-vacuum-overview=heldout
+sqlite-cli-description=dev
+sqlite-cli-dot-commands=dev
+sqlite-pragma-hard-negative=dev
+sqlite-vacuum-space-reclaim=dev
+zephyr-dependency-setup=dev
+zephyr-dependency-table=dev}"
 # Which runs worked on which fixture, and a digest of that fixture's annotation:
 # `<fixture>=<reviewers joined by +>|<sha256 of the canonical annotation>`.
 # `sqlite-pragma-hard-negative` names one run because it emits no candidates, so no adjudication
@@ -139,6 +159,17 @@ if (existsSync(fixturesDir)) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
     }
+  }
+}
+
+
+const manifestPath = join(fixturesDir, "manifest.json");
+if (existsSync(manifestPath)) {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const actualSplits = manifest.fixtures.map((fixture) => `${fixture.id}=${fixture.split}`).toSorted().join("\n");
+  if (actualSplits !== process.env.EXPECTED_SPLITS) {
+    console.error(`fixture splits changed. Declared:\n${process.env.EXPECTED_SPLITS}\nFound:\n${actualSplits}`);
+    process.exitCode = 1;
   }
 }
 

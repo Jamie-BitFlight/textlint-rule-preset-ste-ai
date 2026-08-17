@@ -50,7 +50,6 @@ describe('fixture provenance', () => {
     expect(report.ok).toBe(true);
   });
 
-
   it('refuses a rewritten fixture whose committed content changed', () => {
     const copy = mkdtempSync(join(tmpdir(), 'ste-ai-fixtures-'));
     try {

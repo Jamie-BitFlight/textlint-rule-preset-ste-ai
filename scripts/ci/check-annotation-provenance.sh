@@ -28,11 +28,27 @@
 # 36 disputed to 33 / 35. Scaled up, the same shuffle reaches 45 / 23 while every declared value
 # here still matches.
 #
-# Nothing outside the annotation constrains a `changes` record: unlike an adjudication, it binds to
-# no live candidate passage, so there is no anchor to check it against. The only thing left to pin
-# is the content itself, so each fixture declares a digest of its `changes` array — object keys
-# sorted so reformatting is not a change, array order preserved so reordering is. Any edit to any
-# rewrite record now has to be accompanied by a new digest here, in the same commit as the edit.
+# So each fixture declares a digest of its annotation — object keys sorted so reformatting is not a
+# change, array order preserved so reordering is. Any edit to any record now has to be accompanied
+# by a new digest here, in the same commit as the edit.
+#
+# An earlier revision digested only `changes`, on the reasoning that an adjudication is anchored by
+# binding to a live candidate passage and so needs no digest. That inference is wrong, and a review
+# demonstrated it: the binding constrains *where a record sits*, not *what it says*. `verdict`,
+# `reason` and `reviewerConfidence` are copied from the reviewer row verbatim and checked against
+# nothing. What constrained them was two aggregates in `test/fixtures/corpus.test.ts` — the global
+# class balance, and one per-rule tally — and a balanced promote/demote preserves both. Measured:
+# demoting the corpus's two confirmed `passive-voice-candidate` defects and promoting two other
+# passages of the same rule passed every gate and all 576 tests, silently moving which passages the
+# semantic evaluators are scored against. Digesting the whole annotation closes that, and covers the
+# keys no check reads at all (`notes`, `original`, `compliant`) rather than leaving them to be
+# noticed one at a time.
+#
+# Every declaration below is overridable from the environment, and `ANNOTATIONS_DIR` redirects the
+# corpus, so `test/e2e/check-annotation-provenance.test.ts` can point the script at a synthetic
+# corpus and assert what it refuses. CI invokes it with none of those set and gets the values here.
+# That indirection exists because a review deleted every check in this file one at a time and the
+# project stayed green each time: nothing tested the gate that tests the corpus.
 #
 # Usage: scripts/ci/check-annotation-provenance.sh
 set -euo pipefail
@@ -41,42 +57,43 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 # Adjudication records, and the four reviewer runs that produced them, per fixtures/verdicts/.
-export EXPECTED_ADJUDICATIONS=105
-export EXPECTED_ADJUDICATION_REVIEWERS='reviewer-a=25,reviewer-b=25,reviewer-c=23,reviewer-d=32'
+export EXPECTED_ADJUDICATIONS="${EXPECTED_ADJUDICATIONS:-105}"
+export EXPECTED_ADJUDICATION_REVIEWERS="${EXPECTED_ADJUDICATION_REVIEWERS:-reviewer-a=25,reviewer-b=25,reviewer-c=23,reviewer-d=32}"
 # Rewrite records, and the two rewriter runs, split nine fixtures each.
-export EXPECTED_CHANGES=70
-export EXPECTED_CHANGE_REVIEWERS='rewriter-a=36,rewriter-b=34'
+export EXPECTED_CHANGES="${EXPECTED_CHANGES:-70}"
+export EXPECTED_CHANGE_REVIEWERS="${EXPECTED_CHANGE_REVIEWERS:-rewriter-a=36,rewriter-b=34}"
 # Every record in the corpus was produced by an agent run. A human-authored record is a real
 # possibility and the schema allows it; it is not something that should arrive unnoticed.
-export EXPECTED_KINDS='agent=175'
-# Which runs worked on which fixture, and a digest of that fixture's rewrite records:
-# `<fixture>=<reviewers joined by +>|<sha256 of the canonical changes array>`.
+export EXPECTED_KINDS="${EXPECTED_KINDS:-agent=175}"
+# Which runs worked on which fixture, and a digest of that fixture's annotation:
+# `<fixture>=<reviewers joined by +>|<sha256 of the canonical annotation>`.
 # `sqlite-pragma-hard-negative` names one run because it emits no candidates, so no adjudication
 # reviewer ever touched it. To refresh a digest after an intended edit, run the script — the failure
 # names the fixture and prints the digest its records now have.
-export EXPECTED_PER_FIXTURE='curl-url-option-reference=reviewer-b+rewriter-a|d85c4e0dcd31646869c064eb5469615b2131e57f18e3c2879f8e27361f998206
-django-settings-configuration=reviewer-d+rewriter-a|68f2fe76e0ff452b33065cff4d7b31be767b25774d143c3e92e4f25371102460
-httpd-mod-ssl-directive-config=reviewer-a+rewriter-b|f179502f5ac3c56cca62e3afe709a2de2d5046ce9e57d5eb622b4f9522a2b27c
-httpd-mod-ssl-overview=reviewer-b+rewriter-a|fe043330842f65593ef1e21fc94873489da3d4775e44fadb232d23e7dfb21a51
-k8s-audit-log-troubleshooting=reviewer-c+rewriter-b|27483df00fe470095ed9711f221bd70f0ac94d11ff36948ddae5810408f51e64
-k8s-debug-pod-troubleshooting=reviewer-c+rewriter-a|391ecf2626d188f202d1fe410383eaf67b9e0c2b6b129e45380f8079a28976f9
-llvm-getting-started-build=reviewer-a+rewriter-a|06095bead4ecd9c6b72c6ddfbc1907971614e4748edcd68bc43b4b1cd57e685d
-llvm-standalone-build-table=reviewer-a+rewriter-b|918ec99375671ae7e1a8a76659838feebb256ababbd7629b00b443369f414989
-node-cli-hard-negative=reviewer-d+rewriter-b|a5e50cab3f418340ab6ad2f87e9c1dd430ca763ce4443f231fa641057d5b7b49
-osha-lockout-tagout-warning=reviewer-c+rewriter-a|27be2f90e6b99db710bd565dc68aa3279fe3f43b70882f5b781591c755190830
-osha-ppe-requirements=reviewer-d+rewriter-b|75d27c85c40e016b31d035f0b1ab12f431c7453b11fe27a2b0cb824fa2ec9362
-postgres-vacuum-overview=reviewer-b+rewriter-b|59c6a68026b1c40d2c030e7c6c7659b3d254c7abb4c4822703f1ad22214de2a1
-sqlite-cli-description=reviewer-a+rewriter-b|43169f9678d4a2d1a0944a80ba678fc1394ffe6edb08671a13ade0e1508add36
-sqlite-cli-dot-commands=reviewer-c+rewriter-a|574b7d220509f69198e90d55cc839f2ca62f51966149fecd57f33e4148ffbd2e
-sqlite-pragma-hard-negative=rewriter-b|0976f6f52b9651266796748ca3d77472fe076c0e5ad14518002d9fadf407fea5
-sqlite-vacuum-space-reclaim=reviewer-d+rewriter-a|c8426005605e803f6be4c523f72d1b58282b94d421939bb4015ad1af9ef1d18b
-zephyr-dependency-setup=reviewer-a+rewriter-a|19b2fd4fd268b423bb06a543893f3b713f33b519828be04bbe22992a60c486b1
-zephyr-dependency-table=reviewer-b+rewriter-b|193a9ad48b4a6e758283f51de6edc1bdd344913058554b2786371679b9837dd3'
+export EXPECTED_PER_FIXTURE="${EXPECTED_PER_FIXTURE:-curl-url-option-reference=reviewer-b+rewriter-a|82df9668fd4f301cffbd35555d5352ca6b9bc28ff470c8cdc30604e3907ac8ec
+django-settings-configuration=reviewer-d+rewriter-a|49861fb07a211131c5bd4a0c0639c620251014322c4bfd64f3dd9d65a289d342
+httpd-mod-ssl-directive-config=reviewer-a+rewriter-b|74b196d5ed6f41bc87666b50429cc1f9f0e24544cf0f888b59c9040f360f72ab
+httpd-mod-ssl-overview=reviewer-b+rewriter-a|923b306b1b73f46bb4bed005d02addcfb8e77cc85b92ad5bbb3038f44e123d22
+k8s-audit-log-troubleshooting=reviewer-c+rewriter-b|1aca2ad77aae62af0622137e3fb93f909508c34b353f2a1b2cedd3fda9840482
+k8s-debug-pod-troubleshooting=reviewer-c+rewriter-a|96614cfe3a49af8cde244adf417d86b0b6b32ca90a5bf13f16019617e3dc9b40
+llvm-getting-started-build=reviewer-a+rewriter-a|f4cec98fb7a2d3d65cb3bf760078b6143ae207078945ab6094075d8865057569
+llvm-standalone-build-table=reviewer-a+rewriter-b|1f2ebb69ec74843d2a56e08d4d7d39dfd6ec5a00cb52c22b851a7d481f6a47c2
+node-cli-hard-negative=reviewer-d+rewriter-b|e95141872f6dd00569b4adb7a575ecf5bb3b4ae0645febf4bf3d2299780e96d6
+osha-lockout-tagout-warning=reviewer-c+rewriter-a|520b13f234af1f67160234cbb6de7c55348c95bf57aacbd0488a8b1f55d22991
+osha-ppe-requirements=reviewer-d+rewriter-b|c17af3c3ef8581e1498601236bdb8be5ee14bf370f48a6d44ceb17378bbdb7a0
+postgres-vacuum-overview=reviewer-b+rewriter-b|8a5a59fe3d8065559475ee4bae5393b847c0ca6d0979ae12d219476802b5c80a
+sqlite-cli-description=reviewer-a+rewriter-b|3bd454e25554da7b4bf4d039088d732603677e702fad805940ab659835d3d01e
+sqlite-cli-dot-commands=reviewer-c+rewriter-a|ecbc21ba560df1dc433352ef6bbe77f0b6bb6d655e58aceebdf927cdec67f44a
+sqlite-pragma-hard-negative=rewriter-b|d82255533037474391d7aef55f5cf4939d917a0a8f97c839a0ee62cd34b47418
+sqlite-vacuum-space-reclaim=reviewer-d+rewriter-a|e55a769b2e5a25162da273e45d1b42700234718646a8f0261b0ebf724f8f28f4
+zephyr-dependency-setup=reviewer-a+rewriter-a|cb9b09a412e8a7115d6b1b458fc6ae995bb944fe3f44bfb38b41618f443d988a
+zephyr-dependency-table=reviewer-b+rewriter-b|fb1f6d85d91b22f46089aaedf4218580e99619d3fa0e9b566815b74351c96c81}"
 
 node --input-type=module -e '
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { parseJsonStrict } from "./scripts/lib/parse-json-strict.mjs";
 
 // Keys sorted so a reformat is not a change; array order preserved so a reorder is one.
 const canonical = (value) =>
@@ -85,10 +102,10 @@ const canonical = (value) =>
     : value && typeof value === "object"
       ? Object.fromEntries(Object.keys(value).toSorted().map((k) => [k, canonical(value[k])]))
       : value;
-const digestOf = (changes) =>
-  createHash("sha256").update(JSON.stringify(canonical(changes))).digest("hex");
+const digestOf = (annotation) =>
+  createHash("sha256").update(JSON.stringify(canonical(annotation))).digest("hex");
 
-const dir = "fixtures/annotations";
+const dir = process.env.ANNOTATIONS_DIR ?? "fixtures/annotations";
 const tally = (pairs) => [...pairs.entries()].toSorted(([a], [b]) => a.localeCompare(b))
   .map(([k, v]) => `${k}=${v}`).join(",");
 
@@ -101,7 +118,17 @@ const perFixture = new Map();
 const bump = (map, k) => map.set(k, (map.get(k) ?? 0) + 1);
 
 for (const file of readdirSync(dir).toSorted()) {
-  const annotation = JSON.parse(readFileSync(join(dir, file), "utf8"));
+  // A duplicate key arrives here as a thrown error. Report it the way every other failure in this
+  // script is reported, rather than as a stack trace that buries which file is at fault.
+  let annotation;
+  try {
+    annotation = parseJsonStrict(readFileSync(join(dir, file), "utf8"), file);
+  } catch (error) {
+    // The message already names the file, since parseJsonStrict was given it as the label.
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    continue;
+  }
   for (const change of annotation.changes) {
     changes += 1;
     bump(byChangeReviewer, change.reviewer);
@@ -126,7 +153,7 @@ for (const file of readdirSync(dir).toSorted()) {
   }
   perFixture.set(
     file.replace(/\.json$/, ""),
-    `${[...named].toSorted((a, b) => a.localeCompare(b)).join("+")}|${digestOf(annotation.changes)}`,
+    `${[...named].toSorted((a, b) => a.localeCompare(b)).join("+")}|${digestOf(annotation)}`,
   );
 }
 
@@ -155,7 +182,7 @@ for (const [fixture, actual] of perFixture) {
   }
   if (expectedDigest !== actualDigest) {
     console.error(
-      `${fixture}: rewrite records changed. Declared ${expectedDigest}, found ${actualDigest}.`,
+      `${fixture}: annotation content changed. Declared ${expectedDigest}, found ${actualDigest}.`,
     );
     process.exitCode = 1;
   }

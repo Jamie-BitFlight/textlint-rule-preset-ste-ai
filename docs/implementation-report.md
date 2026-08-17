@@ -150,10 +150,14 @@ Two cautions on that sentence, both checkable against the data:
 - The attribution above is read from the records themselves: `annotationChangeSchema` requires
   `reviewer` and `reviewerKind`, the same pair the 105 `candidateAdjudications` carry. It did not
   until recently, and until then the sentence above rested on the annotation's `reviewers` array —
-  a list nothing pointed into and nothing checked. The records are still self-asserted, unlike the
-  adjudications, which bind to a live candidate passage; what holds them is the totals pinned in
-  `scripts/ci/check-annotation-provenance.sh`. `reviewer` names the originating run, and 11 of the
-  70 records have been edited since by later reconciliation commits.
+  a list nothing pointed into and nothing checked. What holds both populations is
+  `scripts/ci/check-annotation-provenance.sh`, which declares a digest of every annotation
+  alongside the totals. The digest is there because the totals are an aggregate and every aggregate
+  so far has been defeated by the rearrangement that preserves it — including, twice, a rearrangement
+  that survived the fix for the previous one. Binding an adjudication to a live candidate passage
+  constrains where the record sits, not what it says, so that population needed pinning too.
+  `reviewer` names the originating run, and 11 of the 70 records have been edited since by later
+  reconciliation commits.
 - Agreement between two agent runs is weaker evidence than the same agreement between separate
   people, since instances sharing a base model correlate. Treat it as one method applied
   consistently.

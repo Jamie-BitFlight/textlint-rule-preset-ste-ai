@@ -185,11 +185,29 @@ by shuffling record counts between fixtures crediting the same run — measured,
 `accepted` record passed every gate in the project and moved the split reported above from 32 / 36 to
 33 / 35.
 
-So the script also declares a digest of each fixture's `changes` array: object keys sorted, so
+So the script also declares a digest of each fixture's annotation: object keys sorted, so
 reformatting is not a change, array order preserved, so reordering is. That pins content rather than
-counts, which is the only thing left when a record binds to nothing outside its own file. All of
-these numbers and digests are expected to change when the corpus does; the point is that changing
-them is an edit somebody makes on purpose, in the same commit as the edit that caused it.
+counts, which is the only thing left when a record binds to nothing outside its own file.
+
+The digest covers the whole annotation rather than only its `changes`, and the reason is worth
+recording because the narrower version looked obviously sufficient. An adjudication binds to a live
+candidate passage, so it seemed anchored — but the binding constrains _where a record sits_, not
+_what it says_. `verdict`, `reason` and `reviewerConfidence` are copied from the reviewer row and
+checked against nothing, and the only things constraining them were two aggregates in
+`corpus.test.ts`. Measured: demoting the corpus's two confirmed `passive-voice-candidate` defects
+while promoting two other passages of the same rule preserved both aggregates, passed every gate,
+and quietly changed which passages the semantic evaluators are scored against.
+
+Two smaller things follow from hashing parsed values rather than bytes. Duplicate JSON keys make the
+file on disk and the value every check sees disagree — `JSON.parse` keeps the last and says nothing —
+so annotations are read through `scripts/lib/parse-json-strict.mjs`, which refuses them. Bytes are
+not hashed directly because the repository sets no `.gitattributes` and a CRLF checkout would then
+fail for everyone on Windows.
+
+All of these numbers and digests are expected to change when the corpus does; the point is that
+changing them is an edit somebody makes on purpose, in the same commit as the edit that caused it.
+The gate itself is covered by `test/e2e/check-annotation-provenance.test.ts`, which exists because
+a review deleted each of its checks in turn and the project stayed green every time.
 
 One more limit, since the field name invites the wrong reading. `reviewer` names the run that
 produced an annotation's rewrites, not the author of the text as it stands: 11 of the 70 records

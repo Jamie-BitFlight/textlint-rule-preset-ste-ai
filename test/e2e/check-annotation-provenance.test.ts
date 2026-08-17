@@ -96,6 +96,10 @@ function makeCorpus(overrides: Partial<Record<string, string>> = {}, raw?: strin
     candidateAdjudications: [adjudication],
   };
   writeFileSync(join(dir, 'demo.json'), raw ?? `${JSON.stringify(annotation, null, 2)}\n`);
+  writeFileSync(
+    join(root, 'manifest.json'),
+    `${JSON.stringify({ fixtures: [{ id: 'demo', split: 'dev' }] }, null, 2)}\n`,
+  );
 
   return {
     dir,
@@ -108,6 +112,7 @@ function makeCorpus(overrides: Partial<Record<string, string>> = {}, raw?: strin
       EXPECTED_CHANGES: '1',
       EXPECTED_CHANGE_REVIEWERS: 'rewriter-a=1',
       EXPECTED_KINDS: 'agent=2',
+      EXPECTED_SPLITS: 'demo=dev',
       EXPECTED_PER_FIXTURE: `demo=reviewer-a+rewriter-a|${digestOf(annotation)}`,
       ...overrides,
     },
@@ -273,6 +278,20 @@ describe('check-annotation-provenance', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('adjudication reviewers: expected reviewer-b=1');
+  });
+
+
+  it('refuses a dev/heldout reassignment even when split sizes could stay balanced', () => {
+    const corpus = makeCorpus();
+    writeFileSync(
+      join(corpus.root, 'manifest.json'),
+      `${JSON.stringify({ fixtures: [{ id: 'demo', split: 'heldout' }] }, null, 2)}\n`,
+    );
+
+    const result = run(corpus);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('fixture splits changed.');
   });
 
   it('refuses a reordered array, because array order is part of the digest', () => {

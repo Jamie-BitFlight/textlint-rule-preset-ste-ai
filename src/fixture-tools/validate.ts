@@ -178,6 +178,11 @@ export function validateFixtureCorpus(fixturesDir: string): ValidationReport {
       `${label}: has a rewritten counterpart but no annotation at ${fixture.annotationPath}`,
     );
 
+    const actualCompliantSha = sha256(compliantPath);
+    check(
+      actualCompliantSha === fixture.compliantSha256,
+      `${label}: compliantSha256 mismatch — manifest ${fixture.compliantSha256}, file ${actualCompliantSha}`,
+    );
     const compliant = readFileSync(compliantPath, 'utf8');
     for (const literal of extractProtectedLiterals(original)) {
       check(

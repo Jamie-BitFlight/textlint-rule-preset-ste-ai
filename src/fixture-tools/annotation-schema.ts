@@ -10,59 +10,59 @@ import { z } from 'zod';
 
 export const spanSchema = z
   .object({
-  start: z.number().int().min(0),
-  end: z.number().int().min(0),
+    start: z.number().int().min(0),
+    end: z.number().int().min(0),
   })
   .strict();
 
 export const expectedDiagnosticSchema = z
   .object({
-  ruleId: z.string().min(1),
-  category: z.enum([
-    'deterministic-violation',
-    'probable-semantic-violation',
-    'review-required',
-    'suppressed-low-confidence',
-    'infrastructure-failure',
-  ]),
-  /** Exact substring of the original that the diagnostic must cover. */
-  quote: z.string().min(1),
+    ruleId: z.string().min(1),
+    category: z.enum([
+      'deterministic-violation',
+      'probable-semantic-violation',
+      'review-required',
+      'suppressed-low-confidence',
+      'infrastructure-failure',
+    ]),
+    /** Exact substring of the original that the diagnostic must cover. */
+    quote: z.string().min(1),
   })
   .strict();
 
 export const annotationChangeSchema = z
   .object({
-  passageId: z.string().min(1),
-  originalText: z.string().min(1),
-  rewrittenText: z.string().min(1),
-  ruleIds: z.array(z.string().min(1)).min(1),
-  originalSpans: z.array(spanSchema).min(1),
-  expectedDiagnostics: z.array(expectedDiagnosticSchema),
-  reason: z.string().min(10),
-  /** What must be identical in both versions. Prose, not code — a reviewer's statement of intent. */
-  semanticInvariants: z.array(z.string().min(3)).min(1),
-  unresolved: z.array(z.string()).default([]),
-  status: z.enum(['accepted', 'disputed', 'deferred']),
-  /**
-   * The run that produced this annotation's rewrites — **not** necessarily the author of the text
-   * as it stands today.
-   *
-   * The distinction is real and measured: 11 of the 70 records have had their content edited since
-   * the run named here, by later reconciliation commits that left no trace of their own. Nothing in
-   * the data says who made those edits, so this field names the originating run and stops there.
-   * Reading it as "who wrote this sentence" is wrong for those 11.
-   *
-   * These records had no provenance at all while `candidateAdjudications` did, which left the
-   * annotation's `reviewers` array as the only trace of who wrote the rewrites — an array no record
-   * pointed into and nothing could check. A name could be added to it, or removed from it, without
-   * contradicting anything in the file. With both populations naming their own run, `reviewers`
-   * becomes derived rather than asserted, and `merge-candidate-verdicts.mjs` rejects a file where
-   * it is anything else. The records themselves are still self-asserted; what pins those is
-   * `scripts/ci/check-annotation-provenance.sh`.
-   */
-  reviewer: z.string().min(1),
-  reviewerKind: z.enum(['human', 'agent']),
-  reviewerConfidence: z.number().min(0).max(1),
+    passageId: z.string().min(1),
+    originalText: z.string().min(1),
+    rewrittenText: z.string().min(1),
+    ruleIds: z.array(z.string().min(1)).min(1),
+    originalSpans: z.array(spanSchema).min(1),
+    expectedDiagnostics: z.array(expectedDiagnosticSchema),
+    reason: z.string().min(10),
+    /** What must be identical in both versions. Prose, not code — a reviewer's statement of intent. */
+    semanticInvariants: z.array(z.string().min(3)).min(1),
+    unresolved: z.array(z.string()).default([]),
+    status: z.enum(['accepted', 'disputed', 'deferred']),
+    /**
+     * The run that produced this annotation's rewrites — **not** necessarily the author of the text
+     * as it stands today.
+     *
+     * The distinction is real and measured: 11 of the 70 records have had their content edited since
+     * the run named here, by later reconciliation commits that left no trace of their own. Nothing in
+     * the data says who made those edits, so this field names the originating run and stops there.
+     * Reading it as "who wrote this sentence" is wrong for those 11.
+     *
+     * These records had no provenance at all while `candidateAdjudications` did, which left the
+     * annotation's `reviewers` array as the only trace of who wrote the rewrites — an array no record
+     * pointed into and nothing could check. A name could be added to it, or removed from it, without
+     * contradicting anything in the file. With both populations naming their own run, `reviewers`
+     * becomes derived rather than asserted, and `merge-candidate-verdicts.mjs` rejects a file where
+     * it is anything else. The records themselves are still self-asserted; what pins those is
+     * `scripts/ci/check-annotation-provenance.sh`.
+     */
+    reviewer: z.string().min(1),
+    reviewerKind: z.enum(['human', 'agent']),
+    reviewerConfidence: z.number().min(0).max(1),
   })
   .strict();
 
@@ -81,58 +81,58 @@ export const annotationChangeSchema = z
  */
 export const candidateAdjudicationSchema = z
   .object({
-  /**
-   * Run-local label, not an identity.
-   *
-   * Candidate ids embed a sentence ordinal, and that ordinal moves whenever segmentation changes
-   * earlier in the document — fixing reStructuredText admonition detection renumbered every sentence
-   * after a `.. note::` and changed six of these while their spans did not move a byte. Nothing joins
-   * on this field: `goldLabelFor` binds by rule and span overlap, and the merge tool binds by rule,
-   * span and quote.
-   */
-  passageId: z.string().min(1),
-  ruleId: z.string().min(1),
-  evaluatorId: z.string().min(1),
-  /** Exact substring of the original that the reviewer judged. Half of the binding, with `span`. */
-  quote: z.string().min(1),
-  span: spanSchema,
-  /**
-   * `violation` — the passage really is defective under the rule's stated intent.
-   * `non-violation` — the heuristic fired but the passage is acceptable.
-   * `undecidable` — the reviewer declined; excluded from the confusion matrix.
-   */
-  verdict: z.enum(['violation', 'non-violation', 'undecidable']),
-  reason: z.string().min(10),
-  /**
-   * What produced this verdict. Required, and deliberately not defaulted.
-   *
-   * `reviewer` is a free-form label (`reviewer-a`), never an identity, and prose elsewhere in the
-   * repository described these records as the work of "four independent reviewers" — wording a
-   * reader takes to mean four people. The adjudication was in fact run as four independent agent
-   * reviewers, which is a real method with a real limitation: agents sharing a base model correlate
-   * in ways separate humans do not, so unanimity across them is weaker evidence than the same
-   * unanimity across people. Recording the method on the record itself means that limitation is
-   * answerable from the data rather than from prose that can drift away from it.
-   */
-  reviewerKind: z.enum(['human', 'agent']),
-  reviewer: z.string().min(1),
-  reviewerConfidence: z.number().min(0).max(1),
+    /**
+     * Run-local label, not an identity.
+     *
+     * Candidate ids embed a sentence ordinal, and that ordinal moves whenever segmentation changes
+     * earlier in the document — fixing reStructuredText admonition detection renumbered every sentence
+     * after a `.. note::` and changed six of these while their spans did not move a byte. Nothing joins
+     * on this field: `goldLabelFor` binds by rule and span overlap, and the merge tool binds by rule,
+     * span and quote.
+     */
+    passageId: z.string().min(1),
+    ruleId: z.string().min(1),
+    evaluatorId: z.string().min(1),
+    /** Exact substring of the original that the reviewer judged. Half of the binding, with `span`. */
+    quote: z.string().min(1),
+    span: spanSchema,
+    /**
+     * `violation` — the passage really is defective under the rule's stated intent.
+     * `non-violation` — the heuristic fired but the passage is acceptable.
+     * `undecidable` — the reviewer declined; excluded from the confusion matrix.
+     */
+    verdict: z.enum(['violation', 'non-violation', 'undecidable']),
+    reason: z.string().min(10),
+    /**
+     * What produced this verdict. Required, and deliberately not defaulted.
+     *
+     * `reviewer` is a free-form label (`reviewer-a`), never an identity, and prose elsewhere in the
+     * repository described these records as the work of "four independent reviewers" — wording a
+     * reader takes to mean four people. The adjudication was in fact run as four independent agent
+     * reviewers, which is a real method with a real limitation: agents sharing a base model correlate
+     * in ways separate humans do not, so unanimity across them is weaker evidence than the same
+     * unanimity across people. Recording the method on the record itself means that limitation is
+     * answerable from the data rather than from prose that can drift away from it.
+     */
+    reviewerKind: z.enum(['human', 'agent']),
+    reviewer: z.string().min(1),
+    reviewerConfidence: z.number().min(0).max(1),
   })
   .strict();
 
 export const annotationSchema = z
   .object({
-  fixtureId: z.string().min(1),
-  original: z.string().min(1),
-  compliant: z.string().min(1),
-  split: z.enum(['dev', 'heldout']),
-  changes: z.array(annotationChangeSchema),
-  /** Verdicts on heuristic candidates that produced no rewrite. */
-  candidateAdjudications: z.array(candidateAdjudicationSchema).default([]),
-  /** Literals a reviewer asserts must be byte-identical. Cross-checked against the extractor. */
-  protectedLiterals: z.array(z.string()).default([]),
-  reviewers: z.array(z.string().min(1)).min(1),
-  notes: z.string().optional(),
+    fixtureId: z.string().min(1),
+    original: z.string().min(1),
+    compliant: z.string().min(1),
+    split: z.enum(['dev', 'heldout']),
+    changes: z.array(annotationChangeSchema),
+    /** Verdicts on heuristic candidates that produced no rewrite. */
+    candidateAdjudications: z.array(candidateAdjudicationSchema).default([]),
+    /** Literals a reviewer asserts must be byte-identical. Cross-checked against the extractor. */
+    protectedLiterals: z.array(z.string()).default([]),
+    reviewers: z.array(z.string().min(1)).min(1),
+    notes: z.string().optional(),
   })
   .strict();
 

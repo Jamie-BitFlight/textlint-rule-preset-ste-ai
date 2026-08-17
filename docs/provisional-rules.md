@@ -27,8 +27,10 @@ grade level exceeds `limits.proceduralMaxGradeLevel` (bundled default 7).
 replaced with the mechanism below on the maintainer's explicit instruction, on the understanding
 that it trades one documented failure mode for a different one — see "Known failure modes" below
 for both directions of that trade. The `maxGradeLevel`/`floorWords` per-rule options replace the
-old `maxWords` option; a pack or config still setting `maxWords` is silently ignored by the schema
-(unknown keys are dropped), not rejected — see `docs/configuration.md`.
+old `maxWords` option; a pack or config still setting `maxWords` is silently ignored, not rejected.
+Per-rule options are the one part of the configuration that is not strict — the rule's own option
+schema drops what it does not recognise — so a stale `maxWords` produces no error. Everywhere else
+an unrecognised key now fails the load; see `docs/configuration.md`.
 
 **Why a readability formula, and why Flesch-Kincaid** A word limit is objective and reproducible,
 but it cannot tell a genuinely hard-to-parse sentence (nested clauses, low-frequency vocabulary)

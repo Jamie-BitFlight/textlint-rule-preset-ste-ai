@@ -148,6 +148,36 @@ They are read once from a shared file, resolved in this order (first hit wins):
 }
 ```
 
+### An unrecognised key is an error
+
+Every object in the shared configuration is strict. A key the schema does not recognise fails the
+load and is named in the message, with its path:
+
+```
+Invalid ste-ai configuration:
+  diagnostics.severity: Unrecognized key: "style-preference"
+```
+
+Unknown keys used to be dropped instead. That is the worst available outcome for a policy file: the
+config parsed, the setting was discarded, and the operator's own file read as evidence of a policy
+the linter had never applied. A misspelt diagnostic category applied no severity, a mistyped
+`semantic` key left the timeout or threshold at its default, and nothing said so.
+
+The one deliberate exception is `rules.<id>`, which accepts arbitrary keys: each rule declares its
+own option schema, and the rule — not this file — is the only thing that can judge its own options.
+Options that no rule recognises are therefore still dropped quietly, and an option that a rule
+recognises but rejects produces a `rule-options-invalid` notice and skips that rule.
+
+Rule _ids_ are checked even though their options are not. A `rules` key naming no rule the preset
+exports produces a `warning`-level `unknown-rule-id` run notice (`detail: { ruleId }`) and the run
+continues, so a configuration written for a newer version of this package degrades instead of
+failing:
+
+```
+Configuration names rule "sentance-length-procedural", which is not a known rule,
+so those options were not applied
+```
+
 ### Protected patterns are screened before they run
 
 Every `extraProtectedPatterns` entry is checked once per run, before any of them is matched against

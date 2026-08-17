@@ -50,6 +50,8 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
   const blockById = new Map<string, TextBlock>(doc.blocks.map((b) => [b.id, b]));
   const packSpecs = new Map(pack.rules.map((r) => [r.ruleId, r]));
 
+  notices.push(...unknownRuleIdNotices(config, rules));
+
   for (const rule of rules) {
     const id = rule.meta.id;
     if (options.onlyRuleId !== undefined && options.onlyRuleId !== id) continue;
@@ -128,6 +130,35 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
   );
 
   return { diagnostics: resolved, candidates: sortCandidates(candidates), notices };
+}
+
+/**
+ * Report `rules` keys that name no registered rule.
+ *
+ * `ruleUserConfigSchema` carries a deliberate catch-all so a rule can receive options only its own
+ * `optionsSchema` can validate (see `src/core/config.ts`), which means the config schema cannot
+ * reject a mistyped rule id — the whole entry is well-formed, it just configures nothing. The id is
+ * checkable here, where the rule list is known.
+ *
+ * A notice rather than a thrown error, deliberately: a config naming a rule from a newer version of
+ * this package degrades — the run completes, every other rule applies — instead of failing outright.
+ */
+function unknownRuleIdNotices(
+  config: SteAiConfig,
+  rules: readonly DeterministicRule[],
+): RunNotice[] {
+  const known = new Set(rules.map((rule) => rule.meta.id));
+  // Sorted so two runs over the same configuration emit byte-identical notices.
+  const unknown = Object.keys(config.rules)
+    .filter((id) => !known.has(id))
+    .toSorted((a, b) => a.localeCompare(b));
+
+  return unknown.map((ruleId) => ({
+    code: 'unknown-rule-id',
+    level: 'warning',
+    message: `Configuration names rule "${ruleId}", which is not a known rule, so those options were not applied`,
+    detail: { ruleId },
+  }));
 }
 
 /**

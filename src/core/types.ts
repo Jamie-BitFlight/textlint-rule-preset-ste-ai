@@ -506,7 +506,11 @@ export interface FixtureAnnotationChange {
   readonly semanticInvariants: readonly string[];
   readonly unresolved: readonly string[];
   readonly status: AdjudicationRecordStatus;
-  /** Reviewer confidence in the rewrite, 0..1, human-assigned. */
+  /** Which run produced the rewrite. A label, never an identity. */
+  readonly reviewer: string;
+  /** Whether that run was a person or an agent. Required, so a record cannot decline to say. */
+  readonly reviewerKind: 'human' | 'agent';
+  /** The reviewer's confidence in the rewrite, 0..1. */
   readonly reviewerConfidence: number;
 }
 

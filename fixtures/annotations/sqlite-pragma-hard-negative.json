@@ -8,10 +8,21 @@
       "passageId": "sqlite-pragma-hard-negative-p1",
       "originalText": "List Of PRAGMAs analysis_limit application_id auto_vacuum automatic_index busy_timeout cache_size cache_spill case_sensitive_like¹ cell_size_check checkpoint_fullfsync collation_list compile_options count_changes¹ data_store_directory¹ data_version database_list default_cache_size¹ defer_foreign_keys empty_result_callbacks¹ encoding foreign_key_check foreign_key_list foreign_keys freelist_count full_column_names¹ fullfsync function_list hard_heap_limit ignore_check_constraints incremental_vacuum index_info index_list index_xinfo integrity_check journal_mode journal_size_limit legacy_alter_table legacy_file_format locking_mode max_page_count mmap_size module_list optimize page_count page_size parser_trace² pragma_list query_only quick_check read_uncommitted recursive_triggers reverse_unordered_selects schema_version³ secure_delete short_column_names¹ shrink_memory soft_heap_limit stats³ synchronous table_info table_list table_xinfo temp_store temp_store_directory¹ threads trusted_schema user_version vdbe_addoptrace² vdbe_debug² vdbe_listing² vdbe_trace² wal_autocheckpoint wal_checkpoint writable_schema³",
       "rewrittenText": "List Of PRAGMAs analysis_limit application_id auto_vacuum automatic_index busy_timeout cache_size cache_spill case_sensitive_like¹ cell_size_check checkpoint_fullfsync collation_list compile_options count_changes¹ data_store_directory¹ data_version database_list default_cache_size¹ defer_foreign_keys empty_result_callbacks¹ encoding foreign_key_check foreign_key_list foreign_keys freelist_count full_column_names¹ fullfsync function_list hard_heap_limit ignore_check_constraints incremental_vacuum index_info index_list index_xinfo integrity_check journal_mode journal_size_limit legacy_alter_table legacy_file_format locking_mode max_page_count mmap_size module_list optimize page_count page_size parser_trace² pragma_list query_only quick_check read_uncommitted recursive_triggers reverse_unordered_selects schema_version³ secure_delete short_column_names¹ shrink_memory soft_heap_limit stats³ synchronous table_info table_list table_xinfo temp_store temp_store_directory¹ threads trusted_schema user_version vdbe_addoptrace² vdbe_debug² vdbe_listing² vdbe_trace² wal_autocheckpoint wal_checkpoint writable_schema³",
-      "ruleIds": ["sentence-length-descriptive"],
-      "originalSpans": [{ "start": 157, "end": 1276 }],
+      "ruleIds": [
+        "sentence-length-descriptive"
+      ],
+      "originalSpans": [
+        {
+          "start": 157,
+          "end": 1276
+        }
+      ],
       "expectedDiagnostics": [
-        { "ruleId": "sentence-length-descriptive", "category": "deterministic-violation", "quote": "List Of PRAGMAs analysis_limit application_id auto_vacuum automatic_index busy_timeout cache_size cache_spill case_sensitive_like¹ cell_size_check checkpoint_fullfsync collation_list compile_options count_changes¹ data_store_directory¹ data_version database_list default_cache_size¹ defer_foreign_keys empty_result_callbacks¹ encoding foreign_key_check foreign_key_list foreign_keys freelist_count full_column_names¹ fullfsync function_list hard_heap_limit ignore_check_constraints incremental_vacuum index_info index_list index_xinfo integrity_check journal_mode journal_size_limit legacy_alter_table legacy_file_format locking_mode max_page_count mmap_size module_list optimize page_count page_size parser_trace² pragma_list query_only quick_check read_uncommitted recursive_triggers reverse_unordered_selects schema_version³ secure_delete short_column_names¹ shrink_memory soft_heap_limit stats³ synchronous table_info table_list table_xinfo temp_store temp_store_directory¹ threads trusted_schema user_version vdbe_addoptrace² vdbe_debug² vdbe_listing² vdbe_trace² wal_autocheckpoint wal_checkpoint writable_schema³" }
+        {
+          "ruleId": "sentence-length-descriptive",
+          "category": "deterministic-violation",
+          "quote": "List Of PRAGMAs analysis_limit application_id auto_vacuum automatic_index busy_timeout cache_size cache_spill case_sensitive_like¹ cell_size_check checkpoint_fullfsync collation_list compile_options count_changes¹ data_store_directory¹ data_version database_list default_cache_size¹ defer_foreign_keys empty_result_callbacks¹ encoding foreign_key_check foreign_key_list foreign_keys freelist_count full_column_names¹ fullfsync function_list hard_heap_limit ignore_check_constraints incremental_vacuum index_info index_list index_xinfo integrity_check journal_mode journal_size_limit legacy_alter_table legacy_file_format locking_mode max_page_count mmap_size module_list optimize page_count page_size parser_trace² pragma_list query_only quick_check read_uncommitted recursive_triggers reverse_unordered_selects schema_version³ secure_delete short_column_names¹ shrink_memory soft_heap_limit stats³ synchronous table_info table_list table_xinfo temp_store temp_store_directory¹ threads trusted_schema user_version vdbe_addoptrace² vdbe_debug² vdbe_listing² vdbe_trace² wal_autocheckpoint wal_checkpoint writable_schema³"
+        }
       ],
       "reason": "This is not a sentence at all: it is the rendered text of an HTML index page (sqlite.org's master list of PRAGMA links), reduced to plain text with no sentence punctuation because the source is a flat list of anchor names, not prose. The sentence-length rule's word-count heuristic fires because there is no terminal punctuation anywhere in the run, but there is nothing here to 'split into shorter sentences' -- it is an alphabetical index of ~70 identifiers. Rewriting it (e.g. inserting artificial periods, reordering, or paraphrasing) would misrepresent the source as prose and would require altering or removing PRAGMA identifiers, which must stay verbatim.",
       "semanticInvariants": [
@@ -22,14 +33,23 @@
         "whether the rule pack should exempt blocks classified as link indexes/tables of contents from sentence-length checks entirely"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     },
     {
       "passageId": "sqlite-pragma-hard-negative-p2",
       "originalText": "PRAGMAs",
       "rewrittenText": "PRAGMAs",
-      "ruleIds": ["abbreviation-introduction"],
-      "originalSpans": [{ "start": 165, "end": 172 }],
+      "ruleIds": [
+        "abbreviation-introduction"
+      ],
+      "originalSpans": [
+        {
+          "start": 165,
+          "end": 172
+        }
+      ],
       "expectedDiagnostics": [],
       "reason": "PRAGMA is a SQLite SQL statement keyword (the SQL command used to query or set database settings), not an abbreviation of a longer phrase. There is no full term to expand it into; 'PRAGMA' is the command's actual name. This is the same class of false positive called out for SQL keywords and command names generally. Reconciled after #56: PRAGMA was added to the rule's default well-known list, and the rule strips a trailing plural 's' before that lookup, so the plural 'PRAGMAs' is exempt too and the expected diagnostic has been removed.",
       "semanticInvariants": [
@@ -37,6 +57,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     }
   ],
@@ -47,6 +69,8 @@
     "journal_mode",
     "user_version"
   ],
-  "reviewers": ["rewriter-b"],
+  "reviewers": [
+    "rewriter-b"
+  ],
   "notes": "This fixture is a deliberate hard negative: both diagnostics the linter raises are false positives caused by treating an HTML index of PRAGMA identifiers as ordinary prose. There is no genuine prose defect to fix, so the compliant file is byte-identical to the original apart from the required rewritten-counterpart header line."
 }

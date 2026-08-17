@@ -42,6 +42,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],
@@ -69,6 +71,7 @@
       "verdict": "non-violation",
       "reason": "The immediately preceding sentence is 'What is the problem?' and 'Is it your Pods, your Replication Controller or your Service?' answers exactly that question; the nouns that follow are the options, not competing antecedents.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -83,6 +86,7 @@
       "verdict": "non-violation",
       "reason": "'The first step in debugging a Pod is taking a look at it' can only mean looking at the Pod; the other nouns in the sentence ('step', 'look') are not things one takes a look at.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -97,6 +101,7 @@
       "verdict": "non-violation",
       "reason": "'Are they all Running?' follows 'Look at the state of the containers in the pod'; only 'containers' is plural and only containers have a Running state, so the plural pronoun is fixed.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.88
     },
     {
@@ -111,6 +116,7 @@
       "verdict": "non-violation",
       "reason": "'is stuck in Pending' is an adjectival state describing the Pod's condition, not a passive verb with a suppressed actor, and the sentence is a diagnostic condition rather than an instruction.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -125,6 +131,7 @@
       "verdict": "non-violation",
       "reason": "This is the idiomatic situational 'it means that ...', referring to the whole preceding condition; reading it as the Pod would produce nonsense, so no meaning-changing second resolution is available.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.78
     },
     {
@@ -139,6 +146,7 @@
       "verdict": "non-violation",
       "reason": "'it can not be scheduled onto a node' can only be the Pod, since Pods are the thing scheduled onto nodes; the two 'it's in the sentence are mildly awkward but not genuinely ambiguous.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.82
     },
     {
@@ -153,6 +161,7 @@
       "verdict": "non-violation",
       "reason": "Explanatory prose telling the reader what a Pending state means, not an instruction; the scheduler is named two sentences later anyway, so nothing is hidden from the reader.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.82
     },
     {
@@ -167,6 +176,7 @@
       "verdict": "non-violation",
       "reason": "'messages from the scheduler about why it can not schedule your pod' - only the scheduler schedules, and it is the nearest noun, so the pronoun resolves one way.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ]

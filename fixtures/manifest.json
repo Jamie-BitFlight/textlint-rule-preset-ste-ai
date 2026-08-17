@@ -30,7 +30,8 @@
       "split": "dev",
       "originalSha256": "e3658029986914be1e75ea158fa33f120a9eb01f1c69f84a6bd13ee3cf289f2e",
       "provenanceKey": "sqlite-lang-vacuum",
-      "notes": "Bulleted rationale for running VACUUM; mixes descriptive rationale with implicit procedural cues (e.g. forensic recovery risk)."
+      "notes": "Bulleted rationale for running VACUUM; mixes descriptive rationale with implicit procedural cues (e.g. forensic recovery risk).",
+      "compliantSha256": "ef3de186438374bad556caec77edd6e48466379edf5eb7217e506d05bbe0b826"
     },
     {
       "id": "postgres-vacuum-overview",
@@ -59,7 +60,8 @@
       "annotationPath": "annotations/postgres-vacuum-overview.json",
       "split": "heldout",
       "originalSha256": "2c86bf2cf0d125cc48de39f1c4fc2d93ae49aceebdf8f199e81121266a524945",
-      "provenanceKey": "postgres-vacuum-sgml-raw"
+      "provenanceKey": "postgres-vacuum-sgml-raw",
+      "compliantSha256": "4c1b0736eb59b1ced4a3285a0310a936abefac17cd15028f2eecb65de5937cfa"
     },
     {
       "id": "zephyr-dependency-setup",
@@ -88,7 +90,8 @@
       "annotationPath": "annotations/zephyr-dependency-setup.json",
       "split": "dev",
       "originalSha256": "aa3c70a7afa9d7902f53a9cf3d58b8a8c0542f65ab556c3eb0ac2e248f2b00d1",
-      "provenanceKey": "zephyr-getting-started-raw"
+      "provenanceKey": "zephyr-getting-started-raw",
+      "compliantSha256": "970f5bebd129ce964e3677f1b5dcb36f158687babcfe917d0996fc752486ef7a"
     },
     {
       "id": "llvm-getting-started-build",
@@ -117,7 +120,8 @@
       "annotationPath": "annotations/llvm-getting-started-build.json",
       "split": "dev",
       "originalSha256": "9b7247b8f5aa956486c8ced07a6fb0d3b115789092f259933bd0d39383134dc0",
-      "provenanceKey": "llvm-getting-started-raw"
+      "provenanceKey": "llvm-getting-started-raw",
+      "compliantSha256": "610452ded7ec0c8616414f2c0439e5163287d4a1ffdaa07a4e48fb90be83b58b"
     },
     {
       "id": "k8s-debug-pod-troubleshooting",
@@ -145,7 +149,8 @@
       "annotationPath": "annotations/k8s-debug-pod-troubleshooting.json",
       "split": "dev",
       "originalSha256": "8b6ede4169445f14fcc10433a5b65d5e07c484899484db1cd0933a8d8eea52df",
-      "provenanceKey": "k8s-debug-pods-raw"
+      "provenanceKey": "k8s-debug-pods-raw",
+      "compliantSha256": "2eeaf6926ccfd54a4dfa01ab92ffeb36f4f7ed83cead9888dfbc0258f3f557d1"
     },
     {
       "id": "k8s-audit-log-troubleshooting",
@@ -174,7 +179,8 @@
       "annotationPath": "annotations/k8s-audit-log-troubleshooting.json",
       "split": "dev",
       "originalSha256": "bd66cb8afc476965d2e9cbf1aa5e16353b8be7f49931057ddfcbeb024796dea9",
-      "provenanceKey": "k8s-audit-raw"
+      "provenanceKey": "k8s-audit-raw",
+      "compliantSha256": "938c808019da624c7fa9a03e0990e5d1fc0d96b271448170b6603dbeec8dcf0c"
     },
     {
       "id": "osha-lockout-tagout-warning",
@@ -204,7 +210,8 @@
       "annotationPath": "annotations/osha-lockout-tagout-warning.json",
       "split": "dev",
       "originalSha256": "c557faa6af15d3ea98bcfc2abda2b65bc6f858c1fbc96bfd263bc87c23f0152a",
-      "provenanceKey": "osha-1910-147-lockout-tagout"
+      "provenanceKey": "osha-1910-147-lockout-tagout",
+      "compliantSha256": "abbcc0080aab8cd7ac938c354b4487bf501543d88867e5de05a8aca0d92a4135"
     },
     {
       "id": "osha-ppe-requirements",
@@ -234,7 +241,8 @@
       "annotationPath": "annotations/osha-ppe-requirements.json",
       "split": "heldout",
       "originalSha256": "56f1edfb298c46f6ced99cc16e178b624f444968ce6474a5a37f5f7ac1e5109d",
-      "provenanceKey": "osha-1910-132-ppe"
+      "provenanceKey": "osha-1910-132-ppe",
+      "compliantSha256": "713aa38336199ea36426304a344f4f72c59644a9005cb7bd24a28355522935cc"
     },
     {
       "id": "httpd-mod-ssl-overview",
@@ -262,7 +270,8 @@
       "annotationPath": "annotations/httpd-mod-ssl-overview.json",
       "split": "heldout",
       "originalSha256": "04581dcc27f7fd3109a01afdcc44334607e63ed6e1df444833612202c62a5dd8",
-      "provenanceKey": "httpd-mod-ssl-xml-raw"
+      "provenanceKey": "httpd-mod-ssl-xml-raw",
+      "compliantSha256": "e132d829fd2bc005c715f0e2daee10305f23ec4f391400f1885eee7470e97b9a"
     },
     {
       "id": "sqlite-cli-description",
@@ -289,7 +298,8 @@
       "annotationPath": "annotations/sqlite-cli-description.json",
       "split": "dev",
       "originalSha256": "5eba83a15ce0fd4242fdd303144430185e01e94723211dce9b6ecf2ab9d626c0",
-      "provenanceKey": "sqlite-cli"
+      "provenanceKey": "sqlite-cli",
+      "compliantSha256": "ca582664c84d733317096d21c764128708e373a9aa50873005ed7beb1172793b"
     },
     {
       "id": "django-settings-configuration",
@@ -319,7 +329,8 @@
       "annotationPath": "annotations/django-settings-configuration.json",
       "split": "dev",
       "originalSha256": "ce8a9271d584bd7d3d76e079e587e21b7d390c6a883e9b9826cad76c917b3e97",
-      "provenanceKey": "django-settings-doc-raw"
+      "provenanceKey": "django-settings-doc-raw",
+      "compliantSha256": "41a67a72ce933b8b7c73d0fb78276a66bb8788eb917515d4632b71308be70ea8"
     },
     {
       "id": "httpd-mod-ssl-directive-config",
@@ -349,7 +360,8 @@
       "split": "heldout",
       "originalSha256": "fc96c12ee1683fe62292dd5c232e5660984701aff6dfee29ab56c1f5e08f9e57",
       "provenanceKey": "httpd-mod-ssl-xml-raw",
-      "notes": "Contains an unedited upstream wording slip (\"This is should be used ... for a that virtual host\"), preserved verbatim."
+      "notes": "Contains an unedited upstream wording slip (\"This is should be used ... for a that virtual host\"), preserved verbatim.",
+      "compliantSha256": "3ec076d6faa27978a73c56ed009978e4fb7123ad5edcec3be9dc8ebd9cdc108d"
     },
     {
       "id": "curl-url-option-reference",
@@ -378,7 +390,8 @@
       "annotationPath": "annotations/curl-url-option-reference.json",
       "split": "heldout",
       "originalSha256": "f8f7c6e9f0cd99dc823630bff69deb24b043e4daffc4f4451e395fd724bac3a7",
-      "provenanceKey": "curl-cmdline-url-raw"
+      "provenanceKey": "curl-cmdline-url-raw",
+      "compliantSha256": "82d44109be498e7af50c7ff144d79bb3722e76d1b95f19a9e8bf3c2ad9f0e774"
     },
     {
       "id": "sqlite-cli-dot-commands",
@@ -406,7 +419,8 @@
       "annotationPath": "annotations/sqlite-cli-dot-commands.json",
       "split": "dev",
       "originalSha256": "d6ddc33d23a5b0ba57a4f6e118b362c208a4c413120a61b765e9a35585189b18",
-      "provenanceKey": "sqlite-cli"
+      "provenanceKey": "sqlite-cli",
+      "compliantSha256": "9cc409ed7e7a1b1e67bdc0c5454260be89c5e75b9f8b2f206c3ecba3026bcdc2"
     },
     {
       "id": "zephyr-dependency-table",
@@ -436,7 +450,8 @@
       "split": "dev",
       "originalSha256": "fe9cd77e5211f1092c6bff3ad5f00ee195c7b4abc871d3b0ed33869866535531",
       "provenanceKey": "zephyr-getting-started-raw",
-      "notes": "RST list-table (dependency versions) + numbered list + code-block satisfy the structured-content requirement."
+      "notes": "RST list-table (dependency versions) + numbered list + code-block satisfy the structured-content requirement.",
+      "compliantSha256": "5eaae202773504daeec9d5400a5ad02314d2c6c043987a81ae82167cefb2ca0b"
     },
     {
       "id": "llvm-standalone-build-table",
@@ -466,7 +481,8 @@
       "split": "dev",
       "originalSha256": "4eca87aecfa2900b7cd267070011995b29233f3331f7ee6e190335627a0396c8",
       "provenanceKey": "llvm-getting-started-raw",
-      "notes": "Markdown pipe table (sub-project requirements) + bullet list + fenced shell code-block."
+      "notes": "Markdown pipe table (sub-project requirements) + bullet list + fenced shell code-block.",
+      "compliantSha256": "e2e155c61d311140cc6b0b20490278216da7800923455c81583f25ac37d04795"
     },
     {
       "id": "sqlite-pragma-hard-negative",
@@ -494,7 +510,8 @@
       "split": "dev",
       "originalSha256": "2f8f148f6e6a81ce7842f7308534b4d4713121d04233839fcffb0962fa3cedc0",
       "provenanceKey": "sqlite-pragma",
-      "notes": "Rendered as continuous text this reads as one enormous run-on \"sentence\"; it is actually the master index of PRAGMA names (an HTML table of links). A naive long-sentence rule would misfire here."
+      "notes": "Rendered as continuous text this reads as one enormous run-on \"sentence\"; it is actually the master index of PRAGMA names (an HTML table of links). A naive long-sentence rule would misfire here.",
+      "compliantSha256": "afe979a288f2425921910f051cd21fb93a22048adf577bb5f8b0317c8997fe4a"
     },
     {
       "id": "node-cli-hard-negative",
@@ -524,7 +541,8 @@
       "split": "heldout",
       "originalSha256": "3d49955f64e9880ddf41a6ef98258a8deffdad32fe893dd0291632900081a4f5",
       "provenanceKey": "node-cli-doc-raw",
-      "notes": "Dense, correct passive voice describing implementation resolution order (\"it's resolved as...\", \"an error is thrown\"); rewriting to active voice would obscure the actor-agnostic algorithm description."
+      "notes": "Dense, correct passive voice describing implementation resolution order (\"it's resolved as...\", \"an error is thrown\"); rewriting to active voice would obscure the actor-agnostic algorithm description.",
+      "compliantSha256": "c53d3c2557f4f4d7044d59b5a21ddbc0ddf6a05a59b7926bfc314081b72f9919"
     }
   ]
 }

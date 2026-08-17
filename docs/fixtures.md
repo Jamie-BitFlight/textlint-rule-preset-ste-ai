@@ -133,6 +133,8 @@ touched.
   "semanticInvariants": ["the 500-hour interval", "the prohibition on removing the cover"],
   "unresolved": ["…anything a reviewer would not decide…"],
   "status": "accepted" | "disputed" | "deferred",
+  "reviewer": "rewriter-a",
+  "reviewerKind": "human" | "agent",   // required, like the adjudication records
   "reviewerConfidence": 0.9
 }
 ```
@@ -141,6 +143,109 @@ touched.
 alone. A reviewer is not obliged to satisfy a heuristic, and the tests are built so that refusing does
 not fail the build — a fixture with no accepted change must simply be a `hard-negative` or carry a
 `notes` explanation, and must record something as `disputed` or `deferred`.
+
+## How the adjudication was run
+
+The corpus holds two populations of record, produced by different runs over different partitions.
+Conflating them is easy and the distinction matters, so state it first:
+
+| Records                  | Count | Produced by                | Partition              | Provenance in the data   |
+| ------------------------ | ----: | -------------------------- | ---------------------- | ------------------------ |
+| `candidateAdjudications` |   105 | `reviewer-a`…`reviewer-d`  | 5 / 4 / 4 / 4 fixtures | `reviewerKind`, required |
+| `changes`                |    70 | `rewriter-a`, `rewriter-b` | 9 fixtures each        | `reviewerKind`, required |
+
+**`candidateAdjudications` — four independent agent reviewers**, one per `fixtures/verdicts/` file,
+each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
+produced any of these 105 records. Every one carries `reviewerKind`, so that is answerable from the
+data rather than from this paragraph; the field is required and undefaulted precisely so a record can
+never omit it, and duplicate keys are refused so that the answer a reader gets from the bytes is the
+answer every consumer gets from the parse. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run produced a verdict,
+never a person.
+
+**`changes` — the 70 rewrite records** behind the 32 accepted / 36 disputed / 2 deferred figures in
+`implementation-report.md`. These carry the same required `reviewer` and `reviewerKind` as the
+adjudications. They did not at first, and the gap was not cosmetic: while the only trace of who
+wrote a rewrite was the annotation's `reviewers` array, that array was an assertion no record
+pointed into, so a name could be added to it or removed from it without contradicting anything in
+the file. It is now derived — exactly the set of names the two record populations carry — and
+`merge-candidate-verdicts.mjs` refuses a file where it is anything else.
+
+Be precise about what that buys, because it is less than it sounds. The adjudications are pinned to
+something outside their own file: each one binds to a live candidate passage, so it cannot be
+invented. The rewrite records are not. Editing every `changes[].reviewer` in an annotation _and_ its
+`reviewers` array together is self-consistent, and so is adding a rewrite that never happened or
+deleting four that did — measured, all three pass the merge tool untouched.
+
+What refuses them is `scripts/ci/check-annotation-provenance.sh`, and it took three attempts to get
+there, each defeated by the same mistake: a check that constrains an aggregate is defeated by
+whatever rearrangement preserves that aggregate. The totals (105 adjudications, 70 rewrites, the
+per-run split, every record saying `agent`) are preserved by moving credit between two fixtures in
+opposite directions. The per-fixture reviewer sets that closed _that_ hole are themselves preserved
+by shuffling record counts between fixtures crediting the same run — measured, splicing a real
+`disputed` record out of `curl-url-option-reference` and dropping in a second copy of that file's own
+`accepted` record passed every gate in the project and moved the split reported above from 32 / 36 to
+33 / 35.
+
+So the script also declares a digest of each fixture's annotation: object keys sorted, so
+reformatting is not a change, array order preserved, so reordering is. That pins content rather than
+counts, which is the only thing left when a record binds to nothing outside its own file.
+
+The digest covers the whole annotation rather than only its `changes`, and the reason is worth
+recording because the narrower version looked obviously sufficient. An adjudication binds to a live
+candidate passage, so it seemed anchored — but the binding constrains _where a record sits_, not
+_what it says_. `verdict`, `reason` and `reviewerConfidence` are copied from the reviewer row and
+checked against nothing, and the only things constraining them were two aggregates in
+`corpus.test.ts`. Measured: demoting the corpus's two confirmed `passive-voice-candidate` defects
+while promoting two other passages of the same rule preserved both aggregates, passed every gate,
+and quietly changed which passages the semantic evaluators are scored against.
+
+Two smaller things follow from hashing parsed values rather than bytes. Duplicate JSON keys make the
+file on disk and the value every check sees disagree — `JSON.parse` keeps the last and says nothing —
+so every JSON file under `fixtures/` is read through `scripts/lib/parse-json-strict.mjs`, which
+refuses them. That scan covers the whole tree rather than the annotations alone, and the reason is
+worth recording: a revision that guarded only the annotations argued the rest was defence in depth,
+and a review disproved it by moving the identical forgery one directory over. `fixtures/verdicts/` is
+what the adjudications are _derived from_, so a duplicated `reviewer` pair there flows the last value
+into every record while the committed annotation and its digest stay byte-identical — the file reads
+as human-audited and `agent=175` still matches. The same trick on `manifest.json` makes the manifest
+document a share-alike licence while the validator reads the permissive duplicate, walking through
+the gate that exists to refuse copyleft.
+
+Bytes are not hashed directly, which would also catch that, because the repository sets no
+`.gitattributes` and a CRLF checkout would then fail for everyone on Windows.
+
+All of these numbers and digests are expected to change when the corpus does; the point is that
+changing them is an edit somebody makes on purpose, in the same commit as the edit that caused it.
+The gate itself is covered by `test/e2e/check-annotation-provenance.test.ts`, which exists because
+a review deleted each of its checks in turn and the project stayed green every time.
+
+One more limit, since the field name invites the wrong reading. `reviewer` names the run that
+produced an annotation's rewrites, not the author of the text as it stands: 11 of the 70 records
+have had their content edited since, by later reconciliation commits that recorded nothing about
+themselves.
+
+What the adjudication method establishes, and what it does not:
+
+- **Each passage was judged exactly once.** The four reviewers' fixture sets are pairwise disjoint —
+  measured: zero fixtures shared between any pair — and `merge-candidate-verdicts.mjs` rejects a
+  second verdict on the same `(ruleId, span)` as a duplicate. So there is no cross-check to appeal
+  to: no passage was independently confirmed, and `goldLabelFor`'s disagreement path
+  (`labels.size !== 1 → unlabelled`) never fires on this corpus. Agreement between reviewers is not
+  weak evidence here; it is absent, because no two reviewers looked at the same thing.
+- **The binding is enforced even though the judgement is not corroborated.** The merge tool binds
+  each verdict to a `(ruleId, span, quote)` triple, and a verdict that does not bind to a live
+  passage fails the build.
+- **The labels are model-authored ground truth for a model-based evaluator.** The semantic evaluators
+  are scored against these records, so a favourable score is partly a measure of agreement between
+  two applications of similar judgement, not an external check.
+- **The reference documents were not written as controlled language.** A "false positive" here means
+  a finding a reviewer judged wrong against the rule's stated intent — not a finding that contradicts
+  any standard. The corpus can therefore say a good deal about precision and very little about recall.
+
+Treat the resulting figures as the project's own measurement of its own heuristics. They are reported
+because a rule set with no measurement at all is worse, not because they are independent evidence.
+
+## What the records are bound to, and what would break the binding
 
 `originalSpans`, and the `candidateAdjudications` merged in from `fixtures/verdicts/` (see
 [`provisional-rules.md`](./provisional-rules.md#measured-precision-of-the-candidate-heuristics)),
@@ -151,6 +256,13 @@ from a real parser instead; if that change moves a span, the verdict recorded ag
 no longer describes the new one and needs fresh review.
 `scripts/ci/check-candidate-ground-truth.sh` already enforces this for candidate verdicts; a parser
 adoption would need the same discipline applied to `originalSpans`.
+
+That check runs `scripts/merge-candidate-verdicts.mjs --check`, which does two things: it refuses a
+verdict that binds to no live passage, and it compares every record the verdicts produce against
+what is committed in `fixtures/annotations/`. The second half is what makes the annotation files
+themselves checked rather than merely generated — an adjudication edited by hand there, or left
+behind after its candidate moved, fails the build instead of sitting in the corpus unnoticed. To
+regenerate rather than check, run the same script without `--check` and review the diff.
 
 ## Corpus tests
 

@@ -31,6 +31,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     }
   ],
@@ -57,6 +59,7 @@
       "verdict": "non-violation",
       "reason": "'accepts user input and passes it down into the SQLite library' — 'it' is the direct object of the coordinated verb and can only be 'user input'; the other nouns are not candidates for being passed down.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -71,6 +74,7 @@
       "verdict": "non-violation",
       "reason": "'When somebody says ... they might be referring to' is the singular 'they' bound to 'somebody'; no competing referent is grammatically available.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -85,6 +89,7 @@
       "verdict": "non-violation",
       "reason": "'is written by and for the core SQLite developers' is descriptive and already names the agent; an active rewrite would break the 'by and for' coordination and lose meaning.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -99,6 +104,7 @@
       "verdict": "non-violation",
       "reason": "'Graphical User Interface (GUI)' is a standard term of art being formally introduced with its abbreviation; the run is conventional and unambiguous.",
       "reviewer": "reviewer-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.95
     }
   ]

@@ -255,9 +255,12 @@ named semantic evaluator; with semantic analysis disabled they degrade to `revie
 
 ### Measured precision of the candidate heuristics
 
-Four independent reviewers adjudicated **all 105 candidate passages** the rule set emits across the
-18 fixtures, judging each against the rule intent stated below and nothing else. The verdicts are in
-`fixtures/verdicts/` and are merged into `candidateAdjudications` in each annotation record.
+**All 105 candidate passages** the rule set emits across the 18 fixtures were adjudicated against the
+rule intent stated below and nothing else. The verdicts are in `fixtures/verdicts/` and are merged
+into `candidateAdjudications` in each annotation record, where every record names what produced it.
+How the adjudication was run, and what that method does and does not establish, is in
+[`fixtures.md`](./fixtures.md#how-the-adjudication-was-run) — read it before treating the table below
+as an independent measurement.
 
 | Rule                           | Candidates | Confirmed defects | Non-defects |
 | ------------------------------ | ---------: | ----------------: | ----------: |

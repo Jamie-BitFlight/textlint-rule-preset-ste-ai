@@ -140,9 +140,31 @@ copyleft source is present; the validator rejects them, and CC-BY sources propag
 confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
-documentation, more than half of what these provisional rules flag was judged wrong by a reviewer.**
-Two independent reviewers worked on disjoint halves of the corpus and reached the same conclusion
-about the same classes of false positive, which is corroboration rather than a single opinion.
+documentation, more than half of what these provisional rules flag was judged wrong at
+adjudication.** These 70 records were produced by two agent runs, `rewriter-a` and `rewriter-b`,
+working on disjoint halves of the corpus — nine fixtures each — which reached the same conclusion
+about the same classes of false positive.
+
+Two cautions on that sentence, both checkable against the data:
+
+- The attribution above is read from the records themselves: `annotationChangeSchema` requires
+  `reviewer` and `reviewerKind`, the same pair the 105 `candidateAdjudications` carry. It did not
+  until recently, and until then the sentence above rested on the annotation's `reviewers` array —
+  a list nothing pointed into and nothing checked. What holds both populations is
+  `scripts/ci/check-annotation-provenance.sh`, which declares a digest of every annotation
+  alongside the totals. The digest is there because the totals are an aggregate and every aggregate
+  so far has been defeated by the rearrangement that preserves it — including, twice, a rearrangement
+  that survived the fix for the previous one. Binding an adjudication to a live candidate passage
+  constrains where the record sits, not what it says, so that population needed pinning too.
+  `reviewer` names the originating run, and 11 of the 70 records have been edited since by later
+  reconciliation commits.
+- Agreement between two agent runs is weaker evidence than the same agreement between separate
+  people, since instances sharing a base model correlate. Treat it as one method applied
+  consistently.
+
+The 105 `candidateAdjudications` are a separate population with a separate partition and their own
+provenance field. See [`fixtures.md`](./fixtures.md#how-the-adjudication-was-run), which sets the two
+side by side.
 
 ## Defects found and fixed during implementation
 

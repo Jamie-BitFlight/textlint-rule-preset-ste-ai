@@ -41,6 +41,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -70,6 +72,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -100,6 +104,8 @@
         "automated verification of this specific fix is not possible because two other exclamation marks, deliberately left as literal SQL string content, produce identical diagnostic quotes elsewhere in the same file"
       ],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -128,6 +134,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -177,6 +185,8 @@
         "the transcript is not fenced as code in the source excerpt, so the linter reads literal CLI output as prose"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -237,6 +247,8 @@
         "the transcript is not fenced as code in the source excerpt, so the linter reads literal SQL syntax as prose punctuation"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],
@@ -267,6 +279,7 @@
       "verdict": "non-violation",
       "reason": "'named' is a participle introducing the database name, not part of a noun pile; the real phrase 'new SQLite database' is an adjective plus a product name plus its head noun and needs no unpacking.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -281,6 +294,7 @@
       "verdict": "non-violation",
       "reason": "This is SQL column definitions and a shell prompt inside an unfenced terminal transcript, not English prose; there is no noun phrase for a reader to group, so the heuristic misfired on unmarked code.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.88
     },
     {
@@ -295,6 +309,7 @@
       "verdict": "non-violation",
       "reason": "'your system End-Of-File character' groups as [your system's] [End-Of-File character], a conventional CLI term of art, and the parenthetical '(usually a Control-D)' resolves any residual doubt on the spot.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     }
   ]

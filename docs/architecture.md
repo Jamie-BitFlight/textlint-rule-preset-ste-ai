@@ -574,10 +574,12 @@ in `fixtures/verdicts/reviewer-d.json`.
 
 **If migrating a document to the new reader moves any span the corpus already covers, that is a
 re-review trigger for every verdict keyed against that document — not something a span-remapping
-script should paper over.** A verdict is a person's judgement about a specific quoted passage; if the
+script should paper over.** A verdict is a judgement about a specific quoted passage, recorded by the
+reviewer named on the record (agent runs, per `reviewerKind`; see
+[`fixtures.md`](./fixtures.md#how-the-adjudication-was-run)); if the
 new reader reports the "same" finding two characters to the left because a table cell's leading
-space is now excluded from its `Str` child where the old regex scanner included it, the quote a
-reviewer read may no longer be the quote the tool now reports, and silently rewriting `span` to match
+space is now excluded from its `Str` child where the old regex scanner included it, the quote the
+reviewer judged may no longer be the quote the tool now reports, and silently rewriting `span` to match
 would be asserting the reviewer verified something they did not look at. The concrete plan, if this is
 approved: before switching a fixture document's family over, run both readers against it, diff every
 `(ruleId, range)` pair the deterministic rules produce, and for every document where a span changed,

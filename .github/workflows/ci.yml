@@ -55,3 +55,6 @@ jobs:
 
       - name: Confirm every candidate passage still has reviewer ground truth
         run: scripts/ci/check-candidate-ground-truth.sh
+
+      - name: Confirm the corpus provenance totals are unchanged
+        run: scripts/ci/check-annotation-provenance.sh

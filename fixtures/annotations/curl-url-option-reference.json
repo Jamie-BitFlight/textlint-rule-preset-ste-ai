@@ -31,6 +31,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     },
     {
@@ -61,6 +63,8 @@
         "rule scans front-matter metadata as if it were prose"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -91,6 +95,8 @@
         "rule scans front-matter field values as if it were prose"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -121,6 +127,8 @@
         "rule misreads a version number's decimal point as a missing unit space"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -151,6 +159,8 @@
         "rule cannot distinguish a purpose clause with alternative infinitives from two sequential instructions"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.75
     },
     {
@@ -217,6 +227,8 @@
         "rule does not distinguish literal scheme/protocol identifiers from prose abbreviations"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -247,6 +259,8 @@
         "rule misreads a three-part version number's dots as missing unit spaces"
       ],
       "status": "disputed",
+      "reviewer": "rewriter-a",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ],
@@ -280,6 +294,7 @@
       "verdict": "non-violation",
       "reason": "This is a YAML front-matter field, not prose: a key 'c:' followed by a conventional copyright notice naming a person. There is no grouping a reader must guess.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -294,6 +309,7 @@
       "verdict": "non-violation",
       "reason": "Same front-matter block as the adjacent 's1:203' entry: this span joins the key/value metadata lines 'Long: url' and 'Arg: <url/file>' across a newline. Each line is a one-word field name followed by its value; a reader of curl's option-reference front matter parses them independently, line by line, exactly as with the other metadata fields in the same block. There is no noun run and no grouping decision.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -308,6 +324,7 @@
       "verdict": "non-violation",
       "reason": "The span straddles a verb ('matches') and a comma-separated list of established protocol names, so it is not a noun pile. 'Outermost subdomain name' is a clear three-word phrase and the protocol names are component identities.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -322,6 +339,7 @@
       "verdict": "non-violation",
       "reason": "In 'otherwise it assumes HTTP' only an agent capable of inference can be the subject, which restricts the referent to curl; the other nearby nouns (URL, protocol, subdomain name) yield incoherent readings rather than competing meanings.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -336,6 +354,7 @@
       "verdict": "non-violation",
       "reason": "This sits in a paragraph describing curl's scheme-guessing behaviour, and the 'by' phrase supplies a means ('providing a full URL'), not a hidden agent. It is a capability statement rather than an instruction, so no actor is concealed.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.65
     },
     {
@@ -350,6 +369,7 @@
       "verdict": "non-violation",
       "reason": "The passive is in a subordinate clause describing where curl sends output; the main clause is already an active imperative ('use the --output or the --remote-name options'). The writing agent is curl and is irrelevant to the reader's action.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -364,6 +384,7 @@
       "verdict": "non-violation",
       "reason": "The genuine noun phrase is 'dedicated destination option', which is transparent; the span only reaches four words by swallowing the conjunction 'unless' that begins the next clause.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -378,6 +399,7 @@
       "verdict": "non-violation",
       "reason": "Descriptive prose about platform behaviour, and the agent is already named explicitly ('by the operating system'). The reader is not the actor and nothing is hidden.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -392,6 +414,7 @@
       "verdict": "non-violation",
       "reason": "'curl can be told to download URLs' is a version-scoped capability statement with curl as the topic, not an instruction; the implied teller is the reader and is obvious from the surrounding option reference.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.6
     },
     {
@@ -406,6 +429,7 @@
       "verdict": "non-violation",
       "reason": "'It is done with `--url @filename`' takes the whole just-described operation as its referent; the competing nouns (text file, URL, line) all give incoherent readings, so there is only one sustainable resolution.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.7
     },
     {
@@ -420,6 +444,7 @@
       "verdict": "non-violation",
       "reason": "Agentless in form, but the same sentence supplies the active restatement immediately after the colon ('you specify a filename prefixed with the `@` symbol'), so the actor is explicit within the passage and nothing is concealed.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.65
     },
     {
@@ -434,6 +459,7 @@
       "verdict": "non-violation",
       "reason": "The referent is curl, echoing 'curl can be told' two sentences earlier; the carried-over reading from the preceding 'It is done' points at the `--url @filename` mechanism, but both readings send the reader to the same action, so the choice does not change the meaning. Marginal call.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.6
     },
     {
@@ -448,6 +474,7 @@
       "verdict": "non-violation",
       "reason": "Same construction as the earlier 'curl can be told': a capability statement about the tool in descriptive reference prose, with the means stated ('by providing an argument like `@-`') and the implied teller obvious.",
       "reviewer": "reviewer-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.6
     }
   ]

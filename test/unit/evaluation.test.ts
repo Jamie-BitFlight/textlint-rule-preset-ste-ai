@@ -57,6 +57,7 @@ const adjudication = (
   verdict,
   reason: 'a reviewer looked at it',
   reviewer: 't',
+  reviewerKind: 'agent' as const,
   reviewerConfidence: 0.9,
 });
 
@@ -71,6 +72,8 @@ const change = (status: 'accepted' | 'disputed' | 'deferred', start = 100, end =
   semanticInvariants: ['meaning'],
   unresolved: [],
   status,
+  reviewer: 'rewriter-a',
+  reviewerKind: 'agent' as const,
   reviewerConfidence: 0.9,
 });
 

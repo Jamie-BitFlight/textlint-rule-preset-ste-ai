@@ -30,6 +30,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.93
     },
     {
@@ -58,6 +60,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -107,6 +111,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.82
     }
   ],
@@ -139,6 +145,7 @@
       "verdict": "non-violation",
       "reason": "\"resolved as if it's been requested by require()\" names its agent explicitly and describes runtime resolution semantics, not an action the reader performs. Rewriting to an active imperative would misstate what Node does.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -153,6 +160,7 @@
       "verdict": "non-violation",
       "reason": "\"If no corresponding file is found\" is a condition on runtime behaviour; the finder is the module resolver and is irrelevant to the reader. Descriptive prose, not an instruction.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -167,6 +175,7 @@
       "verdict": "non-violation",
       "reason": "\"an error is thrown\" is the conventional way to state that the runtime raises an error, and the thrower is the runtime itself. Making it active would add nothing a reader needs.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -181,6 +190,7 @@
       "verdict": "non-violation",
       "reason": "Same construction as earlier in the section, with the agent stated as require(). It describes how Node loads the resolved path, so the actor is present and the passage is not an instruction.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -195,6 +205,7 @@
       "verdict": "non-violation",
       "reason": "The parallel \"as if it's been requested by import()\" clause names its agent and states loader semantics. The as-if framing is precisely what the passive is doing, and an active rewrite would lose it.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -209,6 +220,7 @@
       "verdict": "non-violation",
       "reason": "\"The program was started with a command-line flag\" is one of a bulleted set of conditions under which a different loader applies, not a step the reader is told to take. Who started it does not affect the condition.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -223,6 +235,7 @@
       "verdict": "non-violation",
       "reason": "\"forces the entry point to be loaded with ECMAScript module loader\" already names the forcing agent (the flag) and describes runtime behaviour. The loading agent is Node and is not a reader-facing choice.",
       "reviewer": "reviewer-d",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     }
   ]

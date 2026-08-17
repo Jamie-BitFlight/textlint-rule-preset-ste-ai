@@ -25,6 +25,8 @@
       ],
       "unresolved": [],
       "status": "disputed",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 1
     },
     {
@@ -53,6 +55,8 @@
       ],
       "unresolved": [],
       "status": "accepted",
+      "reviewer": "rewriter-b",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.97
     }
   ],
@@ -80,6 +84,7 @@
       "verdict": "non-violation",
       "reason": "'where was it observed?' is another member of the same parallel list with the same event referent; the flagged alternatives are past participles, not selectable antecedents.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -94,6 +99,7 @@
       "verdict": "non-violation",
       "reason": "'from where was it initiated?' shares the single implied event referent of the surrounding bullets, so the pronoun is not open to a meaning-changing second reading.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.85
     },
     {
@@ -108,6 +114,7 @@
       "verdict": "non-violation",
       "reason": "'Each request can be recorded with an associated stage' is descriptive prose about apiserver behaviour, not an instruction; the actor is the audit subsystem and naming it would add nothing for the reader.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -122,6 +129,7 @@
       "verdict": "non-violation",
       "reason": "In 'before it is delegated down the handler chain', 'it' is the request just mentioned - the nearest noun and the only thing that traverses a handler chain. The audit event is a weak alternative but not a plausible one for a reader of this text.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.65
     },
     {
@@ -136,6 +144,7 @@
       "verdict": "non-violation",
       "reason": "Descriptive prose about internal request routing; the passage describes when a stage occurs rather than telling anyone to act, and the delegating component is an implementation detail the reader neither controls nor needs.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.88
     },
     {
@@ -150,6 +159,7 @@
       "verdict": "non-violation",
       "reason": "'Once the response headers are sent' marks a point in the server's own lifecycle; there is no instruction and no reader-relevant actor to promote.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -164,6 +174,7 @@
       "verdict": "non-violation",
       "reason": "'before the response body is sent' is the same kind of timing marker in descriptive prose about system behaviour, where the agent is genuinely irrelevant.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.9
     },
     {
@@ -178,6 +189,7 @@
       "verdict": "non-violation",
       "reason": "'This stage is only generated for long-running requests' states a property of the system, not an instruction; the generating component is the apiserver and naming it would not help the reader.",
       "reviewer": "reviewer-c",
+      "reviewerKind": "agent",
       "reviewerConfidence": 0.88
     }
   ]

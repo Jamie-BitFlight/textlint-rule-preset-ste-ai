@@ -36,10 +36,10 @@ function distImport(...segments) {
 // always resolves at the point this script actually runs. `existsSync` + dynamic `import()`
 // matches the same guarded pattern `scripts/validate-fixtures.mjs` and
 // `scripts/evaluate-semantic.mjs` already use for the same reason, and gives a clear message
-// instead of a raw "Cannot find module" if `npm run build` really has not been run yet.
+// instead of a raw "Cannot find module" if `vp run build` really has not been run yet.
 async function main() {
   if (!existsSync(join(root, 'dist', 'core', 'config.js'))) {
-    console.error('dist/ is missing. Run "npm run build" first.');
+    console.error('dist/ is missing. Run "vp run build" first.');
     process.exitCode = 2;
     return;
   }

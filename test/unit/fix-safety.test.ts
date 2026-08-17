@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { autofixPolicySchema, resolveConfig } from '../../src/core/config.js';
 import { analyseDocument } from '../../src/core/document.js';
 import { checkFixSafety, gateFix } from '../../src/core/rule.js';

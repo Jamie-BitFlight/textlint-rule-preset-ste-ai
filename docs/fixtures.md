@@ -47,8 +47,8 @@ HTTP status, byte count, SHA-256 and fetch timestamp. The manifest references a 
 and the validator cross-checks: a fabricated entry cannot pass.
 
 ```bash
-npm run fixtures:fetch      # re-download and rewrite the lock (needs network)
-npm run fixtures:validate   # build, then verify everything below
+vp run fixtures:fetch      # re-download and rewrite the lock (needs network)
+vp run fixtures:validate   # build, then verify everything below
 ```
 
 `validateFixtureCorpus()` checks:
@@ -85,7 +85,7 @@ their annotations mostly record `disputed` findings rather than rewrites.
 evaluator quality and must not be tuned against.
 
 The separation is enforced three ways: the validator asserts the splits are disjoint by content hash
-and that `heldout` is ≥ 25% of the corpus; `npm run eval:semantic` defaults to `heldout` and requires
+and that `heldout` is ≥ 25% of the corpus; `vp run eval:semantic` defaults to `heldout` and requires
 `--split all` to mix; and a test asserts no `heldout` content hash appears in `dev`.
 
 ## Rewriting rules
@@ -284,7 +284,7 @@ regenerate rather than check, run the same script without `--check` and review t
 
 ## Adding a fixture
 
-1. Add the source to `scripts/fetch-sources.mjs` and run `npm run fixtures:fetch`. Never hand-write a
+1. Add the source to `scripts/fetch-sources.mjs` and run `vp run fixtures:fetch`. Never hand-write a
    provenance record.
 2. Verify the licence by fetching the licence page or the repository `LICENSE` file, and quote it
    verbatim in the manifest and in `LICENSES.md`.
@@ -292,4 +292,4 @@ regenerate rather than check, run the same script without `--check` and review t
    comment the other fixtures use.
 4. Add the manifest entry, including the SHA-256 of the file as committed.
 5. Write the counterpart and the annotation.
-6. `npm run fixtures:validate && npx vitest run test/fixtures`.
+6. `vp run fixtures:validate && vp test test/fixtures`.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { analyseDocument } from '../../src/core/document.js';
 import { computeLineStarts, normalizeLineEndings, positionAt } from '../../src/core/text.js';

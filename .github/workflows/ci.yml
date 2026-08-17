@@ -10,39 +10,38 @@ on:
 # needs to do lives in scripts/ci/ where it can be reviewed and executed like any other code.
 jobs:
   verify:
+    name: Verify on Node.js ${{ matrix.node-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: voidzero-dev/setup-vp@313600b80b104eadebb9111787d37a2e83e014ca # v1.17.0
         with:
-          # 24 is Node's current Active LTS and the floor advertised in package.json's
-          # `engines.node`. Node 20 reached end-of-life on 2026-04-30; Node 22 is Maintenance LTS,
-          # not Active — neither is a version this project should advertise support for.
-          node-version: 24
-          cache: npm
+          node-version: ${{ matrix.node-version }}
+          cache: true
 
       - name: Install dependencies
-        run: npm ci
+        run: vp install --frozen-lockfile
 
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Lint and format check
-        run: npm run lint
+      - name: Format, lint, and type check
+        run: vp check
 
       - name: Build from a clean state
-        run: npm run build:clean
+        run: vp run clean && vp run build
 
       # The default suite must never need a model service. If this step starts requiring network
       # access, that is a regression in the deterministic-only guarantee.
       #
-      # Runs `test:coverage`, not plain `test`: vitest.config.ts's coverage `thresholds` are only
-      # evaluated when coverage collection is enabled (`--coverage`), so this is the step that
-      # actually enforces them — running the plain suite here would let a coverage regression pass
-      # CI silently despite the thresholds existing in config.
+      # Runs `vp test --coverage`, not plain `vp test`: vite.config.ts's coverage `thresholds` are
+      # only evaluated when coverage collection is enabled, so this is the step that actually
+      # enforces them. Running the plain suite here would let a coverage regression pass CI silently
+      # despite the thresholds existing in config.
       - name: Unit, integration, fixture and e2e tests (with coverage enforcement)
-        run: npm run test:coverage
+        run: vp test --coverage
 
       - name: Fixture provenance and corpus integrity
         run: node scripts/validate-fixtures.mjs

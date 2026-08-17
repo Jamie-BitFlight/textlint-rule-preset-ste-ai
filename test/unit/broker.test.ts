@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { semanticConfigSchema } from '../../src/core/config.js';
 import type { CandidatePassage, SemanticVerdict } from '../../src/core/types.js';
 import { MemorySemanticCache } from '../../src/model-client/cache.js';

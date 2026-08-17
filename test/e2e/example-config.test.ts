@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { steAiConfigSchema } from '../../src/core/config.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
 

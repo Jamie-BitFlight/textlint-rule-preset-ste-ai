@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { analyseDocument } from '../../src/core/document.js';
 import { resolveConfig } from '../../src/core/config.js';
 import { runDeterministicRules } from '../../src/core/runner.js';

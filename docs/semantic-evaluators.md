@@ -134,7 +134,7 @@ both numbers are carried on the diagnostic so a reader can see why a verdict was
 ## Measurement
 
 ```bash
-npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080 --model my-model
+vp run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080 --model my-model
 ```
 
 Reported per evaluator and overall: true positives, false positives, true negatives, false negatives,

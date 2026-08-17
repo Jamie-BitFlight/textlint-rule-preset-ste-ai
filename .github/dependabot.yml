@@ -12,6 +12,14 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 10
+    # Node.js 22 is the deliberate compatibility floor. Keep its ambient types pinned to that
+    # runtime line instead of allowing a routine dependency group to raise the effective minimum.
+    ignore:
+      - dependency-name: '@types/node'
+      # Vite+ owns the toolchain and its runtime support. Upgrade it deliberately together with the
+      # Node matrix rather than allowing a routine group to raise the development runtime floor.
+      - dependency-name: 'vite-plus'
+      - dependency-name: 'vite'
     groups:
       npm-dependencies:
         patterns:

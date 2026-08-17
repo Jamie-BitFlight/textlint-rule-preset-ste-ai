@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { annotationSchema } from '../../src/fixture-tools/annotation-schema.js';
 import { extractProtectedLiterals, missingLiterals } from '../../src/fixture-tools/literals.js';

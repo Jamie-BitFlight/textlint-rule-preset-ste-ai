@@ -39,7 +39,7 @@ a pluggable `DocumentReader` interface, not hand-written regex over masked text;
 ## Install
 
 ```bash
-npm install --save-dev textlint textlint-rule-preset-ste-ai
+vp install --save-dev textlint textlint-rule-preset-ste-ai
 ```
 
 `.textlintrc.json`:
@@ -237,7 +237,7 @@ record. Provenance is machine-checkable: a fetch script records the real HTTP st
 every source, and the validator cross-checks the manifest against it.
 
 ```bash
-npm run fixtures:validate
+vp run fixtures:validate
 ```
 
 See [`docs/fixtures.md`](docs/fixtures.md).
@@ -254,14 +254,13 @@ conformance claim. See [`docs/rule-pack-import.md`](docs/rule-pack-import.md).
 ## Development
 
 ```bash
-npm install
-npm run typecheck
-npm run lint
-npm test                  # no model required
-npm run fixtures:validate
-npm run verify            # all of the above
+vp install
+vp check                  # format, lint, and type checks
+vp test                   # no model required
+vp run fixtures:validate
+vp run verify             # all of the above
 
-npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # needs a model
+vp run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # needs a model
 ```
 
 | Document                                                         | Contents                                        |
@@ -270,6 +269,7 @@ npm run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # ne
 | [`docs/architecture.md`](docs/architecture.md)                   | modules, the offset contract, the rule contract |
 | [`docs/provisional-rules.md`](docs/provisional-rules.md)         | every rule, with its observed failure modes     |
 | [`docs/rule-authoring.md`](docs/rule-authoring.md)               | writing a rule                                  |
+| [`docs/publishing.md`](docs/publishing.md)                       | publishing releases to npm with trusted OIDC    |
 | [`docs/semantic-evaluators.md`](docs/semantic-evaluators.md)     | evaluators, prompt contract, measurement        |
 | [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md)         | categories, outage policy, autofix policy       |
 | [`docs/suppression.md`](docs/suppression.md)                     | inline directives, and what they record         |

@@ -123,7 +123,12 @@ export type TextMode = 'procedural' | 'descriptive';
 export type AdmonitionKind = 'danger' | 'warning' | 'caution' | 'note' | 'none';
 
 export type BlockKind =
-  'paragraph' | 'heading' | 'list-item' | 'table-cell' | 'block-quote' | 'caption';
+  | 'paragraph'
+  | 'heading'
+  | 'list-item'
+  | 'table-cell'
+  | 'block-quote'
+  | 'caption';
 
 /** A run of prose with exact source offsets. */
 export interface TextBlock {

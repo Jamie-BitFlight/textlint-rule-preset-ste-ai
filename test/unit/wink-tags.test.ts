@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { buildWinkPosIndex } from '../../src/core/wink-tags.js';
 
 function tagOf(text: string, word: string): string | undefined {

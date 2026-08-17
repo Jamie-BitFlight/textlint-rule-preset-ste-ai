@@ -1,0 +1,16 @@
+export default {
+  branches: ['main'],
+  tagFormat: 'v${version}',
+  plugins: [
+    '@semantic-release/commit-analyzer',
+    '@semantic-release/release-notes-generator',
+    ['@semantic-release/npm', { npmPublish: false }],
+    [
+      '@semantic-release/git',
+      {
+        assets: ['package.json', 'package-lock.json'],
+        message: 'chore(release): ${nextRelease.version}\n\n${nextRelease.notes}',
+      },
+    ],
+  ],
+};

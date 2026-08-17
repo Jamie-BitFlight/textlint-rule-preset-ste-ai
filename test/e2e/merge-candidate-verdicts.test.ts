@@ -13,8 +13,19 @@ import { afterEach, describe, expect, it } from 'vitest';
  * script leaves every other gate in the project green. The guarantees they hold down are that
  * `reviewerKind` is required on input and stamped on output, that `--check` compares against the
  * committed annotations rather than stopping at "the verdicts bind", that `reviewers` is derived
- * from the records instead of folded together with what is already in the file, and that the write
- * path neither leaves a stale record behind nor rewrites a file that already holds the right bytes.
+ * from the records instead of folded together with what is already in the file, that the write
+ * path neither leaves a stale record behind nor rewrites a file that already holds the right bytes,
+ * and that every guard binding a verdict to the candidate it judges refuses what it is there to
+ * refuse.
+ *
+ * Read that as a record of which mutants have been killed, not as a claim of coverage over the
+ * script. An independent review of an earlier revision deleted ten guards that the suite as it then
+ * stood did not notice — including the sweep that gives the CI step named "Confirm every candidate
+ * passage still has reviewer ground truth" its entire meaning. The cases those survivors prompted
+ * are in `what it refuses in the verdict-to-candidate binding` and `the order it writes records in`
+ * below. The lesson generalises past this file: the committed corpus is consistent, so no real data
+ * reaches a failure path, and a guard with no synthetic case against it is untested however green
+ * the project looks.
  *
  * The corpus is not used here. These are properties of the tool, and asserting them against the
  * real 105-record corpus would make them fail for reasons that have nothing to do with the tool.
@@ -65,6 +76,10 @@ interface Layout {
 interface Options {
   /** A second manifest fixture with no packet and no verdicts, carrying this annotation. */
   readonly orphanedAnnotation?: Record<string, unknown>;
+  /** Extra candidates in the `demo` packet, for the cases that need two at once. */
+  readonly extraCandidates?: readonly Record<string, unknown>[];
+  /** A packet for a fixture the manifest does not list, which only a stale directory produces. */
+  readonly unmanifestedPacket?: boolean;
 }
 
 const roots: string[] = [];
@@ -85,8 +100,17 @@ function makeCorpus(reviewerDoc: Record<string, unknown>, options: Options = {})
 
   writeFileSync(
     join(packets, 'demo.json'),
-    JSON.stringify({ fixtureId: 'demo', candidates: [candidate] }),
+    JSON.stringify({
+      fixtureId: 'demo',
+      candidates: [candidate, ...(options.extraCandidates ?? [])],
+    }),
   );
+  if (options.unmanifestedPacket === true) {
+    writeFileSync(
+      join(packets, 'stray.json'),
+      JSON.stringify({ fixtureId: 'stray', candidates: [candidate] }),
+    );
+  }
   writeFileSync(join(verdicts, 'reviewer-a.json'), JSON.stringify(reviewerDoc));
 
   const manifest = [{ id: 'demo', annotationPath: 'annotations/demo.json' }];
@@ -141,6 +165,8 @@ interface MutableAnnotation {
    * without a cast.
    */
   candidateAdjudications: unknown;
+  /** The rewrite records. Two cases replace this wholesale to change which run is credited. */
+  changes: Record<string, unknown>[];
 }
 
 /** The first adjudication, or a failure that names the reason rather than an index error. */
@@ -152,6 +178,24 @@ function firstAdjudication(annotation: MutableAnnotation): Record<string, unknow
     throw new Error('the annotation has no adjudication to edit');
   }
   return first;
+}
+
+/**
+ * The `ruleId` of every adjudication, in the order the file holds them. Narrowed by guards rather
+ * than by an assertion: the point of the case using this is that the order is what the tool chose,
+ * so a cast that assumed the shape would be assuming part of the answer.
+ */
+function adjudicationRuleIds(annotation: Record<string, unknown>): string[] {
+  const records = annotation['candidateAdjudications'];
+  if (!Array.isArray(records)) throw new Error('candidateAdjudications is not an array');
+  return records.map((record: unknown) => {
+    if (typeof record !== 'object' || record === null || !('ruleId' in record)) {
+      throw new Error('an adjudication has no ruleId');
+    }
+    const { ruleId } = record;
+    if (typeof ruleId !== 'string') throw new Error('ruleId is not a string');
+    return ruleId;
+  });
 }
 
 /** Edit a committed annotation the way a person with an editor would. */
@@ -444,6 +488,174 @@ describe('merge-candidate-verdicts', () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('demo: cannot read annotations/demo.json:');
       expect(result.stderr).not.toContain('at JSON.parse');
+    });
+  });
+
+  /**
+   * The binding between a verdict and the passage it judges. Every guard here was found by deleting
+   * it and watching the whole project stay green: the corpus is consistent, so no committed data
+   * exercises the failure path, and only a synthetic corpus reaches it.
+   */
+  describe('what it refuses in the verdict-to-candidate binding', () => {
+    it('a candidate no verdict judges, which is the whole point of the ground-truth gate', () => {
+      const layout = makeCorpus(agentVerdicts);
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'demo: candidate ambiguous-pronoun-candidate@10-14 ("ambiguous-pronoun-candidate:s1:10") has no verdict',
+      );
+    });
+
+    it('a quote that does not match the packet, the half that catches a wrong span', () => {
+      const layout = makeCorpus(withRow({ ...agentVerdicts, verdicts: {} }));
+      writeFileSync(
+        join(layout.verdicts, 'reviewer-a.json'),
+        JSON.stringify({
+          ...agentVerdicts,
+          verdicts: { demo: [{ ...verdictRow, quote: 'they' }] },
+        }),
+      );
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'reviewer-a/demo/ambiguous-pronoun-candidate@10-14: quote does not match the text at that span',
+      );
+    });
+
+    it('an evaluatorId that does not match the packet', () => {
+      const layout = makeCorpus({
+        ...agentVerdicts,
+        verdicts: { demo: [{ ...verdictRow, evaluatorId: 'some-other-evaluator' }] },
+      });
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'reviewer-a/demo/ambiguous-pronoun-candidate@10-14: evaluatorId does not match packet',
+      );
+    });
+
+    it('a second verdict on the same passage, rather than letting one silently win', () => {
+      const layout = makeCorpus({
+        ...agentVerdicts,
+        verdicts: { demo: [verdictRow, { ...verdictRow, verdict: 'violation' }] },
+      });
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'reviewer-a/demo: duplicate verdict for ambiguous-pronoun-candidate@10-14',
+      );
+    });
+
+    it('a verdict with no span, which has nothing to bind to', () => {
+      const { span: _span, ...spanless } = verdictRow;
+      const layout = makeCorpus({ ...agentVerdicts, verdicts: { demo: [spanless] } });
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'reviewer-a/demo: verdict for "ambiguous-pronoun-candidate:s1:10" has no span',
+      );
+    });
+
+    it('a reviewer id that is present but empty, which names no run at all', () => {
+      const layout = makeCorpus(withRow({ ...agentVerdicts, reviewer: '' }));
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('reviewer-a.json: missing reviewer id');
+    });
+
+    it('verdicts binding to a fixture the manifest does not list', () => {
+      const layout = makeCorpus(
+        {
+          ...agentVerdicts,
+          verdicts: { demo: [verdictRow], stray: [verdictRow] },
+        },
+        { unmanifestedPacket: true },
+      );
+
+      const result = run(layout);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'stray: verdicts bind to this fixture, but it is not in manifest.json',
+      );
+    });
+
+    it('an unknown flag, rather than ignoring it and running on the defaults', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+
+      const result = run(layout, '--fixtures-dir', layout.fixtures);
+
+      // 2, not 1: a usage error is not a data problem, and `check-exit-codes.sh` pins that split.
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('--fixtures-dir');
+    });
+  });
+
+  describe('the order it writes records in', () => {
+    /** Same span, different rule: only the ruleId tiebreak in the sort separates these two. */
+    const sameSpanCandidate = {
+      ...candidate,
+      passageId: 'zzz-other-rule:s1:10',
+      ruleId: 'zzz-other-rule',
+      evaluatorId: 'other-evaluator',
+    };
+
+    it('breaks a span tie by ruleId, so two rules at one span do not swap between runs', () => {
+      const layout = makeCorpus(
+        {
+          ...agentVerdicts,
+          verdicts: {
+            demo: [{ ...verdictRow, ...sameSpanCandidate, verdict: 'violation' }, verdictRow],
+          },
+        },
+        { extraCandidates: [sameSpanCandidate] },
+      );
+
+      expect(run(layout).status).toBe(0);
+
+      expect(adjudicationRuleIds(readAnnotation(layout))).toEqual([
+        'ambiguous-pronoun-candidate',
+        'zzz-other-rule',
+      ]);
+      expect(run(layout, '--check').status).toBe(0);
+    });
+
+    it('sorts the derived reviewers array, so its order does not depend on file order', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      // The adjudications are read first, so a rewriter name sorting *before* `reviewer-a` is what
+      // separates a sorted derivation from insertion order. `zzz-rewriter` would not: it lands in
+      // the same place either way.
+      editAnnotation(layout, (annotation) => {
+        annotation.reviewers = [];
+        annotation.changes = [{ ...change, reviewer: 'aaa-rewriter' }];
+      });
+
+      expect(run(layout).status).toBe(0);
+
+      expect(readAnnotation(layout)['reviewers']).toEqual(['aaa-rewriter', 'reviewer-a']);
+    });
+
+    it('drops an empty reviewer name from the derived array rather than recording it', () => {
+      const layout = makeCorpus(withRow(agentVerdicts));
+      editAnnotation(layout, (annotation) => {
+        annotation.changes = [{ ...change, reviewer: '' }];
+      });
+
+      expect(run(layout).status).toBe(0);
+
+      expect(readAnnotation(layout)['reviewers']).toEqual(['reviewer-a']);
     });
   });
 });

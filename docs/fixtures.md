@@ -173,11 +173,23 @@ Be precise about what that buys, because it is less than it sounds. The adjudica
 something outside their own file: each one binds to a live candidate passage, so it cannot be
 invented. The rewrite records are not. Editing every `changes[].reviewer` in an annotation _and_ its
 `reviewers` array together is self-consistent, and so is adding a rewrite that never happened or
-deleting four that did — measured, all three pass the merge tool untouched. What refuses them is
-`scripts/ci/check-annotation-provenance.sh`, which pins the totals (105 adjudications, 70 rewrites,
-the per-run split, and the fact that every record says `agent`) the way `check-rules-provisional.sh`
-pins the rule count. Those numbers are expected to change when the corpus does; the point is that
-changing them is an edit somebody makes on purpose.
+deleting four that did — measured, all three pass the merge tool untouched.
+
+What refuses them is `scripts/ci/check-annotation-provenance.sh`, and it took three attempts to get
+there, each defeated by the same mistake: a check that constrains an aggregate is defeated by
+whatever rearrangement preserves that aggregate. The totals (105 adjudications, 70 rewrites, the
+per-run split, every record saying `agent`) are preserved by moving credit between two fixtures in
+opposite directions. The per-fixture reviewer sets that closed _that_ hole are themselves preserved
+by shuffling record counts between fixtures crediting the same run — measured, splicing a real
+`disputed` record out of `curl-url-option-reference` and dropping in a second copy of that file's own
+`accepted` record passed every gate in the project and moved the split reported above from 32 / 36 to
+33 / 35.
+
+So the script also declares a digest of each fixture's `changes` array: object keys sorted, so
+reformatting is not a change, array order preserved, so reordering is. That pins content rather than
+counts, which is the only thing left when a record binds to nothing outside its own file. All of
+these numbers and digests are expected to change when the corpus does; the point is that changing
+them is an edit somebody makes on purpose, in the same commit as the edit that caused it.
 
 One more limit, since the field name invites the wrong reading. `reviewer` names the run that
 produced an annotation's rewrites, not the author of the text as it stands: 11 of the 70 records

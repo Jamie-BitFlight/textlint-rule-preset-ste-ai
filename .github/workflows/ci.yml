@@ -2,8 +2,11 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # Feature branches are verified by the pull_request event below. Restricting push to main
+    # prevents the same commit from running this matrix twice while its pull request is open.
+    branches: [main]
   pull_request:
+    branches: [main]
 
 # Every step invokes a script or an npm script. No logic is inlined in this file: inline YAML code
 # is not linted, not type-checked, not syntax-highlighted and not runnable locally. Anything a step

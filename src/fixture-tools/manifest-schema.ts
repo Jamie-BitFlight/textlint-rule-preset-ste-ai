@@ -8,14 +8,16 @@ import { z } from 'zod';
  * validator cross-checks the manifest against it so a fabricated entry cannot pass.
  */
 
-export const licenceEvidenceSchema = z.object({
+export const licenceEvidenceSchema = z
+  .object({
   /** Where the licence statement is published. */
   url: z.url(),
   /** Verbatim licence statement, or the path of the licence file in the upstream repository. */
   quote: z.string().min(10),
   /** How the evidence was obtained. */
   method: z.enum(['licence-page', 'repository-licence-file', 'page-footer', 'statute']),
-}).strict();
+  })
+  .strict();
 
 export const fixtureCategorySchema = z.enum([
   'installation',
@@ -29,7 +31,8 @@ export const fixtureCategorySchema = z.enum([
   'hard-negative',
 ]);
 
-export const fixtureEntrySchema = z.object({
+export const fixtureEntrySchema = z
+  .object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,60}$/, 'ids are lower-case kebab-case'),
   title: z.string().min(3),
   sourceOrganisation: z.string().min(2),
@@ -92,29 +95,36 @@ export const fixtureEntrySchema = z.object({
   /** Key in `provenance.lock.json` proving the upstream fetch. */
   provenanceKey: z.string().min(1),
   notes: z.string().optional(),
-}).strict();
+  })
+  .strict();
 
-export const fixtureManifestSchema = z.object({
+export const fixtureManifestSchema = z
+  .object({
   $schema: z.string().optional(),
   generatedAt: z.string().min(4),
   /** Statement of why every fixture may be redistributed here. */
   licenceStatement: z.string().min(40),
   fixtures: z.array(fixtureEntrySchema).min(1),
-}).strict();
+  })
+  .strict();
 
-export const provenanceRecordSchema = z.object({
+export const provenanceRecordSchema = z
+  .object({
   url: z.url(),
   httpStatus: z.number().int(),
   fetchedAt: z.string().min(4),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   bytes: z.number().int().nonnegative(),
   contentType: z.string().optional(),
-}).strict();
+  })
+  .strict();
 
-export const provenanceLockSchema = z.object({
+export const provenanceLockSchema = z
+  .object({
   generatedAt: z.string().min(4),
   records: z.record(z.string(), provenanceRecordSchema),
-}).strict();
+  })
+  .strict();
 
 export type FixtureEntry = z.output<typeof fixtureEntrySchema>;
 export type FixtureManifest = z.output<typeof fixtureManifestSchema>;

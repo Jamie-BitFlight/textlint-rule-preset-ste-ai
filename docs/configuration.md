@@ -204,6 +204,13 @@ npx ste-ai lint docs/**/*.md --deterministic-only
 Setting `adjudicate: false` on a candidate rule makes it report `review-required` locally instead of
 producing a semantic candidate.
 
+`abbreviation-introduction` requires `minLength` to be less than or equal to `maxLength`; the two
+bounds become the length range of the abbreviation-shaped token it looks for, and an inverted pair
+describes no token at all. An inverted pair is rejected when the options are validated, so the rule
+is skipped with a `rule-options-invalid` notice naming it and the rest of the run still reports.
+Options that fail validation never abort a run — every rule's options are validated before it runs,
+and a rule whose options are invalid is skipped this way.
+
 ## CLI
 
 ```bash

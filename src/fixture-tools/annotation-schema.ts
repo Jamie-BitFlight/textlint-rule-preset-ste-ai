@@ -11,7 +11,7 @@ import { z } from 'zod';
 export const spanSchema = z.object({
   start: z.number().int().min(0),
   end: z.number().int().min(0),
-});
+}).strict();
 
 export const expectedDiagnosticSchema = z.object({
   ruleId: z.string().min(1),
@@ -24,7 +24,7 @@ export const expectedDiagnosticSchema = z.object({
   ]),
   /** Exact substring of the original that the diagnostic must cover. */
   quote: z.string().min(1),
-});
+}).strict();
 
 export const annotationChangeSchema = z.object({
   passageId: z.string().min(1),
@@ -58,7 +58,7 @@ export const annotationChangeSchema = z.object({
   reviewer: z.string().min(1),
   reviewerKind: z.enum(['human', 'agent']),
   reviewerConfidence: z.number().min(0).max(1),
-});
+}).strict();
 
 /**
  * A reviewer's verdict on a heuristic candidate passage.
@@ -110,7 +110,7 @@ export const candidateAdjudicationSchema = z.object({
   reviewerKind: z.enum(['human', 'agent']),
   reviewer: z.string().min(1),
   reviewerConfidence: z.number().min(0).max(1),
-});
+}).strict();
 
 export const annotationSchema = z.object({
   fixtureId: z.string().min(1),
@@ -124,7 +124,7 @@ export const annotationSchema = z.object({
   protectedLiterals: z.array(z.string()).default([]),
   reviewers: z.array(z.string().min(1)).min(1),
   notes: z.string().optional(),
-});
+}).strict();
 
 export type Annotation = z.output<typeof annotationSchema>;
 export type AnnotationChange = z.output<typeof annotationChangeSchema>;

@@ -625,6 +625,11 @@ describe('screenExtraPatterns', () => {
     // must not fabricate one, and a group that genuinely still consumes is unaffected.
     ['a group proven zero-width, no adjacency at all', '(?:x{0})b'],
     ['a group that actually consumes, not zero-width', 'a*(?:x)a*b'],
+    // Round 14: two single-character classes holding different supplementary-plane characters
+    // (surrogate pairs) must not appear to overlap just because their UTF-16 code units happen to
+    // share a high surrogate — `atomCharSet` must read a whole codepoint per member, not one
+    // UTF-16 code unit at a time.
+    ['two single-character classes of different astral characters', '[\u{1F600}]*[\u{1F601}]*X'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -731,6 +736,14 @@ describe('screenExtraPatterns', () => {
     [
       'the reported eight-way case, alternating two overlapping ranges',
       '^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$',
+      'adjacent-repetition',
+    ],
+    // Round 14: the same supplementary-plane character repeated in two adjacent classes must
+    // still be recognised as overlapping — reading it as a whole codepoint, not per-UTF-16-code-unit,
+    // must not stop genuine overlap detection from working.
+    [
+      'two single-character classes of the same astral character',
+      '[\u{1F600}]*[\u{1F600}]*X',
       'adjacent-repetition',
     ],
     // Round 7: a backreference to a group that can only ever capture empty is itself zero-width —

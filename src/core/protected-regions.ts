@@ -482,10 +482,13 @@ function canOnlyMatchEmpty(
  * pattern, to decide whether that group can be treated as zero-width — and a backreference inside
  * that slice can point at a group opened and closed entirely *outside* it, which this walk's own
  * `collectTrackableGroupKeys(source)` (scoped to the slice) can never see. Found in external review
- * of PR #73, round 13: `^()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b$` confirmed
- * 4.697s for 40 `a`s, because `canOnlyMatchEmpty('\1')` — called on the wrapper group's isolated
- * body text, with no way to know group 1 was the empty `()` earlier in the full pattern — could
- * only ever conclude the backreference consumes, never that it doesn't. `complexityRejection`
+ * of PR #73, round 13: `^()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b$` matched
+ * against 40 `a`s plus a non-matching suffix confirmed multi-second, engine-catastrophic rejection
+ * time (see `test/unit/protected-patterns.test.ts` for the reproducible timing assertion, rather
+ * than a specific duration here that would only describe one run on one machine), because
+ * `canOnlyMatchEmpty('\1')` — called on the wrapper group's isolated body text, with no way to know
+ * group 1 was the empty `()` earlier in the full pattern — could only ever conclude the
+ * backreference consumes, never that it doesn't. `complexityRejection`
  * already computes a full-pattern `groupEmptyOnly` once, for its own escape-branch backreference
  * handling (round 12); this reuses that same completed map as the outer context instead of a third,
  * separately-maintained lookup.
@@ -748,11 +751,14 @@ function isSurrogateCodeUnit(code: number): boolean {
  *
  * Ranges were originally left unenumerated entirely (any `-` strictly between two other characters
  * bailed the whole class out to `undefined`), on the reasoning that a range is not "cheaply
- * enumerable" the way a handful of individual literals is. Round 12 review of PR #73 showed that
+ * enumerable" the way a handful of individual literals is. Round 13 review of PR #73 showed that
  * reasoning wrong for the common case: `^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$`
- * confirmed 4.537s for 40 `b`s, because two overlapping small ranges are exactly as dangerous
- * adjacent as two overlapping literal sets, and just as cheap to enumerate. Bounded expansion below
- * closes that gap while still refusing to enumerate a range whose span is not small.
+ * matched against 40 `b`s plus a non-matching suffix confirmed multi-second, engine-catastrophic
+ * rejection time (see `test/unit/protected-patterns.test.ts` for the reproducible timing assertion
+ * rather than a specific duration here), because two overlapping small ranges are exactly as
+ * dangerous adjacent as two overlapping literal sets, and just as cheap to enumerate. Bounded
+ * expansion below closes that gap while still refusing to enumerate a range whose span is not
+ * small.
  */
 function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
   if (atomText.length === 1) {
@@ -772,8 +778,17 @@ function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
     // unambiguously the literal hyphen — the same reasoning `normalizeAtomText` already applies.
     const isRange = inner[k + 1] === '-' && k + 2 < inner.length;
     if (!isRange) {
-      chars.add(inner[k]!);
-      k += 1;
+      // A literal supplementary-plane character (e.g. an emoji) is two UTF-16 code units — a
+      // surrogate pair — not two separate characters. Adding `inner[k]` alone would add just the
+      // high surrogate half as its own set member, so two *different* astral characters that
+      // happen to share the same high surrogate (common for emoji, which cluster in a handful of
+      // high-surrogate blocks) would appear to overlap on that shared half alone. Found in
+      // external review of PR #73/#76: `[😀]*[😁]*X` — two disjoint single-character classes —
+      // was wrongly rejected as `adjacent-repetition`. `codePointAt`/`fromCodePoint` read and add
+      // the whole character as one set member either way.
+      const codePoint = inner.codePointAt(k)!;
+      chars.add(String.fromCodePoint(codePoint));
+      k += codePoint > 0xffff ? 2 : 1;
     } else {
       const startCode = inner.charCodeAt(k);
       const endCode = inner.charCodeAt(k + 2);
@@ -1063,10 +1078,11 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
         // `canOnlyMatchEmpty` is passed `groupEmptyOnly` — the full-pattern map this function
         // computed once via `analyzeEmptiness(source)` at the top — as outer context, not called on
         // `bodyText` alone. Found in external review of PR #73, round 13:
-        // `()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b` confirmed 4.697s for 40
-        // `a`s, because `canOnlyMatchEmpty('\1')` in isolation has no way to know group 1 — defined
-        // outside this slice — was the empty `()` earlier in the pattern, and could only ever
-        // conclude the backreference consumes.
+        // `()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b` confirmed engine-catastrophic
+        // rejection time against 40 `a`s (see `test/unit/protected-patterns.test.ts` for the
+        // reproducible timing assertion), because `canOnlyMatchEmpty('\1')` in isolation has no way
+        // to know group 1 — defined outside this slice — was the empty `()` earlier in the
+        // pattern, and could only ever conclude the backreference consumes.
       } else if (quantifier !== undefined && quantifier.min !== quantifier.max) {
         // A closed *ordinary* group that can consume is compared against the streak the same way a
         // bare atom is, using its exact body text, normalized the same way a single-character class

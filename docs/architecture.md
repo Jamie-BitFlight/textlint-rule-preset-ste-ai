@@ -525,7 +525,7 @@ to a table cell's text, a list item's text, or a plain-text document's paragraph
 beside the checker, applied per `TextUnit.text`, not inside the reader.
 
 Also in this bucket, but not interchangeable with the rest of it: `corroboratedConstantPass`
-(`src/core/protected-regions.ts:928-942`), which protects a bare all-caps token (e.g. `LLVM`, `ON`)
+(in `src/core/protected-regions.ts`), which protects a bare all-caps token (e.g. `LLVM`, `ON`)
 when it is corroborated elsewhere in the same document by a region a naming-shaped pass already
 recognised. Unlike the other passes named above, it is order-dependent — it consults
 `priorRegions`, the regions already produced by earlier naming-shaped passes (`configFragmentPass`,

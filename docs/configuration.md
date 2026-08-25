@@ -186,25 +186,28 @@ a document. An entry that fails the check does not run, and each failure produce
 output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the document start.
 `detail.reason` names the specific ground:
 
-| `detail.reason`          | Refused because                                               | Example      |
-| ------------------------ | ------------------------------------------------------------- | ------------ |
-| `invalid-syntax`         | `new RegExp(source, 'gu')` throws                             | `([unclosed` |
-| `source-too-long`        | the source exceeds 200 characters                             | —            |
-| `nested-quantifier`      | a repetition is applied to a group whose body already repeats | `(\d+)+`     |
-| `quantified-alternation` | a repetition is applied to a group containing an alternation  | `(a\|ab)*`   |
+| `detail.reason`          | Refused because                                                                                   | Example      |
+| ------------------------ | ------------------------------------------------------------------------------------------------- | ------------ |
+| `invalid-syntax`         | `new RegExp(source, 'gu')` throws                                                                 | `([unclosed` |
+| `source-too-long`        | the source exceeds `MAX_PROTECTED_PATTERN_LENGTH` (exported from `src/core/protected-regions.ts`) | —            |
+| `nested-quantifier`      | a repetition is applied to a group whose body already repeats                                     | `(\d+)+`     |
+| `quantified-alternation` | a repetition is applied to a group containing an alternation                                      | `(a\|ab)*`   |
+| `quantified-optional`    | a repetition is applied to a group containing an optional element                                 | `(a?)+`      |
 
 A refused entry is never silently ignored, because the consequence is not local: the literals it
 named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
 of the passages sent to the semantic service. Silence there would look exactly like a clean run.
 
-The last two grounds bound match time. A repetition nested inside a repetition can take time
-exponential in document length, and a JavaScript regular expression cannot be interrupted once
-matching has begun, so the shape is refused up front rather than timed. The check is syntactic and
-therefore blunt in both directions: it refuses `(?:foo|bar)+`, which is harmless in practice, and it
-does not refuse a cost that comes from adjacent rather than nested repetitions (`\d+\d+x`, which is
-polynomial, not exponential). Rewrite a refused pattern so the repeated group's body neither repeats
-nor alternates — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the
-shape without the outer repetition.
+The last three grounds bound match time. A repetition nested inside a repetition, or wrapped around
+a group with an optional element, can take time exponential in document length — `(a?)+` matches the
+same span more than one way per iteration for the same reason `(a+)+` does, just reached through `?`
+instead of `+`/`*` — and a JavaScript regular expression cannot be interrupted once matching has
+begun, so the shape is refused up front rather than timed. The check is syntactic and therefore blunt
+in both directions: it refuses `(?:foo|bar)+`, which is harmless in practice, and it does not refuse
+a cost that comes from adjacent rather than nested repetitions (`\d+\d+x`, which is polynomial, not
+exponential). Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
+contains an optional element — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not —
+or match the shape without the outer repetition.
 
 ### Option precedence
 

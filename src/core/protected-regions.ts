@@ -90,7 +90,14 @@ export type ProtectedPatternRejectionReason =
   /** A repetition quantifier applied to a group whose body already repeats, e.g. `(\d+)+`. */
   | 'nested-quantifier'
   /** A repetition quantifier applied to a group containing an alternation, e.g. `(a|ab)*`. */
-  | 'quantified-alternation';
+  | 'quantified-alternation'
+  /**
+   * A repetition quantifier applied to a group containing an optional element, e.g. `(a?)+`: each
+   * iteration can consume the optional atom or skip it, so the same input span has more than one
+   * derivation across iterations — the same exponential-backtracking mechanism as a nested
+   * quantifier, reached through `?`/`{0,n}` instead of `+`/`*`.
+   */
+  | 'quantified-optional';
 
 export interface ProtectedPatternRejection {
   /** The offending source, exactly as configured. */
@@ -108,6 +115,8 @@ export interface ScreenedProtectedPatterns {
 }
 
 interface QuantifierAt {
+  /** Smallest number of repetitions the quantifier requires; `0` for `*` and `?`. */
+  readonly min: number;
   /** Largest number of repetitions the quantifier permits; `Infinity` for `*`, `+` and `{n,}`. */
   readonly max: number;
   /** Characters consumed by the quantifier, so the scanner can step over it. */
@@ -117,28 +126,62 @@ interface QuantifierAt {
 /**
  * Read a quantifier at `index`, or `undefined` when no quantifier starts there.
  *
- * `?` is a quantifier but not a *repetition*: `(\d+)?` cannot backtrack more than `\d+` alone, so
- * only quantifiers whose maximum exceeds one are of interest here. A lazy or possessive modifier
- * (`+?`, `*+`) changes match semantics, not the size of the search space, and is counted the same.
+ * A lazy or possessive modifier (`+?`, `*+`) changes match semantics, not the size of the search
+ * space, and is counted the same.
  */
 function quantifierAt(source: string, index: number): QuantifierAt | undefined {
   const ch = source[index];
-  if (ch === '*' || ch === '+') return { max: Number.POSITIVE_INFINITY, length: 1 };
-  if (ch === '?') return { max: 1, length: 1 };
+  if (ch === '*') return { min: 0, max: Number.POSITIVE_INFINITY, length: 1 };
+  if (ch === '+') return { min: 1, max: Number.POSITIVE_INFINITY, length: 1 };
+  if (ch === '?') return { min: 0, max: 1, length: 1 };
   if (ch !== '{') return undefined;
   const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(index));
   if (m === null) return undefined;
   const min = Number(m[1]);
   const max = m[2] === undefined ? min : m[3] === '' ? Number.POSITIVE_INFINITY : Number(m[3]);
-  return { max, length: m[0].length };
+  return { min, max, length: m[0].length };
 }
 
 /** One group's accumulated shape, used to judge the quantifier that may follow its `)`. */
 interface GroupShape {
-  /** A repetition quantifier occurs somewhere inside this group, at any depth. */
+  /** A repetition quantifier (max > 1) occurs somewhere inside this group, at any depth. */
   repeats: boolean;
   /** An alternation occurs somewhere inside this group, at any depth. */
   alternates: boolean;
+  /**
+   * An atom, group, or the group itself has a minimum of zero (`?`, `*`, `{0,n}`) somewhere inside
+   * this group, at any depth — including a subgroup whose own trailing quantifier is optional.
+   */
+  optional: boolean;
+}
+
+/**
+ * Length of the group-type marker immediately after an opening `(`, or `0` for an ordinary
+ * capturing group.
+ *
+ * `(?:`, `(?=`, `(?!`, `(?<=`, `(?<!` and a named group's `(?<name>` all start with a literal `?`
+ * that is not a quantifier — there is nothing before it, inside the frame just pushed for `(`, for
+ * it to quantify. Without skipping the marker here, the bare-atom scan below would read that `?` as
+ * an optional quantifier applied to nothing and mark the group `optional`, so every non-capturing
+ * group or lookaround — `(?:[A-Z][A-Z]-)`, harmless — would look exactly like `(a?)`, genuinely
+ * ambiguous, the moment either sits under an outer repetition.
+ *
+ * Every source reaching this function already compiled via `new RegExp` (`screenExtraPatterns`
+ * checks that first), so a `?` here is guaranteed to start one of these five recognised forms —
+ * never a malformed one.
+ */
+function groupMarkerLength(source: string, openParenIndex: number): number {
+  if (source[openParenIndex + 1] !== '?') return 0;
+  const marker = source[openParenIndex + 2];
+  if (marker === ':' || marker === '=' || marker === '!') return 2;
+  if (marker === '<') {
+    const lookbehind = source[openParenIndex + 3];
+    if (lookbehind === '=' || lookbehind === '!') return 3;
+    // A named group: `?<`, the name, and the closing `>`.
+    const nameEnd = source.indexOf('>', openParenIndex + 3);
+    return nameEnd - openParenIndex + 1;
+  }
+  return 0;
 }
 
 /**
@@ -149,20 +192,23 @@ interface GroupShape {
  * the hang it was meant to prevent) and over a linear-time engine (a second engine for one config
  * field). It costs a single scan of the source and no match time at all.
  *
- * Two shapes are refused: a repetition applied to a group that already repeats — `(\d+)+`,
- * `(a*)*`, `(?:x+|y)+`, the classic exponential forms — and a repetition applied to a group
- * containing an alternation — `(a|ab)*` — because deciding whether the branches are ambiguous is
- * exactly the analysis this cheap screen does not do.
+ * Three shapes are refused, each because a repetition wraps a group whose body can consume the
+ * same span more than one way: a repetition applied to a group that already repeats — `(\d+)+`,
+ * `(a*)*`, `(?:x+|y)+`, the classic exponential forms; a repetition applied to a group containing
+ * an alternation — `(a|ab)*` — because deciding whether the branches are ambiguous is exactly the
+ * analysis this cheap screen does not do; and a repetition applied to a group containing an
+ * optional element — `(a?)+` — because each iteration can consume or skip the optional atom, which
+ * is the same ambiguity reached through `?`/`{0,n}` instead of `+`/`*`.
  *
  * The screen is deliberately syntactic, and therefore both over- and under-approximates. It refuses
  * `(?:foo|bar)+`, which is harmless in practice, and it does not refuse shapes whose cost comes
  * from two adjacent repetitions rather than nesting (`\d+\d+x`, polynomial rather than exponential).
- * `docs/configuration.md` documents both, together with the workaround: rewrite the repeated group
- * so its body neither repeats nor alternates.
+ * `docs/configuration.md` documents all three refused shapes, together with the workaround: rewrite
+ * the repeated group so its body neither repeats, alternates, nor contains an optional element.
  */
 function complexityRejection(source: string): ProtectedPatternRejection | undefined {
   // Index 0 is the whole pattern, which nothing can quantify; each `(` pushes a frame.
-  const stack: GroupShape[] = [{ repeats: false, alternates: false }];
+  const stack: GroupShape[] = [{ repeats: false, alternates: false, optional: false }];
   let i = 0;
 
   while (i < source.length) {
@@ -188,8 +234,8 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       continue;
     }
     if (ch === '(') {
-      stack.push({ repeats: false, alternates: false });
-      i += 1;
+      stack.push({ repeats: false, alternates: false, optional: false });
+      i += 1 + groupMarkerLength(source, i);
       continue;
     }
     if (ch === ')') {
@@ -216,11 +262,25 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
               'branches this screen cannot prove unambiguous',
           };
         }
+        if (closed.optional) {
+          return {
+            source,
+            reason: 'quantified-optional',
+            explanation:
+              'a repetition quantifier is applied to a group containing an optional element, so ' +
+              'the same input span has more than one way to divide across iterations',
+          };
+        }
         parent.repeats = true;
       }
       // A group's shape is part of its parent's shape: `((\d+))+` must read as nested repetition.
       parent.repeats = parent.repeats || closed.repeats;
       parent.alternates = parent.alternates || closed.alternates;
+      // The group itself is optional from the parent's point of view either because something
+      // optional happened inside it, or because its own trailing quantifier makes the whole group
+      // optional, e.g. the `(a+)?` in `((a+)?)+` — either way, a later outer repetition on `parent`
+      // must see it.
+      parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
       i += 1 + (quantifier?.length ?? 0);
       continue;
     }
@@ -228,6 +288,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     const quantifier = quantifierAt(source, i);
     if (quantifier !== undefined) {
       if (quantifier.max > 1) frame.repeats = true;
+      if (quantifier.min === 0) frame.optional = true;
       i += quantifier.length;
       continue;
     }

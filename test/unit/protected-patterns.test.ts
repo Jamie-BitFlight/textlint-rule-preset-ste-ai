@@ -57,6 +57,27 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('quantified-alternation');
   });
 
+  it('reports a quantified optional, whose iterations can split the same span two ways', () => {
+    // Reported in external review of PR #73: an earlier version of the screen checked only for a
+    // nested repetition or alternation inside the repeated group, so `(aa?)+` — an optional atom,
+    // not an explicit `+`/`*` — compiled and passed straight through to `matchAll`. Proving the
+    // shape it exploits is really dangerous, not just differently classified: run the pattern
+    // `screenExtraPatterns` refuses directly against Node's own engine, on the input from that
+    // review comment, and confirm it would have taken over a second, not that it merely "looks
+    // slow" by inspection.
+    const attack = new RegExp('^(aa?)+$', 'u');
+    const input = `${'a'.repeat(35)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^(aa?)+$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('quantified-optional');
+  });
+
   it('reports an over-long source, so a pathological pattern never reaches the engine', () => {
     const tooLong = `${'a'.repeat(MAX_PROTECTED_PATTERN_LENGTH)}b`;
     const notices = patternNotices(analyse([tooLong]).notices);
@@ -102,6 +123,12 @@ describe('screenExtraPatterns', () => {
     ['a quantifier inside a character class, which is a literal', '[a+]+'],
     ['escaped parentheses, which are not a group', '\\(a+\\)+'],
     ['an alternation that is not repeated', '(?:PN|SN)\\d+'],
+    // A non-capturing group's `?:` starts with a literal `?` that is not a quantifier — nothing
+    // precedes it to quantify. These must not be misread as an optional element and rejected.
+    ['a repeated non-capturing group with a safe body', '(?:abc)+'],
+    ['a repeated named group with a safe body', '(?<part>abc)+'],
+    ['a lookahead containing an optional element, not itself repeated', '(?=a?)'],
+    ['a lookbehind containing an optional element, not itself repeated', '(?<=a?)'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -112,6 +139,16 @@ describe('screenExtraPatterns', () => {
     ['repetition nested two groups deep', '((\\d+))+', 'nested-quantifier'],
     ['a repeated alternation of repetitions', '(?:x+|y)+', 'nested-quantifier'],
     ['a repeated ambiguous alternation', '(a|ab)*', 'quantified-alternation'],
+    // Each iteration of the outer `+` can consume the optional atom or skip it, so the same input
+    // has more than one way to split across iterations — the same mechanism as a nested repetition,
+    // reached through `?` instead of `+`/`*`. Node's own engine takes >1s matching `^(aa?)+$`
+    // against 35 `a`s followed by a non-matching character; this is the shape that bypassed an
+    // earlier version of this screen, reported in external review of PR #73.
+    ['a repeated group with a trailing optional atom', '(aa?)+', 'quantified-optional'],
+    ['the minimal repeated-optional shape', '(a?)+', 'quantified-optional'],
+    ['a repeated optional shape inside a named group', '(?<part>a?)+', 'quantified-optional'],
+    ['a repeated optional shape nested two groups deep', '((a?))+', 'quantified-optional'],
+    ['a bounded optional repetition, min zero', '(a{0,3})+', 'nested-quantifier'],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

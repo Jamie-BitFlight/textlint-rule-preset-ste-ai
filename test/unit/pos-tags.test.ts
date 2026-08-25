@@ -313,9 +313,9 @@ describe('sentenceOpensImperative', () => {
   it('gives a one-phrase multi-word entry a different active configuration than its words split apart', () => {
     // `["gadget widget"]` (one phrase) and `["gadget", "widget"]` (two separate verbs) must not
     // collapse to the same taught state: switching between them must actually re-teach.
-    expect(sentenceOpensImperative('Widget the gadget before shipping.', ['gadget', 'widget'])).toBe(
-      true,
-    );
+    expect(
+      sentenceOpensImperative('Widget the gadget before shipping.', ['gadget', 'widget']),
+    ).toBe(true);
     expect(sentenceOpensImperative('Widget the gadget before shipping.', ['gadget widget'])).toBe(
       false,
     );

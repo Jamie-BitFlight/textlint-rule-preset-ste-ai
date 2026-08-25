@@ -132,6 +132,54 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition of a Unicode property escape, not four unrelated atoms', () => {
+    // Reported in external review of PR #73, round 7: the escape branch always read exactly two
+    // characters, so `\p{L}` split into the unrelated atoms `\p`, `{`, `L`, `}` — only the
+    // trailing `}` ever got quantified, and the unquantified atoms between one `}` and the next
+    // reset the adjacent-repetition streak every time. Same proof discipline: measure first.
+    const attack = new RegExp('^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition between two different classes that overlap', () => {
+    // Reported in external review of PR #73, round 7: round 6's single-character-class
+    // normalization recognised `[a]` as the same atom as bare `a`, but not `[ab]` as an atom that
+    // *overlaps* with `a` — the raw source text still differed, so the streak was never caught.
+    // Same proof discipline: measure first.
+    const attack = new RegExp('^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports a backreference to an empty capture as matches-only-empty, not a consuming atom', () => {
+    // Reported in external review of PR #73, round 7: the escape branch treated every
+    // backreference as an ordinary consuming escape, so `()\1` — a capture that can only ever be
+    // empty, followed by a backreference to it — compiled and passed every check even though
+    // every possible match is zero-length.
+    const notices = patternNotices(analyse(['()\\1']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -233,6 +281,20 @@ describe('screenExtraPatterns', () => {
     // A group whose own trailing quantifier has an exact-zero maximum can never actually run, so
     // an outer repetition on the group is not reached — no different from `a{0}` on a bare atom.
     ['a group with an exact-zero trailing quantifier, not itself repeated', '(PN){0}b'],
+    // Round 7: a Unicode property escape is one atom (`\p{L}` is length 5, not two separate
+    // characters), so `\p{L}` and `\p{N}` are two genuinely different, non-overlapping atoms — the
+    // parser has no enumerable character set for either, so no overlap is provable and neither
+    // shape is flagged on suspicion.
+    ['a repeated Unicode property escape, alone', '\\p{L}+'],
+    ['two different Unicode property escapes, adjacent', '\\p{L}*\\p{N}*b'],
+    // A backreference to a group that genuinely consumes is an ordinary consuming atom — only a
+    // backreference to a *provably empty* capture is treated as zero-width.
+    ['a backreference to a group that actually consumes', '(a)\\1'],
+    ['a backreference to an empty capture, with consuming content after it', '()\\1b'],
+    // Two multi-character classes with genuinely no character in common — the range and
+    // escape-inside-a-class cases just above already cover why `[a-z]`/`[\d]` are not enumerable
+    // in the first place, so overlap with another atom is never claimed for either.
+    ['two disjoint multi-character classes, adjacent', '[ab]*[cd]*e'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -305,6 +367,41 @@ describe('screenExtraPatterns', () => {
       '((PN)){0}',
       'matches-only-empty',
     ],
+    // Round 7: a Unicode property escape is one atom, not the four unrelated characters an
+    // earlier version of the scanner split it into — so the same adjacent-repetition ambiguity
+    // as `a*a*` applies to `\p{L}*\p{L}*` too, and its negation `\P{...}` the same way.
+    [
+      'the same Unicode property escape, repeated adjacently, eight-way',
+      '^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$',
+      'adjacent-repetition',
+    ],
+    [
+      'a negated Unicode property escape, repeated adjacently',
+      '\\P{L}*\\P{L}*b',
+      'adjacent-repetition',
+    ],
+    // Round 7: two atoms that are not textually identical but can still match the same character
+    // are just as ambiguous adjacent as the same atom repeated.
+    [
+      'a bare literal and a multi-character class that contains it',
+      'a*[ab]*b',
+      'adjacent-repetition',
+    ],
+    ['two multi-character classes that share a character', '[ab]*[bc]*d', 'adjacent-repetition'],
+    [
+      'the reported eight-way case, alternating a bare literal and an overlapping class',
+      '^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$',
+      'adjacent-repetition',
+    ],
+    // Round 7: a backreference to a group that can only ever capture empty is itself zero-width —
+    // the escape branch previously treated every backreference as an ordinary consuming escape.
+    ['a backreference to an empty capture', '()\\1', 'matches-only-empty'],
+    [
+      'a backreference to a capture whose own content is quantified to zero',
+      '(a{0})\\1',
+      'matches-only-empty',
+    ],
+    ['a named backreference to an empty capture', '(?<x>)\\k<x>', 'matches-only-empty'],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

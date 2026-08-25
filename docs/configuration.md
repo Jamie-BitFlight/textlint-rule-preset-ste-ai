@@ -206,29 +206,35 @@ document length — `(a?)+` matches the same span more than one way per iteratio
 `(a+)+` does, just reached through `?` instead of `+`/`*`; `a*a*` has no nesting or alternation at
 all, but the same ambiguity in how much of a run of `a`s the first repeat consumed versus the second
 — and a JavaScript regular expression cannot be interrupted once matching has begun, so each shape is
-refused up front rather than timed. `adjacent-repetition` triggers on the _same_ atom appearing twice
-in a row with a range quantifier on each (`\d+\d+`, not just `a*a*`; a lazy quantifier like `\d+?`
-still counts, since laziness changes which match is preferred, not whether more than one is
-possible); an exact count (`{2}`) never qualifies, so `DOC-[A-Z]{2}-\d+` stays accepted. The check is
-syntactic and therefore blunt in both directions: it refuses `(?:foo|bar)+`, which is harmless in
-practice, and it does not attempt to prove whether two _different-looking_ adjacent atoms are safe to
-combine — comparison is by source text, normalized only for the one equivalence that is unambiguous
-to detect syntactically: a single-character class such as `[a]` is recognised as the same atom as the
-bare `a` (and `[-]` as the bare `-`, the one character a class can hold alone without meaning a
-range), so `a*[a]*` is refused exactly like `a*a*`. A class holding any other shape — a range, a
-negation, an escape, or a character whose meaning changes outside a class such as `[.]` versus bare
-`.` — is left uncompared, on the same "accept unless provably unsafe" bias as everything else in this
-screen. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
-contains an optional element, and so no atom is independently range-quantified twice in a row —
-`(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape without the
-outer repetition.
+refused up front rather than timed. `adjacent-repetition` triggers on two atoms, adjacent and each
+independently range-quantified (`\d+\d+`, not just `a*a*`; a lazy quantifier like `\d+?` still
+counts, since laziness changes which match is preferred, not whether more than one is possible),
+that can match the same character — the same atom spelled identically (`a*a*`), a single-character
+class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
+adjacent character to form a range with and is unambiguously literal), or two different classes
+that share a member (`a*[ab]*`, `[ab]*[bc]*`). An exact count (`{2}`) never qualifies, so
+`DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
+refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
+character sets are cheaply enumerable — a bare literal, or a class built entirely of individual
+literal characters with no range, escape, or negation. A range (`[a-z]`), an escape shorthand inside
+or outside a class (`\d`, `[\d]`), a Unicode property escape (`\p{L}`), the wildcard (`.`), or a
+character whose meaning changes outside a class (`[.]` versus bare `.`) is left uncompared, on the
+same "accept unless provably unsafe" bias as everything else in this screen — so `[a-z]+[0-9]+` is
+accepted even though the two classes happen to be disjoint, and `\p{L}*\p{L}*` is refused only
+because it is the same escape spelled identically, not because either one's character set was
+computed. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
+contains an optional element, and so no two adjacent range-quantified atoms can match the same
+character — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape
+without the outer repetition.
 
 `matches-only-empty` is a different kind of refusal: not a complexity risk, just a pattern that can
 never do anything. `extraPatternPass` discards a zero-length match because there is no span to
 protect, so `^` or a bare lookahead like `(?=PN)` — an atom quantified to occur exactly zero times,
-`a{0}` — or a _group_ quantified to occur exactly zero times, `(PN){0}`, regardless of what its body
-contains — would otherwise pass every check above and silently protect nothing. Content _outside_ a
-lookaround still counts: `(?=PN)PN` consumes the second `PN` and is accepted.
+`a{0}` — a _group_ quantified to occur exactly zero times, `(PN){0}`, regardless of what its body
+contains — or a backreference to a group that can only ever capture empty, `()\1` — would otherwise
+pass every check above and silently protect nothing. Content _outside_ a lookaround still counts:
+`(?=PN)PN` consumes the second `PN` and is accepted, and a backreference to a group that actually
+consumes, `(a)\1`, is an ordinary consuming atom.
 
 ### Option precedence
 

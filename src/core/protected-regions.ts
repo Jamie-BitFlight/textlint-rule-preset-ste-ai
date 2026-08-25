@@ -178,6 +178,29 @@ function quantifierAt(source: string, index: number): QuantifierAt | undefined {
   return { min, max, length };
 }
 
+/**
+ * Length of the escape sequence starting at the `\` at `index` — `2` for an ordinary escape
+ * (`\d`, `\.`, `\1`), or the full extent of a Unicode property escape (`\p{Letter}`,
+ * `\P{Script=Greek}`) through its closing `}`.
+ *
+ * Reading only two characters for `\p{L}` splits it into `\p`, then reads `{`, `L`, `}` as three
+ * unrelated bare atoms — corrupting every per-atom check downstream, since none of them is aware
+ * they were ever part of one escape. Found in external review of PR #73:
+ * `\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*X` passed adjacent-repetition because only the
+ * trailing `}` was ever quantified and compared, and the unquantified `\p`/`{`/`L` atoms between
+ * one `}` and the next reset the streak every time; confirmed 7.187s for 40 `a`s before this fix.
+ * Every source reaching this already compiled via `new RegExp`, so a `\p`/`\P` here is guaranteed
+ * to be followed by a well-formed `{...}`.
+ */
+function escapeAtomLength(source: string, index: number): number {
+  const kind = source[index + 1];
+  if (kind === 'p' || kind === 'P') {
+    const closeBrace = source.indexOf('}', index + 2);
+    if (closeBrace >= 0) return closeBrace - index + 1;
+  }
+  return 2;
+}
+
 /** One group's accumulated shape, used to judge the quantifier that may follow its `)`. */
 interface GroupShape {
   /** A repetition quantifier (max > 1) occurs somewhere inside this group, at any depth. */
@@ -190,14 +213,27 @@ interface GroupShape {
    */
   optional: boolean;
   /**
-   * Source text of the bare atom most recently and immediately quantified with a *range*
-   * quantifier (`min !== max`, so there is genuinely more than one way to satisfy it) directly in
-   * this frame's own body — `undefined` once anything breaks the adjacency: a different atom, an
-   * exact-count quantifier, no quantifier at all, or a `|`/`(`/`)`. Used to catch a second,
-   * textually identical one appearing immediately after it (`a*a*`), where the ambiguity is which
-   * repeat consumed which character, not whether either individually can.
+   * The bare atom most recently and immediately quantified with a *range* quantifier (`min !==
+   * max`, so there is genuinely more than one way to satisfy it) directly in this frame's own body
+   * — `undefined` once anything breaks the adjacency: a different, non-overlapping atom, an
+   * exact-count quantifier, no quantifier at all, or a `|`/`(`/`)`. Used to catch a second one
+   * appearing immediately after it (`a*a*`) — including one that matches an overlapping but not
+   * textually identical set of characters (`a*[ab]*`) — where the ambiguity is which repeat
+   * consumed which character, not whether either individually can.
    */
-  lastRangeQuantifiedAtom: string | undefined;
+  lastRangeQuantifiedAtom: RangeQuantifiedAtom | undefined;
+}
+
+/** An atom quantified with a range quantifier, retained so the next atom can be compared to it. */
+interface RangeQuantifiedAtom {
+  /** Normalized source text (see {@link normalizeAtomText}), for an exact-spelling match. */
+  readonly text: string;
+  /**
+   * The finite set of single characters this atom can match, when cheaply enumerable — see
+   * {@link atomCharSet}. `undefined` when this atom's character set is not determined, in which
+   * case only an identical `text` can still catch a match.
+   */
+  readonly charSet: ReadonlySet<string> | undefined;
 }
 
 /**
@@ -240,19 +276,26 @@ function groupMarkerLength(source: string, openParenIndex: number): number {
  * the hang it was meant to prevent) and over a linear-time engine (a second engine for one config
  * field). It costs a single scan of the source and no match time at all.
  *
- * Three shapes are refused, each because a repetition wraps a group whose body can consume the
- * same span more than one way: a repetition applied to a group that already repeats — `(\d+)+`,
+ * Four shapes are refused, each because a repetition wraps something that can consume the same
+ * span more than one way: a repetition applied to a group that already repeats — `(\d+)+`,
  * `(a*)*`, `(?:x+|y)+`, the classic exponential forms; a repetition applied to a group containing
  * an alternation — `(a|ab)*` — because deciding whether the branches are ambiguous is exactly the
- * analysis this cheap screen does not do; and a repetition applied to a group containing an
- * optional element — `(a?)+` — because each iteration can consume or skip the optional atom, which
- * is the same ambiguity reached through `?`/`{0,n}` instead of `+`/`*`.
+ * analysis this cheap screen does not do; a repetition applied to a group containing an optional
+ * element — `(a?)+` — because each iteration can consume or skip the optional atom, which is the
+ * same ambiguity reached through `?`/`{0,n}` instead of `+`/`*`; and two range-quantified atoms
+ * that are immediately adjacent and can match an overlapping set of characters — `\d+\d+x`,
+ * `a*[ab]*` — because the ambiguity is at the boundary between the two repeats, not inside either
+ * one, so it needs no nesting or alternation to be exponentially costly in the number of adjacent
+ * repeats.
  *
  * The screen is deliberately syntactic, and therefore both over- and under-approximates. It refuses
- * `(?:foo|bar)+`, which is harmless in practice, and it does not refuse shapes whose cost comes
- * from two adjacent repetitions rather than nesting (`\d+\d+x`, polynomial rather than exponential).
- * `docs/configuration.md` documents all three refused shapes, together with the workaround: rewrite
- * the repeated group so its body neither repeats, alternates, nor contains an optional element.
+ * `(?:foo|bar)+`, which is harmless in practice, and for the adjacent-repetition shape specifically
+ * it only proves overlap when both atoms' character sets are cheaply enumerable (see
+ * {@link atomCharSet}) — two range-quantified atoms it cannot analyse that way, such as `[a-z]+` next
+ * to `[0-9]+`, are accepted even where they happen to be disjoint or to overlap.
+ * `docs/configuration.md` documents all four refused shapes, together with the workaround: rewrite
+ * the repeated group so its body neither repeats, alternates, nor contains an optional element, and
+ * so no two adjacent range-quantified atoms can match the same character.
  */
 /** Whether `(` at `openParenIndex` opens a lookahead or lookbehind assertion. */
 function isLookaroundMarker(source: string, openParenIndex: number): boolean {
@@ -267,6 +310,27 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
 }
 
 /**
+ * Whether `(` at `openParenIndex` opens a capturing group, and its name if it has one — `false`
+ * for a non-capturing group or a lookaround, `undefined` for an unnamed capturing group, or the
+ * name for a named one. Used by {@link canOnlyMatchEmpty} to assign JavaScript's left-to-right
+ * capturing-group numbers and to key its per-group emptiness map by both number and name, since a
+ * backreference can spell either (`\1` or `\k<name>`). Parses the same five marker forms as
+ * {@link groupMarkerLength} and {@link isLookaroundMarker}, from the capturing side of that split.
+ */
+function capturingGroupNameAt(source: string, openParenIndex: number): string | undefined | false {
+  if (source[openParenIndex + 1] !== '?') return undefined; // plain `(`: capturing, unnamed
+  const marker = source[openParenIndex + 2];
+  if (marker === ':' || marker === '=' || marker === '!') return false;
+  if (marker === '<') {
+    const lookbehind = source[openParenIndex + 3];
+    if (lookbehind === '=' || lookbehind === '!') return false; // lookbehind, not a name
+    const nameEnd = source.indexOf('>', openParenIndex + 3);
+    return source.slice(openParenIndex + 3, nameEnd);
+  }
+  return false;
+}
+
+/**
  * Whether `source` can only ever produce a zero-length match, e.g. `^`, `(?=PN)`, `\b` alone.
  *
  * Walks the pattern once, tracking one thing: whether a *consuming* atom — a literal character, an
@@ -275,14 +339,24 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
  * advances the match position no matter what it contains, so `(?=PN)` alone is zero-width-only even
  * though `PN` inside it consumes two characters when the assertion itself is tested; `(?=PN)PN` is
  * not, because of the second `PN` outside the assertion. `^`, `$` and `|` are structural, not
- * consuming, either way. An atom quantified with an exact zero count (`a{0}`) can never actually
- * consume regardless of what it is, so it does not count either — resolved together with the atom
- * it quantifies, the same way {@link complexityRejection} resolves an atom and its quantifier as
- * one step, for the same reason: checking only the atom itself, without looking at what quantifies
- * it, would call `a{0}` consuming when it can never run.
+ * consuming, either way. An atom or group quantified with an exact zero count (`a{0}`, `(PN){0}`)
+ * can never actually run regardless of what it is, so it does not count either — resolved together
+ * with its own trailing quantifier, the same way {@link complexityRejection} resolves an atom and
+ * its quantifier as one step, for the same reason: judging before that quantifier has been seen
+ * would call `a{0}` or `(PN){0}` consuming when neither can ever run.
+ *
+ * A backreference (`\1`, `\k<name>`) consumes only if the group it refers to can — a backreference
+ * to a group that can only ever capture empty is itself zero-width, found in external review of
+ * PR #73 (`()\1`, `(a{0})\1`, `(?<x>)\k<x>` all previously accepted, since the escape branch
+ * treated every backreference as an ordinary consuming escape). Groups are recorded as they close,
+ * keyed by both number and name, so a later backreference — the only order this matters in, since a
+ * backreference to a group that has not yet closed can never have captured anything and is already
+ * always empty regardless — can look its group up.
  *
  * This under-approximates on purpose, matching the rest of this screen: a pattern this walk cannot
- * prove is zero-width-only is accepted, not flagged on suspicion.
+ * prove is zero-width-only is accepted, not flagged on suspicion. A backreference to a group this
+ * walk did not resolve — including one nested inside a lookaround, out of scope for the same reason
+ * lookaround content is never tracked for consumption — is conservatively treated as consuming.
  */
 function canOnlyMatchEmpty(source: string): boolean {
   let i = 0;
@@ -296,6 +370,14 @@ function canOnlyMatchEmpty(source: string): boolean {
   // deciding before it had seen that quantifier at all. Judgment is deferred to `)` for exactly
   // this reason; the final verdict is read from index 0 once the whole pattern has been walked.
   const consumingStack: boolean[] = [false];
+  // Parallel to `lookaroundStack`, one entry per `(` of any kind: the capturing-group keys (its
+  // ordinal as a string, and its name if it has one) to record in `groupEmptyOnly` once the group
+  // closes, or `undefined` for a non-capturing group, a lookaround, or a capturing group nested
+  // inside one (whose own emptiness this walk does not track — same scope limit as everywhere else
+  // lookaround content is involved).
+  const captureKeyStack: (readonly string[] | undefined)[] = [];
+  let nextGroupNumber = 1;
+  const groupEmptyOnly = new Map<string, boolean>();
 
   function markConsuming(): void {
     if (lookaroundDepth > 0) return;
@@ -318,8 +400,16 @@ function canOnlyMatchEmpty(source: string): boolean {
   while (i < source.length) {
     const ch = source[i];
     if (ch === '\\') {
+      const backreference = /^\\(?:([1-9]\d*)|k<([^>]+)>)/.exec(source.slice(i));
+      if (backreference !== null) {
+        const key = backreference[1] ?? backreference[2] ?? '';
+        i += backreference[0].length;
+        const emptyOnly = groupEmptyOnly.get(key) === true;
+        if (!emptyOnly && stillConsumes()) markConsuming();
+        continue;
+      }
       const escaped = source[i + 1];
-      i += 2;
+      i += escapeAtomLength(source, i);
       if (escaped !== 'b' && escaped !== 'B' && stillConsumes()) markConsuming();
       continue;
     }
@@ -335,14 +425,30 @@ function canOnlyMatchEmpty(source: string): boolean {
       lookaroundStack.push(isLookaround);
       if (isLookaround) {
         lookaroundDepth += 1;
-      } else if (lookaroundDepth === 0) {
-        consumingStack.push(false);
+        captureKeyStack.push(undefined);
+      } else {
+        if (lookaroundDepth === 0) consumingStack.push(false);
+        const capture = capturingGroupNameAt(source, i);
+        if (capture === false) {
+          captureKeyStack.push(undefined);
+        } else {
+          const number = nextGroupNumber;
+          nextGroupNumber += 1;
+          captureKeyStack.push(
+            lookaroundDepth === 0
+              ? capture === undefined
+                ? [String(number)]
+                : [String(number), capture]
+              : undefined,
+          );
+        }
       }
       i += 1 + groupMarkerLength(source, i);
       continue;
     }
     if (ch === ')') {
       const wasLookaround = lookaroundStack.pop();
+      const keys = captureKeyStack.pop();
       i += 1;
       if (wasLookaround === true) {
         lookaroundDepth -= 1;
@@ -350,10 +456,15 @@ function canOnlyMatchEmpty(source: string): boolean {
       }
       // JS regular expressions have no syntax for quantifying a lookaround (`(?!x)+` is a syntax
       // error, verified directly), so only an ordinary group's own trailing quantifier can ever
-      // neutralize what is inside it — `stillConsumes` still has to run either way, to keep `i`
-      // positioned correctly for whatever follows.
+      // neutralize what is inside it — `stillConsumes` always runs, both to keep `i` positioned
+      // correctly for whatever follows and because its result is now also needed to record this
+      // group's own emptiness for any backreference later in the pattern.
       const closedConsumes = lookaroundDepth === 0 ? (consumingStack.pop() ?? false) : false;
-      if (closedConsumes && stillConsumes()) markConsuming();
+      const finalConsumes = closedConsumes && stillConsumes();
+      if (finalConsumes) markConsuming();
+      if (keys !== undefined) {
+        for (const key of keys) groupEmptyOnly.set(key, !finalConsumes);
+      }
       continue;
     }
     if (ch === '^' || ch === '$' || ch === '|') {
@@ -422,6 +533,46 @@ function normalizeAtomText(atomText: string): string {
   return inner;
 }
 
+/**
+ * The finite set of single characters `atomText` can match, when that set is cheaply enumerable —
+ * a bare literal character, or a character class made up entirely of individual literal
+ * characters, with no range, escape, or negation. `undefined` for anything else (`.`, `\d`,
+ * `[a-z]`, `[^a]`, …): not because those provably can't overlap with another atom, but because
+ * this parser does not attempt to prove it, the same "provable, not exhaustive" bias as the rest
+ * of this screen. Used to catch two adjacent range-quantified atoms that are not textually
+ * identical but can still match the same character — found in external review of PR #73
+ * (`a*[ab]*a*[ab]*a*[ab]*a*[ab]*b`, confirmed 5.066s for 40 `a`s before this fix, because the
+ * single-character-class normalization above only recognises `[a]` as equivalent to `a`, not `[ab]`
+ * as *overlapping* with `a`).
+ */
+function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
+  if (atomText.length === 1) {
+    // Bare `.` reaching here is always the wildcard metacharacter — a literal dot is scanned as
+    // the escape `\.` instead, never as this one-character bare-atom case.
+    return atomText === '.' ? undefined : new Set([atomText]);
+  }
+  if (atomText.length < 3 || atomText[0] !== '[' || atomText[atomText.length - 1] !== ']') {
+    return undefined;
+  }
+  const inner = atomText.slice(1, -1);
+  if (inner.length === 0 || inner.startsWith('^') || inner.includes('\\')) return undefined;
+  // A `-` between two other characters is a range (`a-z`); only at either end, or alone, is it
+  // unambiguously the literal hyphen — the same reasoning `normalizeAtomText` already applies.
+  for (let k = 1; k < inner.length - 1; k += 1) {
+    if (inner[k] === '-') return undefined;
+  }
+  return new Set(inner);
+}
+
+/** Whether two character sets share at least one member. */
+function setsOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a];
+  for (const ch of smaller) {
+    if (larger.has(ch)) return true;
+  }
+  return false;
+}
+
 function complexityRejection(source: string): ProtectedPatternRejection | undefined {
   // Index 0 is the whole pattern, which nothing can quantify; each `(` pushes a frame.
   const stack: GroupShape[] = [
@@ -431,6 +582,13 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
 
   /**
    * Read the quantifier (if any) at `i`, apply it to `frame`, and advance `i` past it.
+   *
+   * The comparison for the adjacent-repetition streak is two-layered: exact normalized text
+   * (`normalizeAtomText`) catches literal spelling repeats and the single-character-class
+   * equivalence, and character-set overlap (`atomCharSet`/`setsOverlap`) additionally catches two
+   * *different* atoms that can still match the same character (`a*[ab]*`). Either is sufficient;
+   * neither is necessary — an atom whose set is not enumerable (`.`, `\d`, `[a-z]`, …) still only
+   * matches via the exact-text path, same limitation as before this fix.
    *
    * `atomText` is the exact source span of the bare atom this quantifier would apply to (escape,
    * character class, or single literal character), so an atom and its quantifier are always
@@ -461,16 +619,26 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     // against Node's engine), not just `*`/`+`-shaped ranges.
     if (quantifier.min !== quantifier.max) {
       const normalized = normalizeAtomText(atomText);
-      if (frame.lastRangeQuantifiedAtom === normalized) {
+      const charSet = atomCharSet(normalized);
+      const previous = frame.lastRangeQuantifiedAtom;
+      const sameText = previous?.text === normalized;
+      const overlappingSets =
+        previous?.charSet !== undefined &&
+        charSet !== undefined &&
+        setsOverlap(previous.charSet, charSet);
+      if (previous !== undefined && (sameText || overlappingSets)) {
         return {
           source,
           reason: 'adjacent-repetition',
-          explanation:
-            `"${atomText}" is independently repeated more than once in a row, so the same input ` +
-            'can be divided between the repeats in more than one way',
+          explanation: sameText
+            ? `"${atomText}" is independently repeated more than once in a row, so the same input ` +
+              'can be divided between the repeats in more than one way'
+            : `"${previous.text}" and "${atomText}" can match overlapping characters and are ` +
+              'independently repeated back to back, so the same input can be divided between the ' +
+              'repeats in more than one way',
         };
       }
-      frame.lastRangeQuantifiedAtom = normalized;
+      frame.lastRangeQuantifiedAtom = { text: normalized, charSet };
     } else {
       frame.lastRangeQuantifiedAtom = undefined;
     }
@@ -484,10 +652,10 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     if (frame === undefined) break; // Unbalanced `)`: `new RegExp` has already rejected it.
 
     if (ch === '\\') {
-      // An escape sequence is one atom; skipping both characters keeps `\(`, `\[`, `\|` and `\*`
-      // from being read as structure.
+      // An escape sequence is one atom — `\(`, `\[`, `\|`, `\*` must not be read as structure, and
+      // a Unicode property escape (`\p{L}`) is one atom through its closing `}`, not several.
       const atomStart = i;
-      i += 2;
+      i += escapeAtomLength(source, i);
       const rejection = consumeQuantifier(frame, source.slice(atomStart, i));
       if (rejection !== undefined) return rejection;
       continue;

@@ -142,4 +142,32 @@ describe('ste-ai lint exit code', () => {
 
     expect(code).not.toBe(0);
   });
+
+  // Found in external review of PR #73, a second round: the exit code was gated on a hardcoded
+  // set of two notice codes, so a rule skipped over invalid options — `rule-options-invalid`, also
+  // always `error`-level — produced the same silent "0 error(s), exit 0" the previous fix was
+  // meant to eliminate. Fixed by gating on `level === 'error'` for any run notice instead of
+  // naming codes one at a time.
+  it('is nonzero when a rule is skipped for invalid options, even on an otherwise clean document', async () => {
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-options-config.json');
+    writeFileSync(
+      configFile,
+      JSON.stringify({ rules: { 'abbreviation-introduction': { minLength: 8, maxLength: 3 } } }),
+      'utf8',
+    );
+    const docFile = join(dir, 'clean.md');
+    writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let code: number;
+    try {
+      code = await main();
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(code).not.toBe(0);
+  });
 });

@@ -76,7 +76,9 @@ proposed:
   [`docs/configuration.md`](docs/configuration.md) and
   [`docs/rule-pack-import.md`](docs/rule-pack-import.md).
 - The CLI's exit codes are the ones a hook needs: `0` clean, `1` errors present (or review-required
-  with `--fail-on-review`), `2` usage error, `3` semantic-service failure under the `error` policy.
+  with `--fail-on-review`), `2` usage error, `3` a protection mechanism itself failed under the
+  `error` policy — the semantic service, or an `extraProtectedPatterns` entry refused by the screen
+  in [`docs/configuration.md`](docs/configuration.md#protected-patterns-are-screened-before-they-run).
 
 ```yaml
 # .pre-commit-config.yaml — works with prek too, same config format

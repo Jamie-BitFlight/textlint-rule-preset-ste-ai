@@ -120,10 +120,11 @@ Two call sites bind the result directly and neither has a channel for load-time 
   `safeSubstitution` gates whether a `TextFix` is attached at all (`:77-84`).
 - `dictionary.preferred` → `vocabulary.ts:164-173`, same shape of pipeline, `allow` keyed on `from`.
 - `contractions` → `vocabulary.ts:242`, `allow` keyed on `from`; apostrophe variants at `:248,280-283`.
-- `approvedTechnicalTerms` → merged into protected-region `approvedTerms` at `analyse.ts:255` and
-  `evaluate.ts:244`; matched case-sensitively (`approvedTermPass` in `protected-regions.ts`).
-  Vocabulary matching runs against `sentence.masked`, so a protected term can never be matched by a
-  vocabulary rule (`helpers.ts:18-23`).
+- `approvedTechnicalTerms` → merged into protected-region `approvedTerms` inside `analyse.ts`'s
+  `prepareRun` and `evaluate.ts`'s `evaluateSemanticEvaluators`; matched case-sensitively
+  (`approvedTermPass` in `protected-regions.ts`). Vocabulary matching runs against
+  `sentence.masked`, so a protected term can never be matched by a vocabulary rule
+  (`helpers.ts:18-23`).
 - `limits` → five consumers, each `options.X ?? pack.limits.X`:
   `structure-rules.ts:43`, `candidate-rules.ts:331`, `sentence-length.ts:28-30`.
 - `rules` → indexed by `ruleId` in `runDeterministicRules` (`src/core/runner.ts:51`), then used for

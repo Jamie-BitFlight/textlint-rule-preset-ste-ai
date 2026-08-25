@@ -78,6 +78,43 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('quantified-optional');
   });
 
+  it('reports an adjacent repetition, whose ambiguity is at the boundary, not inside either repeat', () => {
+    // Reported in external review of PR #73: `^a*a*a*a*a*a*a*a*b$` has no nesting and no
+    // alternation inside either `*` — the ambiguity is entirely in how many characters the first
+    // `a*` consumes versus the second, third, etc. Same proof discipline as the quantified-optional
+    // case above: measure the pattern the screen refuses against Node's own engine first.
+    const attack = new RegExp('^a*a*a*a*a*a*a*a*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*a*a*a*a*a*a*a*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports a pattern that can only ever match empty, not a silent no-op', () => {
+    // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
+    // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
+    // discards every zero-length match it produces — so the pattern protects nothing, with no
+    // notice, the same silent-no-op class of bug issue #7 exists to eliminate.
+    const result = analyse(['^']);
+    const notices = patternNotices(result.notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
+    // Confirms the *consequence*, not just the classification: `extraPatternPass` itself
+    // contributed no region — `PN1234` still ends up protected, but by the unrelated bare
+    // code-shaped-identifier heuristic, not by this refused pattern. Had `^` silently been
+    // accepted and produced nothing, this specific pass's contribution would be indistinguishable
+    // from a config with no extraProtectedPatterns configured at all.
+    expect(
+      result.document.protectedRegions.some((r) => r.note === 'User-supplied protected pattern.'),
+    ).toBe(false);
+  });
+
   it('reports an over-long source, so a pathological pattern never reaches the engine', () => {
     const tooLong = `${'a'.repeat(MAX_PROTECTED_PATTERN_LENGTH)}b`;
     const notices = patternNotices(analyse([tooLong]).notices);
@@ -127,8 +164,19 @@ describe('screenExtraPatterns', () => {
     // precedes it to quantify. These must not be misread as an optional element and rejected.
     ['a repeated non-capturing group with a safe body', '(?:abc)+'],
     ['a repeated named group with a safe body', '(?<part>abc)+'],
-    ['a lookahead containing an optional element, not itself repeated', '(?=a?)'],
-    ['a lookbehind containing an optional element, not itself repeated', '(?<=a?)'],
+    ['a lookahead containing an optional element, not itself repeated', '(?=a?)b'],
+    ['a lookbehind containing an optional element, not itself repeated', '(?<=a?)b'],
+    // Two range-quantified atoms, but not the SAME atom, and not adjacent to each other in a way
+    // that creates cross-boundary ambiguity — a false positive an overly blunt adjacent-repetition
+    // check could produce.
+    ['two different atoms, each independently range-quantified', '(\\d+)(\\d+)'],
+    ['an exact count next to a real repetition, only one is ambiguous', 'DOC-[A-Z]{2}-\\d+'],
+    ['the same atom reused, but separated by an unquantified atom', 'v\\d+\\.\\d+'],
+    ['the same atom, but the second occurrence is an exact count', 'a*a{2}'],
+    // A lookaround's own content never consumes from the caller's point of view, but content
+    // *outside* it does — this is not zero-width-only.
+    ['a lookahead with consuming content after it', '(?=PN)PN'],
+    ['an anchor plus consuming content', '^PN'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -149,6 +197,26 @@ describe('screenExtraPatterns', () => {
     ['a repeated optional shape inside a named group', '(?<part>a?)+', 'quantified-optional'],
     ['a repeated optional shape nested two groups deep', '((a?))+', 'quantified-optional'],
     ['a bounded optional repetition, min zero', '(a{0,3})+', 'nested-quantifier'],
+    // Reported in external review of PR #73: `^a*a*a*a*a*a*a*a*b$` compiled and passed the screen
+    // above (neither nested nor alternating) despite Node's own engine taking over 3s to match it
+    // against 40 `a`s followed by a non-matching character — the ambiguity is not inside either
+    // repeat, but in how the same run of characters can be divided between two adjacent ones.
+    ['the same atom independently repeated twice in a row', 'a*a*b', 'adjacent-repetition'],
+    ['the reported eight-way case', 'a*a*a*a*a*a*a*a*b', 'adjacent-repetition'],
+    // `?` (min 0, max 1) has the same "consume it or don't" choice as `*` and chains the same way.
+    [
+      'the same optional atom repeated many times in a row',
+      'a?a?a?a?a?a?a?a?a?a?b',
+      'adjacent-repetition',
+    ],
+    // `extraPatternPass` discards a zero-length match, so a pattern that can only ever produce one
+    // protects nothing — silently, unlike every other refusal here, since it's neither invalid
+    // syntax nor a complexity risk.
+    ['a bare anchor, no consuming content at all', '^', 'matches-only-empty'],
+    ['a bare word boundary', '\\b', 'matches-only-empty'],
+    ['a lookahead with nothing outside it', '(?=PN)', 'matches-only-empty'],
+    ['a lookbehind with nothing outside it', '(?<=PN)', 'matches-only-empty'],
+    ['two lookarounds and nothing that consumes', '(?=PN)(?!SN)', 'matches-only-empty'],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

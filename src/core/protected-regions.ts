@@ -324,8 +324,12 @@ function groupMarkerLength(source: string, openParenIndex: number): number {
  * The screen is deliberately syntactic, and therefore both over- and under-approximates. It refuses
  * `(?:foo|bar)+`, which is harmless in practice, and for the adjacent-repetition shape specifically
  * it only proves overlap when both atoms' character sets are cheaply enumerable (see
- * {@link atomCharSet}) — two range-quantified atoms it cannot analyse that way, such as `[a-z]+` next
- * to `[0-9]+`, are accepted even where they happen to be disjoint or to overlap.
+ * {@link atomCharSet}) — a bare literal, a class of individual literal characters, or a class of one
+ * or more small literal ranges, so `[a-z]+` next to `[0-9]+` is now correctly accepted because the
+ * two are proven disjoint, not merely unanalysed. An atom whose set genuinely cannot be cheaply
+ * enumerated — an escape shorthand, a Unicode property escape, the wildcard, a negated class, or a
+ * range too large (or astral) to enumerate — is still accepted regardless of whether it happens to
+ * overlap its neighbour.
  * `docs/configuration.md` documents all four refused shapes, together with the workaround: rewrite
  * the repeated group so its body neither repeats, alternates, nor contains an optional element, and
  * so no two adjacent range-quantified atoms can match the same character.

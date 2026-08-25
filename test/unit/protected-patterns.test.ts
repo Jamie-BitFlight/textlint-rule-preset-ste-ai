@@ -307,6 +307,70 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition across an intervening word-boundary escape', () => {
+    // Reported in external review of PR #73, round 11: `\B` never consumes, the same reasoning as
+    // a lookaround or an empty group, but the escape branch always fed it through
+    // `consumeQuantifier` like an ordinary consuming atom. Same proof discipline: measure first.
+    const attack = new RegExp('^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition between group bodies that spell the same atoms differently', () => {
+    // Reported in external review of PR #73, round 11: the round-10 fix compared raw, unnormalized
+    // group body text, so `(?:ab)*` and the equivalent `(?:a[b])*` — same atoms, one spelled with
+    // a single-character class — were never recognised as the same body. Same proof discipline:
+    // measure first.
+    const attack = new RegExp(
+      '^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$',
+      'u',
+    );
+    const input = `${'ab'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition across a group proven zero-width, not just literally empty', () => {
+    // Reported in external review of PR #73, round 11: the round-10 fix only recognised a group
+    // as zero-width when its body was literally empty (`()`), so `(?:x{0})` — a non-empty body
+    // that can still only ever match empty — still reset the streak. Same proof discipline:
+    // measure first.
+    const attack = new RegExp(
+      '^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$',
+      'u',
+    );
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$'])
+        .notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -460,6 +524,19 @@ describe('screenExtraPatterns', () => {
     ['a syntactically empty group, no adjacency at all', '()b'],
     ['an empty group after only one range-quantified atom', 'a*()b'],
     ['an empty group after an atom that is not range-quantified', '(a)()b'],
+    // Round 11: `\B`/`\b` between two atoms with nothing in common must not fabricate an overlap
+    // where none exists — it only preserves an adjacency that would already be there.
+    ['a word-boundary escape between two atoms with nothing in common', 'a*\\Bc*d'],
+    // Round 11: group bodies compared by exact (normalized) text, not overlap — genuinely
+    // different bodies stay accepted.
+    [
+      'two repeated groups with different bodies, one containing a single-char class',
+      '(?:ab)*(?:ac)*c',
+    ],
+    // Round 11: a group proven zero-width only shields adjacency it would otherwise preserve — it
+    // must not fabricate one, and a group that genuinely still consumes is unaffected.
+    ['a group proven zero-width, no adjacency at all', '(?:x{0})b'],
+    ['a group that actually consumes, not zero-width', 'a*(?:x)a*b'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -643,6 +720,43 @@ describe('screenExtraPatterns', () => {
     [
       'the reported eight-way case, separated by empty groups',
       '^a*()a*()a*()a*()a*()a*()a*()a*b$',
+      'adjacent-repetition',
+    ],
+    // Round 11: `\B`/`\b` never consume, so — like a lookaround or an empty group — they cannot
+    // break adjacency between the atoms on either side.
+    [
+      'two atoms adjacent across an intervening non-word-boundary',
+      'a*\\Ba*b',
+      'adjacent-repetition',
+    ],
+    ['two atoms adjacent across an intervening word-boundary', 'a*\\ba*b', 'adjacent-repetition'],
+    [
+      'the reported eight-way case, separated by non-word-boundaries',
+      '^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$',
+      'adjacent-repetition',
+    ],
+    // Round 11: two group bodies that spell the same atom sequence differently are just as
+    // ambiguous adjacent as two identical spellings.
+    [
+      'two repeated groups whose bodies differ only by single-char-class spelling',
+      '(?:ab)*(?:a[b])*c',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, alternating body spellings',
+      '^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$',
+      'adjacent-repetition',
+    ],
+    // Round 11: a group whose body is provably zero-width — not just literally empty — is zero-
+    // width the same way `()` is, and must not break adjacency either.
+    [
+      'two atoms adjacent across a group proven zero-width, not literally empty',
+      'a*(?:x{0})a*b',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, separated by provably zero-width groups',
+      '^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$',
       'adjacent-repetition',
     ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],

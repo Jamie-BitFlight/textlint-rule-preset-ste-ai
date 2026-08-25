@@ -200,7 +200,9 @@ A refused entry is never silently ignored, because the consequence is not local:
 named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
 of the passages sent to the semantic service. Silence there would look exactly like a clean run.
 
-The first four grounds bound match time. A repetition nested inside a repetition, wrapped around a
+`nested-quantifier`, `quantified-alternation`, `quantified-optional`, and `adjacent-repetition` bound
+match time; `invalid-syntax` and `source-too-long` are gates checked before a pattern is analysed for
+complexity at all. A repetition nested inside a repetition, wrapped around a
 group with an optional element, or repeated immediately next to itself, can take time exponential in
 document length — `(a?)+` matches the same span more than one way per iteration for the same reason
 `(a+)+` does, just reached through `?` instead of `+`/`*`; `a*a*` has no nesting or alternation at
@@ -212,18 +214,22 @@ counts, since laziness changes which match is preferred, not whether more than o
 that can match the same character — the same atom spelled identically (`a*a*`), a single-character
 class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
 adjacent character to form a range with and is unambiguously literal), two different classes that
-share a member (`a*[ab]*`, `[ab]*[bc]*`), or a repeated group and the exact text it wraps — a
-trivial wrapper (`(?:a)*a*`, since `(?:a)` means exactly `a`) or a multi-atom body repeated
-(`(?:ab)*(?:ab)*`), compared by exact text either way rather than a character set, since a group's
-body is not itself a single enumerable character. A multi-character escape (`\p{Letter}`,
-`\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom for this comparison,
-never several unrelated characters — but different notations of what happens to be the same
-underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings identical
-after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`) or a
-syntactically empty group (`()`) between two otherwise-adjacent atoms does not break the adjacency,
-since neither ever advances the match position — `a*(?=a*)a*` and `a*()a*` are both refused exactly
-like `a*a*`, and this holds regardless of what the lookaround itself asserts, since the atoms on
-either side are still exactly as ambiguous either way. An exact count (`{2}`) never qualifies, so
+share a member (`a*[ab]*`, `[ab]*[bc]*`), or a repeated group and the text it wraps — a trivial
+wrapper (`(?:a)*a*`, since `(?:a)` means exactly `a`) or a multi-atom body repeated
+(`(?:ab)*(?:ab)*`), compared by exact text either way rather than a character set (since a group's
+body is not itself a single enumerable character), normalized the same way a single-character class
+atom already is — `(?:ab)*(?:a[b])*` is refused as the same body spelled two ways. A multi-character
+escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
+for this comparison, never several unrelated characters — but different notations of what happens to
+be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
+identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`),
+a word-boundary escape (`\b`, `\B`), or a group _provably_ unable to consume — not just literally
+empty (`()`), but anything the same zero-width proof `matches-only-empty` uses can show, such as
+`(?:x{0})` — between two otherwise-adjacent atoms does not break the adjacency, since none of them
+ever advances the match position — `a*(?=a*)a*`, `a*\Ba*`, `a*()a*`, and `a*(?:x{0})a*` are all
+refused exactly like `a*a*`, and this holds regardless of what the lookaround itself asserts, since
+the atoms on either side are still exactly as ambiguous either way. An exact count (`{2}`) never
+qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
 character sets are cheaply enumerable — a bare literal, or a class built entirely of individual

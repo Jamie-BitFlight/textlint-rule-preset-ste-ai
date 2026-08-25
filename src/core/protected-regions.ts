@@ -637,6 +637,45 @@ function normalizeAtomText(atomText: string): string {
 }
 
 /**
+ * Apply {@link normalizeAtomText} to every single-character class inside a *group's* body text,
+ * not just a body that is entirely one class — so two group bodies that spell the same atom
+ * sequence differently, `(?:ab)` and `(?:a[b])`, compare equal by exact text the same way
+ * {@link applyAdjacentAtom} already compares two bare atoms. Found in external review of PR #73:
+ * alternating `(?:ab)*` with `(?:a[b])*` eight times confirmed 5.362s for 40 `ab` pairs before this
+ * fix, because the round-10 fix compared raw, unnormalized body text.
+ *
+ * Scans left to right the same way the rest of this file's scanners do — an escape (`\[` in
+ * particular) is skipped as one unit before it can be misread as opening a class, and a class is
+ * consumed to its closing `]` before anything inside it is inspected — so this is safe to run on
+ * any already-valid body text regardless of what other structure (nested groups, alternation,
+ * further escapes) it also contains; nothing outside a `[...]` span is ever altered.
+ */
+function normalizeGroupBody(bodyText: string): string {
+  let result = '';
+  let i = 0;
+  while (i < bodyText.length) {
+    const ch = bodyText[i];
+    if (ch === '\\') {
+      const length = escapeAtomLength(bodyText, i);
+      result += bodyText.slice(i, i + length);
+      i += length;
+      continue;
+    }
+    if (ch === '[') {
+      const start = i;
+      i += 1;
+      while (i < bodyText.length && bodyText[i] !== ']') i += bodyText[i] === '\\' ? 2 : 1;
+      i += 1;
+      result += normalizeAtomText(bodyText.slice(start, i));
+      continue;
+    }
+    result += ch;
+    i += 1;
+  }
+  return result;
+}
+
+/**
  * The finite set of single characters `atomText` can match, when that set is cheaply enumerable —
  * a bare literal character, or a character class made up entirely of individual literal
  * characters, with no range, escape, or negation. `undefined` for anything else (`.`, `\d`,
@@ -791,7 +830,19 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // a Unicode property escape (`\p{L}`) is one atom through its closing `}`, not several.
       const atomStart = i;
       i += escapeAtomLength(source, i);
-      const rejection = consumeQuantifier(frame, source.slice(atomStart, i));
+      const atomText = source.slice(atomStart, i);
+      if (atomText === '\\b' || atomText === '\\B') {
+        // A word-boundary assertion never consumes, so — like a lookaround or an empty group —
+        // it cannot participate in or break the adjacent-repetition streak. Found in external
+        // review of PR #73: `a*\Ba*\B…` (eight `a*` separated by `\B`) confirmed 4.475s for 40
+        // `a`s before this fix, because the escape path always fed it through `consumeQuantifier`
+        // like an ordinary consuming atom. Still skip past any quantifier that follows it (`\b+`
+        // is syntactically legal, if semantically inert) to keep `i` positioned correctly.
+        const quantifier = quantifierAt(source, i);
+        if (quantifier !== undefined) i += quantifier.length;
+        continue;
+      }
+      const rejection = consumeQuantifier(frame, atomText);
       if (rejection !== undefined) return rejection;
       continue;
     }
@@ -875,28 +926,32 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
       const bodyText = source.slice(closed.bodyStart, i);
-      if (wasLookaround === true || bodyText === '') {
-        // Neither a lookaround nor a syntactically empty group (`()`) can advance the match
-        // position, so neither can break adjacency between the atom before it and the atom after
-        // it — `parent.lastRangeQuantifiedAtom` is left exactly as it was, regardless of what the
-        // lookaround's own body contains (it never runs at the surrounding match position anyway)
-        // or the empty group's own trailing quantifier says (repeating nothing is still nothing).
-        // Found in external review of PR #73: `a*(?=a*)a*(?=a*)…` (eight `a*` separated by
-        // lookaheads) confirmed 6.589s for 40 `a`s, and `a*()a*()…` (eight `a*` separated by empty
-        // captures) confirmed 4.802s, both before this fix, because every closing `)` unconditionally
-        // reset the streak. JS regular expressions have no syntax for quantifying a lookaround, so
-        // `quantifier` here is always `undefined` for that case; this branch does not touch it.
+      if (wasLookaround === true || canOnlyMatchEmpty(bodyText)) {
+        // Neither a lookaround nor a group *provably* unable to consume — not just a literally
+        // empty body (`()`), but anything `canOnlyMatchEmpty` can prove zero-width, e.g. `(?:x{0})`
+        // — can advance the match position, so neither can break adjacency between the atom
+        // before it and the atom after it — `parent.lastRangeQuantifiedAtom` is left exactly as it
+        // was, regardless of what the lookaround's own body contains (it never runs at the
+        // surrounding match position anyway) or the group's own trailing quantifier says (repeating
+        // nothing is still nothing). Found in external review of PR #73: `a*(?=a*)a*(?=a*)…` (eight
+        // `a*` separated by lookaheads) confirmed 6.589s for 40 `a`s, `a*()a*()…` (empty captures)
+        // confirmed 4.802s, and `a*(?:x{0})a*(?:x{0})…` (a non-empty but provably zero-width body)
+        // confirmed 4.517s, all before their respective fixes — the last one because an earlier
+        // version of this check only tested literal emptiness, not effective consumption. JS
+        // regular expressions have no syntax for quantifying a lookaround, so `quantifier` here is
+        // always `undefined` for that case; this branch does not touch it.
       } else if (quantifier !== undefined && quantifier.min !== quantifier.max) {
-        // A closed *ordinary*, non-empty group is compared against the streak the same way a bare
-        // atom is, using its exact body text — `(?:a)*a*` is exactly as ambiguous as `a*a*`
-        // (`applyAdjacentAtom`'s normalization and character-set logic still applies to a
-        // single-character body), and `(?:ab)*(?:ab)*` is exactly as ambiguous as two identical
-        // multi-character bodies repeated, caught by the same exact-text comparison the atom path
-        // already relies on. Found in external review of PR #73: an earlier version of this fix
-        // only recognised a group whose body was exactly one un-quantified bare atom, so
-        // `(?:ab)*(?:ab)*…` (eight two-atom groups) confirmed 5.309s for 40 `ab` pairs before this
-        // fix, because a group with more than one atom never had anything recorded to compare.
-        const rejection = applyAdjacentAtom(source, parent, bodyText);
+        // A closed *ordinary* group that can consume is compared against the streak the same way a
+        // bare atom is, using its exact body text, normalized the same way a single-character class
+        // atom already is — `(?:a)*a*` is exactly as ambiguous as `a*a*`, `(?:ab)*(?:ab)*` exactly
+        // as ambiguous as two identical multi-character bodies repeated, and `(?:ab)*(?:a[b])*`
+        // exactly as ambiguous as two spellings of the same body, caught by the same exact-text
+        // comparison the atom path already relies on (`applyAdjacentAtom`'s character-set overlap
+        // logic does not apply here — a multi-character body is never itself a single enumerable
+        // atom). Found in external review of PR #73: an earlier version of this fix compared raw,
+        // unnormalized body text, so alternating `(?:ab)*` with the equivalent `(?:a[b])*` eight
+        // times confirmed 5.362s for 40 `ab` pairs before this fix.
+        const rejection = applyAdjacentAtom(source, parent, normalizeGroupBody(bodyText));
         if (rejection !== undefined) return rejection;
       } else {
         parent.lastRangeQuantifiedAtom = undefined;

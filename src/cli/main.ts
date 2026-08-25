@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgsNode, type ParseArgsOptionsConfig } from 'node:util';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
-import { steAiConfigSchema } from '../core/config.js';
+import { resolveConfig } from '../core/config.js';
 import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
@@ -111,11 +111,11 @@ function buildConfig(args: Args): SteAiConfigInput {
   const base: SteAiConfigInput =
     typeof configPath === 'string'
       ? // The file's shape is genuinely unknown until validated — `JSON.parse` returns `any`, and
-        // an assertion would only assume correctness, not check it. `steAiConfigSchema.parse`
-        // validates the same boundary `resolveConfig` validates elsewhere, so a malformed
-        // `--config` file fails loudly here instead of producing a wrongly-shaped config that only
-        // breaks later, confusingly, downstream.
-        steAiConfigSchema.parse(JSON.parse(readFileSync(configPath, 'utf8')))
+        // an assertion would only assume correctness, not check it. `resolveConfig` is the same
+        // function every other entry point (the shared config file, the programmatic API) uses for
+        // this boundary, so a malformed `--config` file fails loudly with the same named-key
+        // message as everywhere else, instead of a raw `ZodError`'s JSON issue dump.
+        resolveConfig(JSON.parse(readFileSync(configPath, 'utf8')))
       : {};
   const semanticEnabled = args.flags.get('semantic') === true;
   const endpoint = args.flags.get('endpoint');

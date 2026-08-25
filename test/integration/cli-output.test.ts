@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { z } from 'zod';
 import { main } from '../../src/cli/main.js';
+import { SteAiConfigError } from '../../src/core/config.js';
 
 /** The subset of `--json`'s real output shape this test itself inspects. */
 const jsonOutputSchema = z.object({
@@ -78,5 +79,41 @@ describe('ste-ai lint output', () => {
     expect(record?.reason).toBe('Vendor spelling fixed by contract.');
     // The machine-readable range stays a raw offset; only the printed line is reader-facing.
     expect(record?.range.start).toBe(DOC.indexOf('utilise'));
+  });
+});
+
+describe('ste-ai lint --config', () => {
+  it('reports an unrecognised key by name and path, not a raw ZodError dump', async () => {
+    // `buildConfig` used to validate `--config` with `steAiConfigSchema.parse` directly, bypassing
+    // `resolveConfig` — the one place that turns a `ZodError`'s JSON issue dump into a message
+    // naming the offending key. `--config` is the most direct way an operator points the CLI at a
+    // policy file, so it must fail exactly the way every other entry point already does.
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-config.json');
+    writeFileSync(
+      configFile,
+      JSON.stringify({ diagnostics: { severity: { 'style-preference': 'info' } } }),
+      'utf8',
+    );
+    const docFile = join(dir, 'doc.md');
+    writeFileSync(docFile, 'Some text.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let thrown: unknown;
+    try {
+      await main();
+    } catch (error) {
+      thrown = error;
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(thrown, 'expected main() to reject with SteAiConfigError').toBeInstanceOf(
+      SteAiConfigError,
+    );
+    if (!(thrown instanceof SteAiConfigError)) throw thrown;
+    expect(thrown.message).toContain('diagnostics.severity');
+    expect(thrown.message).toContain('style-preference');
   });
 });

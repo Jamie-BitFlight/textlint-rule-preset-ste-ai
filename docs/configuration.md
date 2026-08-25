@@ -186,77 +186,23 @@ a document. An entry that fails the check does not run, and each failure produce
 output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the document start.
 `detail.reason` names the specific ground:
 
-| `detail.reason`          | Refused because                                                                                   | Example      |
-| ------------------------ | ------------------------------------------------------------------------------------------------- | ------------ |
-| `invalid-syntax`         | `new RegExp(source, 'gu')` throws                                                                 | `([unclosed` |
-| `source-too-long`        | the source exceeds `MAX_PROTECTED_PATTERN_LENGTH` (exported from `src/core/protected-regions.ts`) | —            |
-| `nested-quantifier`      | a repetition is applied to a group whose body already repeats                                     | `(\d+)+`     |
-| `quantified-alternation` | a repetition is applied to a group containing an alternation                                      | `(a\|ab)*`   |
-| `quantified-optional`    | a repetition is applied to a group containing an optional element                                 | `(a?)+`      |
-| `adjacent-repetition`    | the same atom is independently range-quantified twice in a row                                    | `a*a*`       |
-| `matches-only-empty`     | every possible match is zero-length, so nothing is ever protected                                 | `^`          |
+| `detail.reason`         | Refused because                                                                                   | Example      |
+| ----------------------- | ------------------------------------------------------------------------------------------------- | ------------ |
+| `invalid-syntax`        | `new RegExp(source, 'gu')` throws                                                                 | `([unclosed` |
+| `source-too-long`       | the source exceeds `MAX_PROTECTED_PATTERN_LENGTH` (exported from `src/core/protected-regions.ts`) | —            |
+| `unsafe-complexity`     | ReDoS analysis found polynomial or exponential backtracking                                       | `(\d+)+`     |
+| `analysis-inconclusive` | ReDoS analysis could not determine whether the expression is safe                                 | —            |
+| `matches-only-empty`    | every possible match is zero-length, so nothing is ever protected                                 | `^`          |
 
 A refused entry is never silently ignored, because the consequence is not local: the literals it
 named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
 of the passages sent to the semantic service. Silence there would look exactly like a clean run.
 
-`nested-quantifier`, `quantified-alternation`, `quantified-optional`, and `adjacent-repetition` bound
-match time; `invalid-syntax` and `source-too-long` are gates checked before a pattern is analysed for
-complexity at all. A repetition nested inside a repetition, wrapped around a
-group with an optional element, or repeated immediately next to itself, can take time exponential in
-document length — `(a?)+` matches the same span more than one way per iteration for the same reason
-`(a+)+` does, just reached through `?` instead of `+`/`*`; `a*a*` has no nesting or alternation at
-all, but the same ambiguity in how much of a run of `a`s the first repeat consumed versus the second
-— and a JavaScript regular expression cannot be interrupted once matching has begun, so each shape is
-refused up front rather than timed. `adjacent-repetition` triggers on two atoms, adjacent and each
-independently range-quantified (`\d+\d+`, not just `a*a*`; a lazy quantifier like `\d+?` still
-counts, since laziness changes which match is preferred, not whether more than one is possible),
-that can match the same character — the same atom spelled identically (`a*a*`), a single-character
-class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
-adjacent character to form a range with and is unambiguously literal), two different classes that
-share a member (`a*[ab]*`, `[ab]*[bc]*`), or a repeated group and the text it wraps — a trivial
-wrapper (`(?:a)*a*`, since `(?:a)` means exactly `a`) or a multi-atom body repeated
-(`(?:ab)*(?:ab)*`), compared by exact text either way rather than a character set (since a group's
-body is not itself a single enumerable character), normalized the same way a single-character class
-atom already is — `(?:ab)*(?:a[b])*` is refused as the same body spelled two ways. A multi-character
-escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
-for this comparison, never several unrelated characters — but different notations of what happens to
-be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
-identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`),
-a word-boundary escape (`\b`, `\B`), a group _provably_ unable to consume — not just literally
-empty (`()`), but anything the same zero-width proof `matches-only-empty` uses can show, such as
-`(?:x{0})` — a bare atom quantified to occur exactly zero times (`x{0}`), or a backreference to a
-group already proven unable to consume (`()\1`, resolved the same way `matches-only-empty` resolves
-one, see below) — between two otherwise-adjacent atoms does not break the adjacency, since none of
-these ever advances the match position — `a*(?=a*)a*`, `a*\Ba*`, `a*()a*`, `a*(?:x{0})a*`,
-`a*x{0}a*`, and `()a*\1a*` are all refused exactly like `a*a*`, and this holds regardless of what
-the lookaround itself asserts, since the atoms on either side are still exactly as ambiguous either
-way. An exact count that consumes something (`{2}`) never qualifies, so
-`DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
-refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
-character sets are cheaply enumerable — a bare literal, or a class built entirely of individual
-literal characters with no range, escape, or negation. A range (`[a-z]`), an escape shorthand inside
-or outside a class (`\d`, `[\d]`), a Unicode property escape (`\p{L}`), the wildcard (`.`), or a
-character whose meaning changes outside a class (`[.]` versus bare `.`) is left uncompared, on the
-same "accept unless provably unsafe" bias as everything else in this screen — so `[a-z]+[0-9]+` is
-accepted even though the two classes happen to be disjoint, and `\p{L}*\p{L}*` is refused only
-because it is the same escape spelled identically, not because either one's character set was
-computed. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
-contains an optional element, and so no two adjacent range-quantified atoms can match the same
-character — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape
-without the outer repetition.
-
-`matches-only-empty` is a different kind of refusal: not a complexity risk, just a pattern that can
-never do anything. `extraPatternPass` discards a zero-length match because there is no span to
-protect, so `^` or a bare lookahead like `(?=PN)` — an atom quantified to occur exactly zero times,
-`a{0}` — a _group_ quantified to occur exactly zero times, `(PN){0}`, regardless of what its body
-contains — or a backreference to a group that can only ever capture empty, `()\1`, whether the
-backreference comes after the group or, as a forward reference (`\1()`, always empty per JavaScript
-itself, since the target has not yet participated), before it — would otherwise pass every check
-above and silently protect nothing. Content _outside_ a lookaround still counts: `(?=PN)PN` consumes
-the second `PN` and is accepted, and a backreference to a group that actually consumes, `(a)\1`, is
-an ordinary consuming atom — including a forward reference immediately followed by the group it
-names, `\1(a)`, since the group itself still consumes once reached.
+`invalid-syntax` and `source-too-long` are gates checked before analysis. Valid sources are parsed by
+`@eslint-community/regexpp`; `recheck` classifies their ReDoS complexity; and
+`regexp-ast-analysis` determines whether every possible match is empty. An inconclusive ReDoS result
+is refused rather than run. This package does not maintain a second regular-expression parser or a
+fallback set of hand-written complexity rules.
 
 ### Option precedence
 

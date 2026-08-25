@@ -206,8 +206,17 @@ async function lint(args: Args): Promise<number> {
     (n, r) => n + r.diagnostics.filter((d) => d.category === 'review-required').length,
     0,
   );
+  // Notice codes whose consequence is not "this run has less information than usual" but "a
+  // safety mechanism the operator was relying on did not run" -- reported in `result.notices`
+  // either way, but loud enough there to also gate the exit code so CI notices, not just the
+  // operator reading output by hand. `invalid-protected-pattern` belongs here specifically: a
+  // refused pattern means the literal it was meant to protect is unmasked and reaches the
+  // semantic service as ordinary prose (see docs/configuration.md's "Protected patterns are
+  // screened before they run"), which a clean-looking `0 error(s)` would otherwise hide. Adding a
+  // new notice code with the same "protection failed" consequence belongs in this set too.
+  const protectionFailureCodes = new Set(['semantic-service-failure', 'invalid-protected-pattern']);
   const infraFailure = results.some((r) =>
-    r.notices.some((n) => n.code === 'semantic-service-failure' && n.level === 'error'),
+    r.notices.some((n) => protectionFailureCodes.has(n.code) && n.level === 'error'),
   );
 
   if (args.flags.get('json') === true) {

@@ -117,3 +117,29 @@ describe('ste-ai lint --config', () => {
     expect(thrown.message).toContain('style-preference');
   });
 });
+
+describe('ste-ai lint exit code', () => {
+  // Found in external review of PR #73: a clean document with a refused extraProtectedPatterns
+  // entry printed "0 error(s)" and exited 0, because invalid-protected-pattern is a RunNotice, not
+  // a diagnostic, and only semantic-service-failure was wired to the exit code. A CI pipeline
+  // gating on exit status alone would see success even though the configured literal was neither
+  // protected nor withheld from the semantic service — the exact failure #7 exists to surface.
+  it('is nonzero when a protected pattern is refused, even on an otherwise clean document', async () => {
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-pattern-config.json');
+    writeFileSync(configFile, JSON.stringify({ extraProtectedPatterns: ['([unclosed'] }), 'utf8');
+    const docFile = join(dir, 'clean.md');
+    writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let code: number;
+    try {
+      code = await main();
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(code).not.toBe(0);
+  });
+});

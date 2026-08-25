@@ -434,9 +434,17 @@ function capturingGroupNameAt(source: string, openParenIndex: number): string | 
  * per-group emptiness map {@link complexityRejection} also needs, to tell whether a *specific*
  * backreference it encounters mid-scan is zero-width, the same way this function tells whether an
  * entire group body is.
+ *
+ * `outerGroupEmptyOnly`, when given, seeds group lookups for a backreference this walk cannot
+ * resolve on its own — needed when `source` is not the whole pattern but an isolated group body
+ * sliced out of it (as {@link complexityRejection}'s `)` handler does), where a backreference
+ * inside can point at a group defined *outside* the slice. See {@link analyzeEmptiness}.
  */
-function canOnlyMatchEmpty(source: string): boolean {
-  return analyzeEmptiness(source).matchesOnlyEmpty;
+function canOnlyMatchEmpty(
+  source: string,
+  outerGroupEmptyOnly?: ReadonlyMap<string, boolean>,
+): boolean {
+  return analyzeEmptiness(source, outerGroupEmptyOnly).matchesOnlyEmpty;
 }
 
 /**
@@ -464,10 +472,28 @@ function canOnlyMatchEmpty(source: string): boolean {
  *
  * This under-approximates on purpose, matching the rest of this screen: a pattern this walk cannot
  * prove is zero-width-only is accepted, not flagged on suspicion. A backreference to a group this
- * walk did not resolve — including one nested inside a lookaround, out of scope for the same reason
- * lookaround content is never tracked for consumption — is conservatively treated as consuming.
+ * walk did not resolve, and `outerGroupEmptyOnly` (see below) does not resolve either — including
+ * one nested inside a lookaround, out of scope for the same reason lookaround content is never
+ * tracked for consumption — is conservatively treated as consuming.
+ *
+ * `outerGroupEmptyOnly`, when given, is consulted for a backreference key this walk's own
+ * `groupEmptyOnly` has no entry for. Needed because `source` is not always the whole pattern:
+ * {@link complexityRejection}'s `)` handler calls this on an isolated group body sliced out of the
+ * pattern, to decide whether that group can be treated as zero-width — and a backreference inside
+ * that slice can point at a group opened and closed entirely *outside* it, which this walk's own
+ * `collectTrackableGroupKeys(source)` (scoped to the slice) can never see. Found in external review
+ * of PR #73, round 13: `^()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b$` confirmed
+ * 4.697s for 40 `a`s, because `canOnlyMatchEmpty('\1')` — called on the wrapper group's isolated
+ * body text, with no way to know group 1 was the empty `()` earlier in the full pattern — could
+ * only ever conclude the backreference consumes, never that it doesn't. `complexityRejection`
+ * already computes a full-pattern `groupEmptyOnly` once, for its own escape-branch backreference
+ * handling (round 12); this reuses that same completed map as the outer context instead of a third,
+ * separately-maintained lookup.
  */
-function analyzeEmptiness(source: string): {
+function analyzeEmptiness(
+  source: string,
+  outerGroupEmptyOnly?: ReadonlyMap<string, boolean>,
+): {
   readonly matchesOnlyEmpty: boolean;
   readonly groupEmptyOnly: ReadonlyMap<string, boolean>;
 } {
@@ -518,10 +544,13 @@ function analyzeEmptiness(source: string): {
         const key = backreference[1] ?? backreference[2] ?? '';
         i += backreference[0].length;
         // `resolved` is set once the target group has closed (this pass is left-to-right, same
-        // order source appears in). Not yet set means either a forward reference to a group this
-        // walk hasn't reached yet — always empty, see `collectTrackableGroupKeys` — or a
-        // reference to a group permanently out of scope, conservatively treated as consuming.
-        const resolved = groupEmptyOnly.get(key);
+        // order source appears in) — checked first against this walk's own map, then against the
+        // caller-supplied full-pattern context for a group this isolated slice never saw open or
+        // close at all (see the `outerGroupEmptyOnly` doc above). Neither resolving means either a
+        // forward reference to a group this walk hasn't reached yet — always empty, see
+        // `collectTrackableGroupKeys` — or a reference to a group permanently out of scope,
+        // conservatively treated as consuming.
+        const resolved = groupEmptyOnly.get(key) ?? outerGroupEmptyOnly?.get(key);
         const emptyOnly = resolved ?? trackableGroupKeys.has(key);
         if (!emptyOnly && stillConsumes()) markConsuming();
         continue;
@@ -691,16 +720,39 @@ function normalizeGroupBody(bodyText: string): string {
 }
 
 /**
+ * Above this many members, a class's character set is not expanded — kept small enough that
+ * expanding a handful of ordinary ranges (`a-z`, `A-Z`, `0-9`, and combinations of them) stays
+ * cheap, while a range with a codepoint span far larger than that (in the extreme, a raw literal
+ * astral character used as a range endpoint, e.g. `[a-𐀀]`) is left unenumerated instead of
+ * building a huge `Set` — the same conservative default this screen already falls back to for
+ * anything it cannot cheaply reason about.
+ */
+const MAX_EXPANDED_CLASS_SIZE = 256;
+
+/** Whether `code` is a UTF-16 surrogate code unit — half of a supplementary-plane character. */
+function isSurrogateCodeUnit(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdfff;
+}
+
+/**
  * The finite set of single characters `atomText` can match, when that set is cheaply enumerable —
- * a bare literal character, or a character class made up entirely of individual literal
- * characters, with no range, escape, or negation. `undefined` for anything else (`.`, `\d`,
- * `[a-z]`, `[^a]`, …): not because those provably can't overlap with another atom, but because
- * this parser does not attempt to prove it, the same "provable, not exhaustive" bias as the rest
- * of this screen. Used to catch two adjacent range-quantified atoms that are not textually
- * identical but can still match the same character — found in external review of PR #73
- * (`a*[ab]*a*[ab]*a*[ab]*a*[ab]*b`, confirmed 5.066s for 40 `a`s before this fix, because the
- * single-character-class normalization above only recognises `[a]` as equivalent to `a`, not `[ab]`
- * as *overlapping* with `a`).
+ * a bare literal character, or a character class made up entirely of individual literal characters
+ * and/or literal ranges (`a-z`) below {@link MAX_EXPANDED_CLASS_SIZE} combined members, with no
+ * escape or negation. `undefined` for anything else (`.`, `\d`, `[^a]`, an oversized range, …): not
+ * because those provably can't overlap with another atom, but because this parser does not attempt
+ * to prove it, the same "provable, not exhaustive" bias as the rest of this screen. Used to catch
+ * two adjacent range-quantified atoms that are not textually identical but can still match the same
+ * character — found in external review of PR #73 (`a*[ab]*a*[ab]*a*[ab]*a*[ab]*b`, confirmed
+ * 5.066s for 40 `a`s before that fix, because the single-character-class normalization above only
+ * recognises `[a]` as equivalent to `a`, not `[ab]` as *overlapping* with `a`).
+ *
+ * Ranges were originally left unenumerated entirely (any `-` strictly between two other characters
+ * bailed the whole class out to `undefined`), on the reasoning that a range is not "cheaply
+ * enumerable" the way a handful of individual literals is. Round 12 review of PR #73 showed that
+ * reasoning wrong for the common case: `^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$`
+ * confirmed 4.537s for 40 `b`s, because two overlapping small ranges are exactly as dangerous
+ * adjacent as two overlapping literal sets, and just as cheap to enumerate. Bounded expansion below
+ * closes that gap while still refusing to enumerate a range whose span is not small.
  */
 function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
   if (atomText.length === 1) {
@@ -713,12 +765,28 @@ function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
   }
   const inner = atomText.slice(1, -1);
   if (inner.length === 0 || inner.startsWith('^') || inner.includes('\\')) return undefined;
-  // A `-` between two other characters is a range (`a-z`); only at either end, or alone, is it
-  // unambiguously the literal hyphen — the same reasoning `normalizeAtomText` already applies.
-  for (let k = 1; k < inner.length - 1; k += 1) {
-    if (inner[k] === '-') return undefined;
+  const chars = new Set<string>();
+  let k = 0;
+  while (k < inner.length) {
+    // A `-` between two other characters is a range (`a-z`); only at either end, or alone, is it
+    // unambiguously the literal hyphen — the same reasoning `normalizeAtomText` already applies.
+    const isRange = inner[k + 1] === '-' && k + 2 < inner.length;
+    if (!isRange) {
+      chars.add(inner[k]!);
+      k += 1;
+    } else {
+      const startCode = inner.charCodeAt(k);
+      const endCode = inner.charCodeAt(k + 2);
+      if (isSurrogateCodeUnit(startCode) || isSurrogateCodeUnit(endCode) || endCode < startCode) {
+        return undefined;
+      }
+      if (chars.size + (endCode - startCode + 1) > MAX_EXPANDED_CLASS_SIZE) return undefined;
+      for (let code = startCode; code <= endCode; code += 1) chars.add(String.fromCharCode(code));
+      k += 3;
+    }
+    if (chars.size > MAX_EXPANDED_CLASS_SIZE) return undefined;
   }
-  return new Set(inner);
+  return chars;
 }
 
 /** Whether two character sets share at least one member. */
@@ -977,7 +1045,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
       const bodyText = source.slice(closed.bodyStart, i);
-      if (wasLookaround === true || canOnlyMatchEmpty(bodyText)) {
+      if (wasLookaround === true || canOnlyMatchEmpty(bodyText, groupEmptyOnly)) {
         // Neither a lookaround nor a group *provably* unable to consume — not just a literally
         // empty body (`()`), but anything `canOnlyMatchEmpty` can prove zero-width, e.g. `(?:x{0})`
         // — can advance the match position, so neither can break adjacency between the atom
@@ -991,6 +1059,14 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
         // version of this check only tested literal emptiness, not effective consumption. JS
         // regular expressions have no syntax for quantifying a lookaround, so `quantifier` here is
         // always `undefined` for that case; this branch does not touch it.
+        //
+        // `canOnlyMatchEmpty` is passed `groupEmptyOnly` — the full-pattern map this function
+        // computed once via `analyzeEmptiness(source)` at the top — as outer context, not called on
+        // `bodyText` alone. Found in external review of PR #73, round 13:
+        // `()a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*(?:\1)a*b` confirmed 4.697s for 40
+        // `a`s, because `canOnlyMatchEmpty('\1')` in isolation has no way to know group 1 — defined
+        // outside this slice — was the empty `()` earlier in the pattern, and could only ever
+        // conclude the backreference consumes.
       } else if (quantifier !== undefined && quantifier.min !== quantifier.max) {
         // A closed *ordinary* group that can consume is compared against the streak the same way a
         // bare atom is, using its exact body text, normalized the same way a single-character class

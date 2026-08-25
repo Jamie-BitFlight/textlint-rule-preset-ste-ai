@@ -414,6 +414,49 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition between two character ranges that overlap', () => {
+    // Reported in external review of PR #73, round 13: a range was left entirely unenumerated even
+    // when small, so `atomCharSet` returned `undefined` for both `[a-z]` and `[b-z]` and no overlap
+    // could be proven, although every character `[b-z]` matches is also in `[a-z]`. Same proof
+    // discipline: measure first.
+    const attack = new RegExp('^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$', 'u');
+    const input = `${'b'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition across a wrapped backreference that loses capture context in isolation', () => {
+    // Reported in external review of PR #73, round 13: the `)` handler called `canOnlyMatchEmpty`
+    // on the closed group's isolated body text alone, so a backreference inside a wrapper group
+    // (`(?:\1)`) could never resolve a capture defined outside that slice — `canOnlyMatchEmpty`
+    // could only ever conclude it consumes. Same proof discipline: measure first.
+    const attack = new RegExp(
+      '^()a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*b$',
+      'u',
+    );
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^()a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -507,8 +550,10 @@ describe('screenExtraPatterns', () => {
     // the same atom, so not a streak.
     ['different atoms, one bare and one a single-char class', 'a*[b]*c'],
     // A range or negated class is not a single-char class, so it must not normalize to its first
-    // character.
-    ['a character range next to the bare atom it starts with', '[a-z]*a*b'],
+    // character. Round 13 taught `atomCharSet` to expand small ranges for overlap detection, so a
+    // range next to an atom it contains is now correctly caught below, not accepted here — a
+    // negated class stays unenumerated (round 13 only expanded ordinary ranges, not negation) and
+    // still belongs in this list.
     ['a negated class next to the bare atom it excludes', '[^a]*a*b'],
     // An escape inside a class is not a bare single character either.
     ['an escaped digit class next to the bare escape', '[\\d]*\\d*b'],
@@ -678,6 +723,16 @@ describe('screenExtraPatterns', () => {
       '^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$',
       'adjacent-repetition',
     ],
+    // Round 13: a range was previously left entirely unenumerated, even when small — two adjacent
+    // range-quantified ranges that overlap are just as ambiguous as two overlapping enumerated
+    // classes, and just as cheap to prove for an ordinary-sized range.
+    ['a character range next to the bare atom it contains', '[a-z]*a*b', 'adjacent-repetition'],
+    ['two overlapping character ranges', '[a-z]*[b-z]*X', 'adjacent-repetition'],
+    [
+      'the reported eight-way case, alternating two overlapping ranges',
+      '^[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*[a-z]*[b-z]*X$',
+      'adjacent-repetition',
+    ],
     // Round 7: a backreference to a group that can only ever capture empty is itself zero-width —
     // the escape branch previously treated every backreference as an ordinary consuming escape.
     ['a backreference to an empty capture', '()\\1', 'matches-only-empty'],
@@ -827,6 +882,19 @@ describe('screenExtraPatterns', () => {
     [
       'the reported eight-way case, separated by a backreference to an empty capture',
       '^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$',
+      'adjacent-repetition',
+    ],
+    // Round 13: a backreference to an empty capture, wrapped in its own group, must still be
+    // recognised as zero-width — `canOnlyMatchEmpty` was called on the wrapper's isolated body
+    // text, which has no way to see a group defined outside that slice.
+    [
+      'two atoms adjacent across a wrapper group around a backreference proven zero-width',
+      '()a*(?:\\1)a*b',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, separated by a wrapped backreference to an empty capture',
+      '^()a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*(?:\\1)a*b$',
       'adjacent-repetition',
     ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],

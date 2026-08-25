@@ -234,14 +234,17 @@ the lookaround itself asserts, since the atoms on either side are still exactly 
 way. An exact count that consumes something (`{2}`) never qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
-character sets are cheaply enumerable — a bare literal, or a class built entirely of individual
-literal characters with no range, escape, or negation. A range (`[a-z]`), an escape shorthand inside
-or outside a class (`\d`, `[\d]`), a Unicode property escape (`\p{L}`), the wildcard (`.`), or a
-character whose meaning changes outside a class (`[.]` versus bare `.`) is left uncompared, on the
-same "accept unless provably unsafe" bias as everything else in this screen — so `[a-z]+[0-9]+` is
-accepted even though the two classes happen to be disjoint, and `\p{L}*\p{L}*` is refused only
-because it is the same escape spelled identically, not because either one's character set was
-computed. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
+character sets are cheaply enumerable — a bare literal, a class built entirely of individual literal
+characters, or a class of one or more literal ranges (`[a-z]`) whose combined size stays small (a few
+hundred members; large enough for ordinary hand-written ranges like `a-zA-Z0-9`, not large enough to
+enumerate an oversized or Unicode-astral one), with no escape or negation. So `[a-z]*[b-z]*` is
+refused as overlapping (every character `[b-z]` matches is also in `[a-z]`), while `[a-z]+[0-9]+` is
+accepted because the two ranges are proven disjoint, not merely left uncompared. An escape shorthand
+inside or outside a class (`\d`, `[\d]`), a Unicode property escape (`\p{L}`), the wildcard (`.`), a
+character whose meaning changes outside a class (`[.]` versus bare `.`), a negated class (`[^a]`), or
+an oversized range is still left uncompared, on the same "accept unless provably unsafe" bias as
+everything else in this screen — `\p{L}*\p{L}*` is refused only because it is the same escape spelled
+identically, not because either one's character set was computed. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
 contains an optional element, and so no two adjacent range-quantified atoms can match the same
 character — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape
 without the outer repetition.

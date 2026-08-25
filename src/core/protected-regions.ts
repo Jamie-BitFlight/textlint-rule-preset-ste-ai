@@ -736,6 +736,12 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       soleAtomDisqualified: false,
     },
   ];
+  // Parallel to `stack`, one entry per `(`: whether that group is a lookaround. Kept separate
+  // from `GroupShape` because it answers a different question at a different time — not "what
+  // does this group's body look like" but "does closing this group even happen at the same match
+  // position it opened at" — consulted only by the `)` handler, to decide whether closing a
+  // lookaround should leave `parent.lastRangeQuantifiedAtom` untouched (see there for why).
+  const isLookaroundStack: boolean[] = [];
   let i = 0;
 
   /**
@@ -834,6 +840,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // left stale afterward — it is just cleared one step later than the other reset points.
       frame.soleAtomText = undefined;
       frame.soleAtomDisqualified = true;
+      isLookaroundStack.push(isLookaroundMarker(source, i));
       stack.push({
         repeats: false,
         alternates: false,
@@ -847,6 +854,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     }
     if (ch === ')') {
       const closed = stack.pop();
+      const wasLookaround = isLookaroundStack.pop();
       const parent = stack[stack.length - 1];
       if (closed === undefined || parent === undefined) break;
       const quantifier = quantifierAt(source, i + 1);
@@ -888,13 +896,22 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // optional, e.g. the `(a+)?` in `((a+)?)+` — either way, a later outer repetition on `parent`
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
-      // A closed group is ordinarily not itself a bare atom for the parent's adjacency streak —
-      // except when its entire body was exactly one un-quantified bare atom (`(?:a)`,
-      // `closed.soleAtomText`) and the group's own trailing quantifier is a *range* quantifier:
-      // `(?:a)*a*` is exactly as ambiguous as `a*a*`, and `applyAdjacentAtom` already knows how to
-      // compare one atom's text/character-set against the streak — this just feeds it the group's
-      // sole atom instead of a bare one.
-      if (
+      if (wasLookaround === true) {
+        // A lookaround never advances the match position, so it cannot break adjacency between
+        // the atom before it and the atom after it — `parent.lastRangeQuantifiedAtom` is left
+        // exactly as it was, regardless of what the lookaround's own body contains. Found in
+        // external review of PR #73: `a*(?=a*)a*(?=a*)…` (eight `a*` separated by lookaheads)
+        // confirmed 6.589s for 40 `a`s before this fix, because every closing `)` — lookaround or
+        // not — unconditionally reset the streak. JS regular expressions have no syntax for
+        // quantifying a lookaround, so `quantifier` here is always `undefined`; this branch does
+        // not touch it.
+      } else if (
+        // A closed *ordinary* group is not itself a bare atom for the parent's adjacency streak —
+        // except when its entire body was exactly one un-quantified bare atom (`(?:a)`,
+        // `closed.soleAtomText`) and the group's own trailing quantifier is a *range* quantifier:
+        // `(?:a)*a*` is exactly as ambiguous as `a*a*`, and `applyAdjacentAtom` already knows how
+        // to compare one atom's text/character-set against the streak — this just feeds it the
+        // group's sole atom instead of a bare one.
         closed.soleAtomText !== undefined &&
         !closed.soleAtomDisqualified &&
         quantifier !== undefined &&

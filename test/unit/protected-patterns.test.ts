@@ -248,6 +248,26 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
   });
 
+  it('reports an adjacent repetition across an intervening zero-width lookaround', () => {
+    // Reported in external review of PR #73, round 9: a lookaround never advances the match
+    // position, so it cannot break adjacency between the atom before it and the atom after it —
+    // but every closing `)`, lookaround or not, unconditionally reset the streak. Same proof
+    // discipline: measure first.
+    const attack = new RegExp('^a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -381,6 +401,14 @@ describe('screenExtraPatterns', () => {
     // backward, is treated as zero-width. `\1(a)` is a forward reference (always empty on its own)
     // immediately followed by the group it refers to, which still consumes when reached.
     ['a forward backreference immediately followed by the group it refers to', '\\1(a)'],
+    // Round 9: a lookaround between two adjacent range-quantified atoms does not fabricate an
+    // overlap where none exists — it just doesn't interrupt one that already exists.
+    ['a lookahead between two atoms with nothing in common', 'a*(?=b)c*d'],
+    ['a lookahead alone, no adjacency at all', '(?=PN)b'],
+    // Pre-existing behavior, unaffected: an optional element inside a lookahead still propagates
+    // `optional` up to the enclosing frame, but nothing wraps that frame here, so it stays
+    // accepted regardless.
+    ['an optional element inside a lookahead, with consuming content after it', 'a*(?=a?)b'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -526,6 +554,25 @@ describe('screenExtraPatterns', () => {
     // latter, conservative-consuming case.
     ['a forward backreference to an empty capture', '\\1()', 'matches-only-empty'],
     ['a forward named backreference to an empty capture', '\\k<x>(?<x>)', 'matches-only-empty'],
+    // Round 9: a lookaround is zero-width, so it cannot break adjacency between the atom before
+    // it and the atom after it, regardless of what the lookaround itself asserts.
+    ['two atoms adjacent across an intervening lookahead', 'a*(?=a*)a*b', 'adjacent-repetition'],
+    [
+      'two atoms adjacent across an intervening negative lookahead',
+      'a*(?!a*)a*b',
+      'adjacent-repetition',
+    ],
+    ['two atoms adjacent across an intervening lookbehind', 'a*(?<=a*)a*b', 'adjacent-repetition'],
+    [
+      'two atoms adjacent across an intervening negative lookbehind',
+      'a*(?<!a*)a*b',
+      'adjacent-repetition',
+    ],
+    [
+      'an unrelated lookahead does not shield the adjacency either',
+      'a*(?=x)a*b',
+      'adjacent-repetition',
+    ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

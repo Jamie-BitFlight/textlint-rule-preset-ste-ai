@@ -218,7 +218,11 @@ un-quantified atom and nothing else; `(?:ab)*a*` and `(?:a*)*a*` do not qualify)
 escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
 for this comparison, never several unrelated characters — but different notations of what happens to
 be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
-identical after that atomicity is accounted for. An exact count (`{2}`) never qualifies, so
+identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`)
+between two otherwise-adjacent atoms does not break the adjacency, since it never advances the match
+position — `a*(?=a*)a*` is refused exactly like `a*a*`, and this holds regardless of what the
+lookaround itself asserts, since the atoms on either side are still exactly as ambiguous either way.
+An exact count (`{2}`) never qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
 character sets are cheaply enumerable — a bare literal, or a class built entirely of individual

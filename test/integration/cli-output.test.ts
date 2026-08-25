@@ -41,19 +41,32 @@ afterEach(() => {
   directory = undefined;
 });
 
-async function lint(name: string, text: string, ...flags: string[]): Promise<string> {
-  const file = join(directory ?? tmpdir(), name);
-  writeFileSync(file, text, 'utf8');
+/**
+ * Drive `main()` in-process under a given argv, returning its exit code and everything it wrote to
+ * stdout.
+ *
+ * Every test in this file goes through here, including the ones that only care about the exit code:
+ * the `process.stdout.write` spy is what keeps a real CLI report out of the test reporter, and a
+ * test that set `process.argv` and called `main()` by hand used to leak one. The `finally` restores
+ * both the argv and the spy even when `main()` rejects, which the `--config` test below relies on.
+ */
+async function runCli(...args: string[]): Promise<{ code: number; stdout: string }> {
   const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   const argv = process.argv;
-  process.argv = ['node', 'ste-ai', 'lint', file, ...flags];
+  process.argv = ['node', 'ste-ai', ...args];
   try {
-    await main();
-    return stdout.mock.calls.map((call) => String(call[0])).join('');
+    const code = await main();
+    return { code, stdout: stdout.mock.calls.map((call) => String(call[0])).join('') };
   } finally {
     process.argv = argv;
     stdout.mockRestore();
   }
+}
+
+async function lint(name: string, text: string, ...flags: string[]): Promise<string> {
+  const file = join(directory ?? tmpdir(), name);
+  writeFileSync(file, text, 'utf8');
+  return (await runCli('lint', file, ...flags)).stdout;
 }
 
 const DOC = [
@@ -98,15 +111,11 @@ describe('ste-ai lint --config', () => {
     const docFile = join(dir, 'doc.md');
     writeFileSync(docFile, 'Some text.\n', 'utf8');
 
-    const argv = process.argv;
-    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
     let thrown: unknown;
     try {
-      await main();
+      await runCli('lint', '--config', configFile, docFile);
     } catch (error) {
       thrown = error;
-    } finally {
-      process.argv = argv;
     }
 
     expect(thrown, 'expected main() to reject with SteAiConfigError').toBeInstanceOf(
@@ -118,29 +127,41 @@ describe('ste-ai lint --config', () => {
   });
 });
 
+/**
+ * The exit-code contract these tests hold to is documented in README.md ("Exit codes: `0` clean,
+ * `1` errors, `2` usage, `3` any `error`-level run notice") and in docs/configuration.md, which
+ * spells out the same four codes and names the current `error`-level notices; docs/llama-cpp-setup.md
+ * states the semantic-service case ("the CLI exits 3") separately. `src/cli/main.ts` implements it as
+ * `if (infraFailure) return 3; if (totalErrors > 0) return 1;`.
+ *
+ * Asserting the exact code, not merely a nonzero one, is the point: `3` is what distinguishes "the
+ * run had less protection than you configured" from `1` "the document has errors", and a caller
+ * branching on the code is the only reason the distinction exists. `scripts/ci/check-exit-codes.sh`
+ * asserts the same numbers against a built `dist/`, but only in CI; these run `main()` directly on
+ * every `vp test`, and additionally assert what the operator sees on stdout — a clean-looking
+ * report — which that script discards to /dev/null.
+ */
 describe('ste-ai lint exit code', () => {
   // Found in external review of PR #73: a clean document with a refused extraProtectedPatterns
   // entry printed "0 error(s)" and exited 0, because invalid-protected-pattern is a RunNotice, not
   // a diagnostic, and only semantic-service-failure was wired to the exit code. A CI pipeline
   // gating on exit status alone would see success even though the configured literal was neither
   // protected nor withheld from the semantic service — the exact failure #7 exists to surface.
-  it('is nonzero when a protected pattern is refused, even on an otherwise clean document', async () => {
+  it('is 3 when a protected pattern is refused, even on an otherwise clean document', async () => {
     const dir = directory ?? tmpdir();
     const configFile = join(dir, 'bad-pattern-config.json');
     writeFileSync(configFile, JSON.stringify({ extraProtectedPatterns: ['([unclosed'] }), 'utf8');
     const docFile = join(dir, 'clean.md');
     writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
 
-    const argv = process.argv;
-    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
-    let code: number;
-    try {
-      code = await main();
-    } finally {
-      process.argv = argv;
-    }
+    const { code, stdout } = await runCli('lint', '--config', configFile, docFile);
 
-    expect(code).not.toBe(0);
+    expect(code).toBe(3);
+    // The two halves of the bug together: the report reads clean, and the code says otherwise.
+    // Asserting only `not.toBe(0)` let `3` regress to `1` — indistinguishable, from the caller's
+    // side, from a document that simply has errors.
+    expect(stdout).toContain('invalid-protected-pattern');
+    expect(stdout).toContain('0 error(s), 0 review-required');
   });
 
   // Found in external review of PR #73, a second round: the exit code was gated on a hardcoded
@@ -148,7 +169,7 @@ describe('ste-ai lint exit code', () => {
   // always `error`-level — produced the same silent "0 error(s), exit 0" the previous fix was
   // meant to eliminate. Fixed by gating on `level === 'error'` for any run notice instead of
   // naming codes one at a time.
-  it('is nonzero when a rule is skipped for invalid options, even on an otherwise clean document', async () => {
+  it('is 3 when a rule is skipped for invalid options, even on an otherwise clean document', async () => {
     const dir = directory ?? tmpdir();
     const configFile = join(dir, 'bad-options-config.json');
     writeFileSync(
@@ -159,15 +180,10 @@ describe('ste-ai lint exit code', () => {
     const docFile = join(dir, 'clean.md');
     writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
 
-    const argv = process.argv;
-    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
-    let code: number;
-    try {
-      code = await main();
-    } finally {
-      process.argv = argv;
-    }
+    const { code, stdout } = await runCli('lint', '--config', configFile, docFile);
 
-    expect(code).not.toBe(0);
+    expect(code).toBe(3);
+    expect(stdout).toContain('rule-options-invalid');
+    expect(stdout).toContain('0 error(s), 0 review-required');
   });
 });

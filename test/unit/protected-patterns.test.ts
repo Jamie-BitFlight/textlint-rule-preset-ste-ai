@@ -457,6 +457,33 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition of the same astral character spelled as both a class and a bare atom', () => {
+    // Reported in external review of PR #73/#76, round 15: round 14 fixed the class-only overlap
+    // comparison (`[😀]*[😀]*`), but the bare-atom scanning loop still advanced one UTF-16 code
+    // unit at a time — leaving `i` mid-character so the trailing quantifier was checked at the
+    // wrong position — and both `normalizeAtomText` and `atomCharSet`'s single-atom branches still
+    // assumed a bare/reducible atom is exactly one JS string-length unit. Same proof discipline:
+    // measure first.
+    const attack = new RegExp(
+      '^[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*X$',
+      'u',
+    );
+    const input = `${'\u{1F600}'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse([
+        '^[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*X$',
+      ]).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -630,6 +657,15 @@ describe('screenExtraPatterns', () => {
     // share a high surrogate — `atomCharSet` must read a whole codepoint per member, not one
     // UTF-16 code unit at a time.
     ['two single-character classes of different astral characters', '[\u{1F600}]*[\u{1F601}]*X'],
+    // Round 15: a class range whose start endpoint is a literal astral character must be recognised
+    // as a range at all — previously misread the character's own low surrogate as the `-`, producing
+    // a spurious extra literal `-` member instead of correctly recognising `😀`-to-`😁` as a range
+    // (and then, per the existing astral-range policy, leaving it unenumerated rather than falsely
+    // reporting overlap with a literal hyphen it does not actually contain).
+    [
+      'a class range starting with an astral character, next to a literal hyphen it does not contain',
+      '[\u{1F600}-\u{1F601}]*-*X',
+    ],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -746,6 +782,21 @@ describe('screenExtraPatterns', () => {
       '[\u{1F600}]*[\u{1F600}]*X',
       'adjacent-repetition',
     ],
+    // Round 15: the same astral character, alternating class and bare spelling, must compare equal
+    // by both the sameText path (normalizeAtomText) and the character-set overlap path
+    // (atomCharSet) — round 14 only fixed the class-only comparison; the bare-atom scanning loop
+    // still advanced one UTF-16 code unit at a time, and both normalizeAtomText's and
+    // atomCharSet's single-atom branches still assumed a bare/reducible atom is exactly one JS
+    // string-length unit (true for BMP, false for a two-unit surrogate pair).
+    [
+      'the same astral character, alternating class and bare spelling, eight-way',
+      '^[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*[\u{1F600}]*\u{1F600}*X$',
+      'adjacent-repetition',
+    ],
+    // Round 15 (found alongside the reported findings, same root cause): an astral atom quantified
+    // to occur exactly zero times must be classified matches-only-empty, the same as any other
+    // atom{0} — canOnlyMatchEmpty's bare-atom path had the identical one-code-unit-at-a-time bug.
+    ['an astral atom quantified to occur exactly zero times', '\u{1F600}{0}', 'matches-only-empty'],
     // Round 7: a backreference to a group that can only ever capture empty is itself zero-width —
     // the escape branch previously treated every backreference as an ordinary consuming escape.
     ['a backreference to an empty capture', '()\\1', 'matches-only-empty'],

@@ -629,8 +629,16 @@ function analyzeEmptiness(
       i += bareQuantifier.length;
       continue;
     }
-    // A bare literal atom: exactly one character, then whatever quantifier (if any) follows it.
-    i += 1;
+    // A bare literal atom: exactly one codepoint, then whatever quantifier (if any) follows it.
+    // Same sibling bug as the one found in `complexityRejection`'s bare-atom path (round 15):
+    // advancing by one UTF-16 code unit leaves `i` mid-character for a supplementary-plane atom,
+    // so `stillConsumes()` checks the wrong position for a trailing quantifier. Concretely,
+    // `\u{1F600}{0}` (an astral atom quantified to occur exactly zero times) was accepted instead
+    // of correctly classified `matches-only-empty` — the `{0}` was checked against the low
+    // surrogate's position, found nothing, and `markConsuming()` fired for the high-surrogate
+    // "half" before the low surrogate's own iteration ever reached the real quantifier.
+    const codePoint = source.codePointAt(i)!;
+    i += codePoint > 0xffff ? 2 : 1;
     if (stillConsumes()) markConsuming();
   }
 
@@ -671,15 +679,28 @@ const CLASS_UNSAFE_METACHARACTERS = new Set([
  * the adjacent-repetition streak below recognises `a*[a]*` as the same atom spelled two ways —
  * found in external review of PR #73 (`a*[a]*a*[a]*a*[a]*a*[a]*b`, confirmed 5.185s for 40 `a`s
  * before this fix, because `lastRangeQuantifiedAtom` compared the raw source text and `"a"` !==
- * `"[a]"`). Only a class of exactly `[` + one character + `]` qualifies: that shape rules out
+ * `"[a]"`). Only a class of exactly `[` + one *codepoint* + `]` qualifies: that shape rules out
  * escapes (`[\d]`), ranges (`[a-z]`), and negation (`[^a]`) without inspecting them separately, and
  * {@link CLASS_UNSAFE_METACHARACTERS} rules out the characters whose meaning changes outside the
  * class. Every other input is returned unchanged.
+ *
+ * "One codepoint" is deliberately not "one JS string-length unit": a supplementary-plane character
+ * is two UTF-16 code units, so `[😀]` has `.length` 4, not the 3 a single-BMP-character class like
+ * `[a]` has. The original length-3 check therefore left `[😀]` unreduced, so it never compared
+ * equal to a bare `😀` even though they mean the same atom — found in external review of PR
+ * #73/#76, round 15, as one half of why `[😀]*😀*[😀]*😀*…` (alternating spellings of the same
+ * astral character) passed the screen: normalized text never matched between the two spellings,
+ * and (see {@link atomCharSet}) the character-set overlap path had its own parallel gap.
  */
 function normalizeAtomText(atomText: string): string {
-  if (atomText.length !== 3 || atomText[0] !== '[' || atomText[2] !== ']') return atomText;
-  const inner = atomText[1];
-  if (inner === undefined || CLASS_UNSAFE_METACHARACTERS.has(inner)) return atomText;
+  if (atomText.length < 3 || atomText[0] !== '[' || atomText[atomText.length - 1] !== ']') {
+    return atomText;
+  }
+  const inner = atomText.slice(1, -1);
+  const codePoint = inner.codePointAt(0);
+  if (codePoint === undefined) return atomText;
+  if (inner.length !== (codePoint > 0xffff ? 2 : 1)) return atomText;
+  if (CLASS_UNSAFE_METACHARACTERS.has(inner)) return atomText;
   return inner;
 }
 
@@ -732,11 +753,6 @@ function normalizeGroupBody(bodyText: string): string {
  */
 const MAX_EXPANDED_CLASS_SIZE = 256;
 
-/** Whether `code` is a UTF-16 surrogate code unit — half of a supplementary-plane character. */
-function isSurrogateCodeUnit(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdfff;
-}
-
 /**
  * The finite set of single characters `atomText` can match, when that set is cheaply enumerable —
  * a bare literal character, or a character class made up entirely of individual literal characters
@@ -761,7 +777,15 @@ function isSurrogateCodeUnit(code: number): boolean {
  * small.
  */
 function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
-  if (atomText.length === 1) {
+  // A bare literal atom is exactly one *codepoint* — not necessarily one JS string-length unit, a
+  // supplementary-plane character (e.g. an emoji) being two. Checking `.length === 1` alone missed
+  // that case entirely (fell through to the class-shaped branch below, which also rejects it, since
+  // a bare 2-unit atom isn't bracketed), leaving a bare astral atom's character set `undefined`
+  // unconditionally — found in external review of PR #73/#76, round 15, as the other half of why
+  // `[😀]*😀*[😀]*😀*…` passed the screen: with `undefined` on one side, `setsOverlap` was never
+  // even attempted between the class-spelled and bare-spelled occurrences.
+  const soleCodePoint = atomText.codePointAt(0);
+  if (soleCodePoint !== undefined && atomText.length === (soleCodePoint > 0xffff ? 2 : 1)) {
     // Bare `.` reaching here is always the wildcard metacharacter — a literal dot is scanned as
     // the escape `\.` instead, never as this one-character bare-atom case.
     return atomText === '.' ? undefined : new Set([atomText]);
@@ -774,30 +798,44 @@ function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
   const chars = new Set<string>();
   let k = 0;
   while (k < inner.length) {
+    // A literal supplementary-plane character (e.g. an emoji) is two UTF-16 code units — a
+    // surrogate pair — not two separate characters, so the range check below must look for `-`
+    // *after* the whole starting codepoint, not at a fixed one-code-unit offset. Read the
+    // codepoint (and how many code units it occupies) before deciding anything else about it.
+    const startCodePoint = inner.codePointAt(k)!;
+    const startLength = startCodePoint > 0xffff ? 2 : 1;
     // A `-` between two other characters is a range (`a-z`); only at either end, or alone, is it
     // unambiguously the literal hyphen — the same reasoning `normalizeAtomText` already applies.
-    const isRange = inner[k + 1] === '-' && k + 2 < inner.length;
+    const dashIndex = k + startLength;
+    const isRange = inner[dashIndex] === '-' && dashIndex + 1 < inner.length;
     if (!isRange) {
-      // A literal supplementary-plane character (e.g. an emoji) is two UTF-16 code units — a
-      // surrogate pair — not two separate characters. Adding `inner[k]` alone would add just the
-      // high surrogate half as its own set member, so two *different* astral characters that
-      // happen to share the same high surrogate (common for emoji, which cluster in a handful of
-      // high-surrogate blocks) would appear to overlap on that shared half alone. Found in
-      // external review of PR #73/#76: `[😀]*[😁]*X` — two disjoint single-character classes —
-      // was wrongly rejected as `adjacent-repetition`. `codePointAt`/`fromCodePoint` read and add
-      // the whole character as one set member either way.
-      const codePoint = inner.codePointAt(k)!;
-      chars.add(String.fromCodePoint(codePoint));
-      k += codePoint > 0xffff ? 2 : 1;
+      // Adding just one UTF-16 code unit of a surrogate pair, instead of the whole codepoint,
+      // would let two *different* astral characters that happen to share a high surrogate (common
+      // for emoji, which cluster in a handful of high-surrogate blocks) appear to overlap on that
+      // shared half alone. Found in external review of PR #73/#76: `[😀]*[😁]*X` — two disjoint
+      // single-character classes — was wrongly rejected as `adjacent-repetition`.
+      chars.add(String.fromCodePoint(startCodePoint));
+      k += startLength;
     } else {
-      const startCode = inner.charCodeAt(k);
-      const endCode = inner.charCodeAt(k + 2);
-      if (isSurrogateCodeUnit(startCode) || isSurrogateCodeUnit(endCode) || endCode < startCode) {
+      const endCodePoint = inner.codePointAt(dashIndex + 1)!;
+      const endLength = endCodePoint > 0xffff ? 2 : 1;
+      // An astral endpoint on either side is left unenumerated (same conservative default as an
+      // oversized range) rather than attempting codepoint-range enumeration for it — found in
+      // external review of PR #73/#76, round 15: the *previous* code-unit-relative range check
+      // misread an astral start character's own low surrogate as the `-`, producing a 3-member set
+      // (both emoji plus a spurious literal `-`) for `[😀-😁]` instead of correctly recognising a
+      // range and bailing on its astral endpoints — `[😀-😁]*-*X` was wrongly rejected as
+      // overlapping, since the miscomputed set really did contain `-`.
+      if (startCodePoint > 0xffff || endCodePoint > 0xffff || endCodePoint < startCodePoint) {
         return undefined;
       }
-      if (chars.size + (endCode - startCode + 1) > MAX_EXPANDED_CLASS_SIZE) return undefined;
-      for (let code = startCode; code <= endCode; code += 1) chars.add(String.fromCharCode(code));
-      k += 3;
+      if (chars.size + (endCodePoint - startCodePoint + 1) > MAX_EXPANDED_CLASS_SIZE) {
+        return undefined;
+      }
+      for (let code = startCodePoint; code <= endCodePoint; code += 1) {
+        chars.add(String.fromCodePoint(code));
+      }
+      k = dashIndex + 1 + endLength;
     }
     if (chars.size > MAX_EXPANDED_CLASS_SIZE) return undefined;
   }
@@ -1103,9 +1141,19 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       continue;
     }
 
-    // A bare literal atom: exactly one character, then whatever quantifier (if any) follows it.
+    // A bare literal atom: exactly one codepoint, then whatever quantifier (if any) follows it.
+    // A supplementary-plane character is two UTF-16 code units; advancing by only one would leave
+    // `i` mid-character, so the trailing quantifier is checked against the low-surrogate position
+    // instead of the real one after the whole character, and the low surrogate is then read again
+    // as its own unrelated one-code-unit "atom" on the next iteration. Found in external review of
+    // PR #73/#76, round 15: with the class-side comparison already fixed to read whole codepoints,
+    // this now-mismatched bare-atom path let `^[😀]*😀*[😀]*😀*[😀]*😀*[😀]*😀*X$` — the same
+    // character, adjacent, eight-way — pass the screen; `😀`, repeated 40 times, confirmed
+    // multi-second rejection time before this fix (see
+    // `test/unit/protected-patterns.test.ts` for the reproducible timing assertion).
     const atomStart = i;
-    i += 1;
+    const codePoint = source.codePointAt(i)!;
+    i += codePoint > 0xffff ? 2 : 1;
     const rejection = consumeQuantifier(frame, source.slice(atomStart, i));
     if (rejection !== undefined) return rejection;
   }

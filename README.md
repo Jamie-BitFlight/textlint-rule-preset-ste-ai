@@ -66,8 +66,9 @@ network.
 ## Who this serves, and how
 
 The intended audience is an AI agent generating text. The goal: keep that agent's vocabulary
-consistent with the project's own approved, preferred, and unapproved terms. A repository can also
-layer its own list on top of the bundled provisional pack.
+consistent with the project's own approved, preferred, and unapproved terms. A repository can
+supply its own `approvedTerms` list on top of whichever pack is active. A repository can also
+replace the bundled provisional pack entirely with its own `rulePack`.
 
 That serves three distinct consumer surfaces, at different stages of readiness. They are not the same
 shape, and should not be conflated.
@@ -77,17 +78,17 @@ invoke this via `npx`. Each can lint documentation files before a commit lands. 
 are real today, not proposed:
 
 - `rulePack` (a path to a JSON file, or an inline object) and `approvedTerms` are both shared-config
-  options. They let a repository supply its own vocabulary on top of the bundled provisional pack.
-  See [`docs/configuration.md`](docs/configuration.md) and
+  options. `approvedTerms` layers on top of whichever pack is active. `rulePack` replaces the
+  bundled provisional pack entirely, not just adds to it. See
+  [`docs/configuration.md`](docs/configuration.md) and
   [`docs/rule-pack-import.md`](docs/rule-pack-import.md).
 - The CLI's exit codes are the ones a hook needs.
   - `0` — clean
   - `1` — errors present (or review-required, with `--fail-on-review`)
   - `2` — usage error
-  - `3` — any `error`-level run notice: a protection mechanism itself failing (the semantic
-    service, or an `extraProtectedPatterns` entry refused by the screen in
-    [`docs/configuration.md`](docs/configuration.md#protected-patterns-are-screened-before-they-run)),
-    or a configured rule skipped for invalid options
+  - `3` — any `error`-level run notice. See
+    [`docs/configuration.md`](docs/configuration.md#protected-patterns-are-screened-before-they-run)
+    for the full list: a protection mechanism failing, or a rule skipped for invalid options
 
 ```yaml
 # .pre-commit-config.yaml — works with prek too, same config format
@@ -215,16 +216,9 @@ is never autofixed.)` See [`docs/diagnostic-policy.md`](docs/diagnostic-policy.m
 
 ## Optional semantic adjudication
 
-Eight bounded evaluators exist, each with a versioned prompt asset in `prompts/v1/`:
-
-- `approved-word-sense`
-- `permitted-part-of-speech`
-- `one-instruction-per-sentence`
-- `passive-voice-adjudication`
-- `pronoun-antecedent-ambiguity`
-- `noun-cluster-comprehension`
-- `technical-term-legitimacy`
-- `rewrite-equivalence`
+A fixed set of bounded evaluators exist, each with a versioned prompt asset in `prompts/v1/`. Run
+`npx ste-ai evaluators` for the current list. This list reads from the live registry, so it stays
+correct as evaluators are added or removed.
 
 One broker mediates every request. It handles:
 
@@ -254,7 +248,8 @@ npx ste-ai rules --json
 npx ste-ai evaluators
 ```
 
-Exit codes: `0` clean, `1` errors, `2` usage, `3` semantic-service failure under the `error` policy.
+Exit codes: `0` clean, `1` errors, `2` usage, `3` any `error`-level run notice. See "Who this
+serves, and how" above for the full list of triggers.
 
 ## Programmatic API
 
@@ -273,20 +268,15 @@ console.log(full.notices, full.traces, full.pack.metadata.conformanceClaim);
 
 ## Fixture corpus
 
-The corpus has 18 excerpts of real licensed documentation, drawn from these sources:
+The corpus is real licensed documentation. Each excerpt has a rewritten counterpart and an
+adjudication record. `fixtures/manifest.json` is the source of truth for the excerpt count and the
+source organisations:
 
-- SQLite
-- PostgreSQL
-- Apache httpd
-- Zephyr
-- LLVM
-- Kubernetes
-- Django
-- Curl
-- Node.js
-- The U.S. Occupational Safety and Health Administration (OSHA)
-
-Each excerpt has a rewritten counterpart and an adjudication record.
+```bash
+node -e "const m = require('./fixtures/manifest.json'); \
+  console.log(m.fixtures.length, 'excerpts from', new Set(m.fixtures.map(f => f.sourceOrganisation)).size, 'sources'); \
+  console.log([...new Set(m.fixtures.map(f => f.sourceOrganisation))].join('\n'))"
+```
 
 Provenance is machine-checkable. A fetch script records the real HTTP status and `SHA-256` checksum of
 every source. The validator cross-checks the manifest against it.

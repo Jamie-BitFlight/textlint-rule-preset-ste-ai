@@ -34,6 +34,15 @@ const analysisCache = new Map<string, AnalysisCacheEntry>();
 const MAX_CACHE_ENTRIES = 32;
 
 /**
+ * Which Document AST nodes have already had this run's run-level notices reported.
+ *
+ * Keyed by object identity, not content: a fresh AST node is a fresh key, so this needs no manual
+ * reset between lint runs the way {@link analysisCache} does (see {@link clearAnalysisCache}) — an
+ * old node simply becomes unreachable and is collected once its run ends.
+ */
+const reportedRunNoticesFor = new WeakSet<object>();
+
+/**
  * Options a rule accepts from textlint.
  *
  * The index signature is what lets a rule receive its own arbitrary options, but it makes the type
@@ -292,9 +301,20 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
           });
         }
 
-        // Run-level notices are surfaced once, by the first rule in the preset, anchored at the
-        // start of the document. Without this a service outage would leave no trace in the report.
-        if (ruleId === FIRST_RULE_ID) {
+        // Run-level notices are surfaced once per run, by whichever enabled rule's Document
+        // handler reaches this line first, anchored at the start of the document. Without this a
+        // service outage — or an invalid `extraProtectedPatterns` entry, or an unrecognised rule
+        // id — would leave no trace in the report.
+        //
+        // This used to be gated on `ruleId === FIRST_RULE_ID`, a single hardcoded rule id. That
+        // silently dropped every run notice whenever the user's own `.textlintrc.json` did not
+        // enable that specific rule — precisely the silent-drop this mechanism exists to prevent,
+        // just one level up. `node` is confirmed the same object across every rule's `Document`
+        // handler within one `lintText()` call (textlint parses the AST once and shares it), and a
+        // fresh object every subsequent call, so a `WeakSet` keyed on it reports exactly once per
+        // run regardless of which rule enters first, with no explicit reset between runs to forget.
+        if (!reportedRunNoticesFor.has(node)) {
+          reportedRunNoticesFor.add(node);
           for (const notice of analysis.notices) {
             if (notice.level === 'info') continue;
             report(node, {
@@ -310,10 +330,3 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
 
   return { linter: reporter, fixer: reporter };
 }
-
-/**
- * The rule that reports run-level notices. Fixed so the notice appears exactly once per run
- * regardless of which rules the user enabled — if this rule is disabled, notices are still
- * available through the programmatic API.
- */
-export const FIRST_RULE_ID = 'sentence-length-procedural';

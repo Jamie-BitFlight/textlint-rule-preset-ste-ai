@@ -326,6 +326,58 @@ describe('per-rule textlint options', () => {
   });
 });
 
+describe('run-level notices, reported once regardless of which rules are enabled', () => {
+  // Found in external review of PR #73: this used to fire only from the rule whose id equalled a
+  // hardcoded constant (`sentence-length-procedural`). A `.textlintrc.json` that does not enable
+  // that specific rule never invokes its handler at all, so the notice — despite being genuinely
+  // computed — was never reported. An invalid `extraProtectedPatterns` entry, whose whole point is
+  // to never go unnoticed (issue #7), went unnoticed anyway, through this one integration surface.
+  const badShared = { extraProtectedPatterns: ['([unclosed'] };
+  const text = 'Part PN1234 is ready.\n';
+
+  it('is reported when the rule that used to be hardcoded is not enabled at all', async () => {
+    const result = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          rule: mustGetRule('unapproved-vocabulary'),
+          options: { shared: badShared },
+        },
+      ],
+    });
+    const notices = result.messages.filter((m) => m.message.includes('invalid-protected-pattern'));
+    expect(notices).toHaveLength(1);
+  });
+
+  it('is reported exactly once, not once per enabled rule', async () => {
+    const result = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          rule: mustGetRule('unapproved-vocabulary'),
+          options: { shared: badShared },
+        },
+        {
+          ruleId: 'no-contractions',
+          rule: mustGetRule('no-contractions'),
+          options: { shared: badShared },
+        },
+        {
+          ruleId: 'sentence-length-procedural',
+          rule: mustGetRule('sentence-length-procedural'),
+          options: { shared: badShared },
+        },
+      ],
+    });
+    const notices = result.messages.filter((m) => m.message.includes('invalid-protected-pattern'));
+    expect(notices).toHaveLength(1);
+  });
+});
+
 describe('preset shape', () => {
   it('exposes one rule module per core rule and enables them all by default', () => {
     expect(Object.keys(rules)).toHaveLength(14);

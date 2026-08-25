@@ -96,14 +96,14 @@
     "@textlint/textlint-plugin-text": "^15.8.0",
     "@textlint/types": "^15.8.0",
     "@types/node": "^22.20.1",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "semantic-release": "^25.0.9",
     "textlint": "^15.8.0",
     "textlint-tester": "^15.8.0",
     "typescript": "^7.0.2",
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
-    "vite-plus": "0.2.9",
-    "vitest": "4.1.10"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
+    "vite-plus": "0.3.0",
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
     "textlint": ">=13"
@@ -114,8 +114,8 @@
     }
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
-    "vitest": "4.1.10"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": ">=22"

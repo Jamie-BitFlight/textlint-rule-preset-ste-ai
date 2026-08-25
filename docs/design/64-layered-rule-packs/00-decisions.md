@@ -86,7 +86,7 @@ for having produced `03` at all.
   agreement was real and would need reinstating with the mode.
 - **Merge keys are per-field, not global.** Verified: `termPattern` (`helpers.ts:10`) matches with
   flags `giu` and collapses whitespace, while `approvedTerms` protection
-  (`protected-regions.ts:552`) matches with flags `gu`, case-sensitively and without folding. A single
+  (`protected-regions.ts:770`) matches with flags `gu`, case-sensitively and without folding. A single
   normaliser would therefore be wrong for one of them.
 - **Override direction is one-way.** The overriding layer owns the resulting entry's provenance
   entirely; it is never inherited from the layer being overridden.

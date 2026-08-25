@@ -649,6 +649,10 @@ describe('screenExtraPatterns', () => {
     // must not fabricate one, and a group that genuinely still consumes is unaffected.
     ['a group proven zero-width, no adjacency at all', '(?:x{0})b'],
     ['a group that actually consumes, not zero-width', 'a*(?:x)a*b'],
+    [
+      'a sliced body whose local capture number must not shadow a global capture',
+      '(a)b*(?:()\\1)b*X',
+    ],
     // Round 14: two single-character classes holding different supplementary-plane characters
     // (surrogate pairs) must not appear to overlap just because their UTF-16 code units happen to
     // share a high surrogate — `atomCharSet` must read a whole codepoint per member, not one
@@ -762,6 +766,11 @@ describe('screenExtraPatterns', () => {
     ['a literal dot class and a wildcard', '[.]*.*b', 'adjacent-repetition'],
     ['equivalent digit classes written differently', '[\\d]*\\d*b', 'adjacent-repetition'],
     ['equivalent character escapes written differently', '\\u{61}*\\x61*b', 'adjacent-repetition'],
+    [
+      'overlapping ranges whose unique union stays within the analysis limit',
+      '[a-öb-÷]*[a-öc-ø]*X',
+      'adjacent-repetition',
+    ],
     [
       'the reported eight-way case, alternating a bare literal and an overlapping class',
       '^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$',

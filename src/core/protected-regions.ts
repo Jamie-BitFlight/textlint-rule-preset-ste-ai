@@ -364,11 +364,11 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
  * review of PR #73: `\1()` and `\k<x>(?<x>)` — both provably zero-width-only — were accepted
  * because the earlier version of the backreference lookup could not distinguish the two.
  */
-function collectTrackableGroupKeys(source: string): ReadonlySet<string> {
+function collectTrackableGroupKeys(source: string, firstGroupNumber = 1): ReadonlySet<string> {
   const keys = new Set<string>();
   const lookaroundStack: boolean[] = [];
   let lookaroundDepth = 0;
-  let nextGroupNumber = 1;
+  let nextGroupNumber = firstGroupNumber;
   let i = 0;
   while (i < source.length) {
     const ch = source[i];
@@ -411,6 +411,32 @@ function collectTrackableGroupKeys(source: string): ReadonlySet<string> {
   return keys;
 }
 
+/** The next global capture number at `end`, ignoring captures opened after that position. */
+function nextCaptureNumberAt(source: string, end: number): number {
+  let nextGroupNumber = 1;
+  let i = 0;
+  while (i < end) {
+    const ch = source[i];
+    if (ch === '\\') {
+      i += escapeAtomLength(source, i);
+      continue;
+    }
+    if (ch === '[') {
+      i += 1;
+      while (i < end && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
+      i += 1;
+      continue;
+    }
+    if (ch === '(') {
+      if (capturingGroupNameAt(source, i) !== false) nextGroupNumber += 1;
+      i += 1 + groupMarkerLength(source, i);
+      continue;
+    }
+    i += 1;
+  }
+  return nextGroupNumber;
+}
+
 /**
  * Whether `(` at `openParenIndex` opens a capturing group, and its name if it has one — `false`
  * for a non-capturing group or a lookaround, `undefined` for an unnamed capturing group, or the
@@ -448,8 +474,9 @@ function capturingGroupNameAt(source: string, openParenIndex: number): string | 
 function canOnlyMatchEmpty(
   source: string,
   outerGroupEmptyOnly?: ReadonlyMap<string, boolean>,
+  firstGroupNumber = 1,
 ): boolean {
-  return analyzeEmptiness(source, outerGroupEmptyOnly).matchesOnlyEmpty;
+  return analyzeEmptiness(source, outerGroupEmptyOnly, firstGroupNumber).matchesOnlyEmpty;
 }
 
 /**
@@ -501,11 +528,12 @@ function canOnlyMatchEmpty(
 function analyzeEmptiness(
   source: string,
   outerGroupEmptyOnly?: ReadonlyMap<string, boolean>,
+  firstGroupNumber = 1,
 ): {
   readonly matchesOnlyEmpty: boolean;
   readonly groupEmptyOnly: ReadonlyMap<string, boolean>;
 } {
-  const trackableGroupKeys = collectTrackableGroupKeys(source);
+  const trackableGroupKeys = collectTrackableGroupKeys(source, firstGroupNumber);
   let i = 0;
   let lookaroundDepth = 0;
   const lookaroundStack: boolean[] = [];
@@ -523,7 +551,7 @@ function analyzeEmptiness(
   // inside one (whose own emptiness this walk does not track — same scope limit as everywhere else
   // lookaround content is involved).
   const captureKeyStack: (readonly string[] | undefined)[] = [];
-  let nextGroupNumber = 1;
+  let nextGroupNumber = firstGroupNumber;
   const groupEmptyOnly = new Map<string, boolean>();
 
   function markConsuming(): void {
@@ -1103,7 +1131,10 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
       const bodyText = source.slice(closed.bodyStart, i);
-      if (wasLookaround === true || canOnlyMatchEmpty(bodyText, groupEmptyOnly)) {
+      if (
+        wasLookaround === true ||
+        canOnlyMatchEmpty(bodyText, groupEmptyOnly, nextCaptureNumberAt(source, closed.bodyStart))
+      ) {
         // Neither a lookaround nor a group *provably* unable to consume — not just a literally
         // empty body (`()`), but anything `canOnlyMatchEmpty` can prove zero-width, e.g. `(?:x{0})`
         // — can advance the match position, so neither can break adjacency between the atom

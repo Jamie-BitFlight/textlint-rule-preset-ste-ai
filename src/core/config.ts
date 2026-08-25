@@ -2,15 +2,28 @@ import { z } from 'zod';
 
 export const severitySchema = z.enum(['info', 'warning', 'error']);
 
+/**
+ * Every object in this configuration is strict: an unrecognised key is an error, not something to
+ * drop quietly.
+ *
+ * A stripped key is the worst possible outcome for a policy file. `diagnostics.severity` keyed on a
+ * misspelt category, a mistyped `semantic` timeout, a rule id that does not exist — each of those
+ * parsed successfully and then applied nothing, so the operator read their own file as proof of a
+ * setting the linter had already discarded. Rejecting the key names the mistake at the boundary
+ * where it can still be fixed.
+ *
+ * The one deliberate exception is {@link ruleUserConfigSchema}, whose catch-all is documented there.
+ */
+
 /** How each diagnostic category is surfaced. Configurable per category. */
-export const diagnosticPolicySchema = z.object({
+export const diagnosticPolicySchema = z.strictObject({
   /**
    * When false, heuristic candidates that were never adjudicated are dropped instead of being
    * reported as `review-required`. Deterministic violations are unaffected.
    */
   reportReviewRequired: z.boolean().default(true),
   severity: z
-    .object({
+    .strictObject({
       'deterministic-violation': severitySchema.default('error'),
       'probable-semantic-violation': severitySchema.default('warning'),
       'review-required': severitySchema.default('info'),
@@ -35,7 +48,7 @@ export const diagnosticPolicySchema = z.object({
 
 export type DiagnosticPolicy = z.output<typeof diagnosticPolicySchema>;
 
-export const autofixPolicySchema = z.object({
+export const autofixPolicySchema = z.strictObject({
   enabled: z.boolean().default(true),
   /**
    * Accept fixes that were gated by a semantic meaning-preservation evaluation. Off by default:
@@ -57,7 +70,7 @@ export const autofixPolicySchema = z.object({
 
 export type AutofixPolicy = z.output<typeof autofixPolicySchema>;
 
-export const suppressionPolicySchema = z.object({
+export const suppressionPolicySchema = z.strictObject({
   /**
    * Inline directives are honoured. When false the document is not scanned at all: no directive
    * is parsed, no record is produced and no suppression notice is emitted.
@@ -72,7 +85,7 @@ export const suppressionPolicySchema = z.object({
 
 export type SuppressionPolicy = z.output<typeof suppressionPolicySchema>;
 
-export const semanticConfigSchema = z.object({
+export const semanticConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   /** llama.cpp server base URL. The OpenAI-compatible `/v1/chat/completions` route is used. */
   endpoint: z.string().default('http://127.0.0.1:8080'),
@@ -109,6 +122,18 @@ export const semanticConfigSchema = z.object({
 
 export type SemanticConfig = z.output<typeof semanticConfigSchema>;
 
+/**
+ * Per-rule user options.
+ *
+ * The catch-all is deliberate and must stay. Every rule declares its own `optionsSchema`, and the
+ * runner validates the merged options against it (`src/core/runner.ts`), emitting a
+ * `rule-options-invalid` notice when they do not fit. This schema therefore cannot know which keys
+ * are legitimate — making it strict would reject every rule-specific option in existence, and would
+ * move option validation away from the only place that knows the answer.
+ *
+ * The rule *ids* are still checked: the runner emits an `unknown-rule-id` notice for a key here that
+ * names no registered rule.
+ */
 export const ruleUserConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -116,7 +141,7 @@ export const ruleUserConfigSchema = z
   })
   .catchall(z.unknown());
 
-export const steAiConfigSchema = z.object({
+export const steAiConfigSchema = z.strictObject({
   /**
    * Path to an authorised rule pack JSON file, or an inline pack object. When absent the bundled
    * provisional pack is used and every diagnostic is marked provisional.
@@ -147,6 +172,35 @@ export const steAiConfigSchema = z.object({
 export type SteAiConfig = z.output<typeof steAiConfigSchema>;
 export type SteAiConfigInput = z.input<typeof steAiConfigSchema>;
 
+/** Thrown when the shared configuration does not validate. Names every offending key by path. */
+export class SteAiConfigError extends Error {
+  readonly issues: readonly { readonly path: string; readonly message: string }[];
+
+  constructor(issues: readonly { readonly path: string; readonly message: string }[]) {
+    super(
+      `Invalid ste-ai configuration:\n${issues.map((i) => `  ${i.path}: ${i.message}`).join('\n')}`,
+    );
+    this.name = 'SteAiConfigError';
+    this.issues = issues;
+  }
+}
+
+/**
+ * Formatted rather than raw: a `ZodError`'s own message is a JSON dump of its issue list, and the
+ * one thing the reader of a rejected config file needs — which key, where — is the hardest part of
+ * it to find. The shape matches the runner's `rule-options-invalid` notice for the same reason.
+ */
+export function formatConfigIssues(
+  error: z.ZodError,
+): readonly { readonly path: string; readonly message: string }[] {
+  return error.issues.map((issue) => ({
+    path: issue.path.map((segment) => String(segment)).join('.') || '<root>',
+    message: issue.message,
+  }));
+}
+
 export function resolveConfig(input: unknown): SteAiConfig {
-  return steAiConfigSchema.parse(input ?? {});
+  const result = steAiConfigSchema.safeParse(input ?? {});
+  if (!result.success) throw new SteAiConfigError(formatConfigIssues(result.error));
+  return result.data;
 }

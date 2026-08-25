@@ -192,10 +192,16 @@ describe('protected-region extraction', () => {
     expect(text.slice(approved[0]?.range.start, approved[0]?.range.end)).toBe('Acme WidgetPro');
   });
 
-  it('accepts extra user patterns and ignores an invalid one without throwing', () => {
+  // Extraction returns ranges and has no channel for a notice, so refusing an unusable pattern is
+  // all it can do here; `test/unit/protected-patterns.test.ts` covers the reporting side, which is
+  // where the same screen runs once per analysis run and yields `invalid-protected-pattern`.
+  it.each([
+    ['an invalid one', '([unclosed'],
+    ['one whose match time is unbounded', '(\\d+)+'],
+  ])('applies the usable extra user patterns and skips %s without throwing', (_label, unusable) => {
     const regions = extractProtectedRegions('Part PN12345 ships.\n', {
       ...defaultProtectedRegionOptions,
-      extraPatterns: ['PN\\d+', '([unclosed'],
+      extraPatterns: ['PN\\d+', unusable],
     });
     expect(regions.some((r) => r.kind === 'identifier')).toBe(true);
   });

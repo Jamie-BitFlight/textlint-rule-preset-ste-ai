@@ -45,8 +45,8 @@ Two design constraints drive most of what follows, and both are verified rather 
 - **The merge key must be the key the _matcher_ uses, per field, and the matchers disagree with each
   other.** Vocabulary matching is case-insensitive and whitespace-collapsing
   (`src/deterministic/helpers.ts:5-11`, flags `giu`, `\s+` normalisation). Technical-term protection
-  is case-**sensitive** with no whitespace normalisation (`src/core/protected-regions.ts:551-552`,
-  flags `gu`). Contractions are matched under both apostrophe forms
+  is case-**sensitive** with no whitespace normalisation (`approvedTermPass` in
+  `src/core/protected-regions.ts`, flags `gu`). Contractions are matched under both apostrophe forms
   (`vocabulary.ts:248`, `variantsOf` at `vocabulary.ts:280-283`). One global normalisation function
   would be wrong for at least one field.
 
@@ -120,9 +120,10 @@ Two call sites bind the result directly and neither has a channel for load-time 
   `safeSubstitution` gates whether a `TextFix` is attached at all (`:77-84`).
 - `dictionary.preferred` → `vocabulary.ts:164-173`, same shape of pipeline, `allow` keyed on `from`.
 - `contractions` → `vocabulary.ts:242`, `allow` keyed on `from`; apostrophe variants at `:248,280-283`.
-- `approvedTechnicalTerms` → merged into protected-region `approvedTerms` at `analyse.ts:255` and
-  `evaluate.ts:244`; matched case-sensitively (`protected-regions.ts:551-552`). Vocabulary matching
-  runs against `sentence.masked`, so a protected term can never be matched by a vocabulary rule
+- `approvedTechnicalTerms` → merged into protected-region `approvedTerms` inside `analyse.ts`'s
+  `prepareRun` and `evaluate.ts`'s `evaluateSemanticEvaluators`; matched case-sensitively
+  (`approvedTermPass` in `protected-regions.ts`). Vocabulary matching runs against
+  `sentence.masked`, so a protected term can never be matched by a vocabulary rule
   (`helpers.ts:18-23`).
 - `limits` → five consumers, each `options.X ?? pack.limits.X`:
   `structure-rules.ts:43`, `candidate-rules.ts:331`, `sentence-length.ts:28-30`.
@@ -340,8 +341,9 @@ const vocabKey = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, '
  *  (vocabulary.ts:280-283 maps U+0027 and U+2019 onto one entry). */
 const contractionKey = (s: string): string => vocabKey(s).replace(/’/g, "'");
 
-/** Technical-term key: the exact string. protected-regions.ts:551-552 matches case-sensitively
- *  with no whitespace normalisation, so "Abort" and "abort" are genuinely different entries. */
+/** Technical-term key: the exact string. protected-regions.ts's approvedTermPass matches
+ *  case-sensitively with no whitespace normalisation, so "Abort" and "abort" are genuinely
+ *  different entries. */
 const technicalKey = (s: string): string => s;
 ```
 
@@ -674,10 +676,10 @@ worth reporting; it does not make the pack unusable. `warning`, so textlint show
 **K5** is a genuine, legitimate layering idiom: a product layer whose product is literally called
 `Abort` adds it to `approvedTechnicalTerms`, and the org's ban on `abort` then does nothing, because
 vocabulary matching runs against `sentence.masked` and a protected term is masked out
-(`helpers.ts:18-23`, `protected-regions.ts:546-558`). Erroring would forbid the idiom. But the ban is
-now dead data, and dead bans are exactly what an audit needs to see. One subtlety the notice message
-must carry: technical-term protection is case-**sensitive** (`protected-regions.ts:552`, flags `gu`)
-while the ban is case-**insensitive** (`helpers.ts:10`, flags `giu`), so `approvedTechnicalTerms:
+(`helpers.ts:18-23`, `approvedTermPass` in `protected-regions.ts`). Erroring would forbid the idiom.
+But the ban is now dead data, and dead bans are exactly what an audit needs to see. One subtlety the
+notice message must carry: technical-term protection is case-**sensitive** (`approvedTermPass`,
+flags `gu`) while the ban is case-**insensitive** (`helpers.ts:10`, flags `giu`), so `approvedTechnicalTerms:
 ["Abort"]` shadows only `Abort`; lowercase `abort` in prose is still flagged. The shadowing is
 partial, and the notice should say so rather than claiming the ban is fully dead.
 

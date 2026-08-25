@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { z } from 'zod';
 import { main } from '../../src/cli/main.js';
+import { SteAiConfigError } from '../../src/core/config.js';
 
 /** The subset of `--json`'s real output shape this test itself inspects. */
 const jsonOutputSchema = z.object({
@@ -78,5 +79,95 @@ describe('ste-ai lint output', () => {
     expect(record?.reason).toBe('Vendor spelling fixed by contract.');
     // The machine-readable range stays a raw offset; only the printed line is reader-facing.
     expect(record?.range.start).toBe(DOC.indexOf('utilise'));
+  });
+});
+
+describe('ste-ai lint --config', () => {
+  it('reports an unrecognised key by name and path, not a raw ZodError dump', async () => {
+    // `buildConfig` used to validate `--config` with `steAiConfigSchema.parse` directly, bypassing
+    // `resolveConfig` — the one place that turns a `ZodError`'s JSON issue dump into a message
+    // naming the offending key. `--config` is the most direct way an operator points the CLI at a
+    // policy file, so it must fail exactly the way every other entry point already does.
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-config.json');
+    writeFileSync(
+      configFile,
+      JSON.stringify({ diagnostics: { severity: { 'style-preference': 'info' } } }),
+      'utf8',
+    );
+    const docFile = join(dir, 'doc.md');
+    writeFileSync(docFile, 'Some text.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let thrown: unknown;
+    try {
+      await main();
+    } catch (error) {
+      thrown = error;
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(thrown, 'expected main() to reject with SteAiConfigError').toBeInstanceOf(
+      SteAiConfigError,
+    );
+    if (!(thrown instanceof SteAiConfigError)) throw thrown;
+    expect(thrown.message).toContain('diagnostics.severity');
+    expect(thrown.message).toContain('style-preference');
+  });
+});
+
+describe('ste-ai lint exit code', () => {
+  // Found in external review of PR #73: a clean document with a refused extraProtectedPatterns
+  // entry printed "0 error(s)" and exited 0, because invalid-protected-pattern is a RunNotice, not
+  // a diagnostic, and only semantic-service-failure was wired to the exit code. A CI pipeline
+  // gating on exit status alone would see success even though the configured literal was neither
+  // protected nor withheld from the semantic service — the exact failure #7 exists to surface.
+  it('is nonzero when a protected pattern is refused, even on an otherwise clean document', async () => {
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-pattern-config.json');
+    writeFileSync(configFile, JSON.stringify({ extraProtectedPatterns: ['([unclosed'] }), 'utf8');
+    const docFile = join(dir, 'clean.md');
+    writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let code: number;
+    try {
+      code = await main();
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(code).not.toBe(0);
+  });
+
+  // Found in external review of PR #73, a second round: the exit code was gated on a hardcoded
+  // set of two notice codes, so a rule skipped over invalid options — `rule-options-invalid`, also
+  // always `error`-level — produced the same silent "0 error(s), exit 0" the previous fix was
+  // meant to eliminate. Fixed by gating on `level === 'error'` for any run notice instead of
+  // naming codes one at a time.
+  it('is nonzero when a rule is skipped for invalid options, even on an otherwise clean document', async () => {
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'bad-options-config.json');
+    writeFileSync(
+      configFile,
+      JSON.stringify({ rules: { 'abbreviation-introduction': { minLength: 8, maxLength: 3 } } }),
+      'utf8',
+    );
+    const docFile = join(dir, 'clean.md');
+    writeFileSync(docFile, 'Nothing wrong with this document.\n', 'utf8');
+
+    const argv = process.argv;
+    process.argv = ['node', 'ste-ai', 'lint', '--config', configFile, docFile];
+    let code: number;
+    try {
+      code = await main();
+    } finally {
+      process.argv = argv;
+    }
+
+    expect(code).not.toBe(0);
   });
 });

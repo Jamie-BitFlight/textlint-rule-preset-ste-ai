@@ -69,6 +69,21 @@ is part of the tool's deterministic behaviour. Add a `rules[]` entry to
 `src/rule-pack/provisional-pack.ts`, and a section in `docs/provisional-rules.md` matching your
 `sourceRef` anchor.
 
+## Put every option constraint in the schema, including the ones between fields
+
+The runner validates a rule's options with `optionsSchema.safeParse` before calling `run`, and a
+failure is reported as a `rule-options-invalid` notice that skips only that rule. Nothing wraps
+`run` itself, so a constraint the schema does not express becomes an exception that aborts the
+analysis of the whole document.
+
+Per-field `min`/`max` does not cover a constraint that holds _between_ two fields. A pair of bounds
+combined into a range, a regular-expression `{min,max}` quantifier, a slice, or an index needs a
+`.refine()` on the object as well — `abbreviation-introduction` in
+`src/deterministic/rules/mechanics.ts` is the worked example: `{ minLength: 8, maxLength: 3 }`
+satisfies both fields' ranges, and before the refinement it parsed and then threw
+`numbers out of order in {} quantifier` from the `RegExp` constructor (issue #6). Give the
+refinement a `path` so the notice names the offending option.
+
 ## Rules you do not implement yourself
 
 The runner applies these after your rule returns, so do not attempt them:

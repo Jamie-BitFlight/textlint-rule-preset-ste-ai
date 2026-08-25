@@ -34,6 +34,28 @@ const analysisCache = new Map<string, AnalysisCacheEntry>();
 const MAX_CACHE_ENTRIES = 32;
 
 /**
+ * Which run-level notices have already been reported for a given Document AST node this run,
+ * identified by `code` + `message`.
+ *
+ * Keyed by object identity on the outer map, not content: a fresh AST node is a fresh key, so this
+ * needs no manual reset between lint runs the way {@link analysisCache} does (see
+ * {@link clearAnalysisCache}) — an old node simply becomes unreachable and is collected once its
+ * run ends.
+ *
+ * Deduplicates rather than gating on "has any rule reported yet" (an earlier version's design,
+ * found broken in external review): `getAnalysis` computes a config scoped to whichever rule is
+ * calling it — its own `perRuleOptions` entry merges in, every other rule's does not — so two
+ * rules enabled in the same run can genuinely compute *different* `AnalysisResult`s, each with its
+ * own distinct notices (e.g. a `rule-options-invalid` specific to the second rule's own bad
+ * options, absent from the first rule's differently-scoped analysis). Gating on "the first rule to
+ * arrive claims it" silently dropped every notice specific to a rule that was not first. Identity
+ * by content, rather than object identity on the notice itself, is what lets the *same* notice
+ * computed redundantly by several rules (e.g. one that depends only on `shared`, not on any rule's
+ * own options) still collapse to one report, while distinct notices all surface.
+ */
+const reportedRunNoticesFor = new WeakMap<object, Set<string>>();
+
+/**
  * Options a rule accepts from textlint.
  *
  * The index signature is what lets a rule receive its own arbitrary options, but it makes the type
@@ -292,17 +314,38 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
           });
         }
 
-        // Run-level notices are surfaced once, by the first rule in the preset, anchored at the
-        // start of the document. Without this a service outage would leave no trace in the report.
-        if (ruleId === FIRST_RULE_ID) {
-          for (const notice of analysis.notices) {
-            if (notice.level === 'info') continue;
-            report(node, {
-              message: `[infrastructure-failure][${notice.code}] ${notice.message}`,
-              padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
-              severity: toTextlintSeverity(notice.level),
-            });
+        // Run-level notices are surfaced once per run, by whichever enabled rule's Document
+        // handler reaches this line first, anchored at the start of the document. Without this a
+        // service outage — or an invalid `extraProtectedPatterns` entry, or an unrecognised rule
+        // id — would leave no trace in the report.
+        //
+        // This used to be gated on `ruleId === FIRST_RULE_ID`, a single hardcoded rule id. That
+        // silently dropped every run notice whenever the user's own `.textlintrc.json` did not
+        // enable that specific rule — precisely the silent-drop this mechanism exists to prevent,
+        // just one level up. A later fix replaced it with "whichever rule's handler arrives first
+        // reports, every other rule this run stays silent" — also wrong, per the class comment on
+        // `reportedRunNoticesFor` above: different rules can compute genuinely different notices
+        // for the same document, so "first one wins" silently dropped every notice specific to a
+        // rule that was not first. Dedupe by content instead: `node` is confirmed the same object
+        // across every rule's `Document` handler within one `lintText()` call (textlint parses the
+        // AST once and shares it), and a fresh object every subsequent call, so this reports each
+        // distinct notice exactly once per run regardless of which rule computed it, with no
+        // explicit reset between runs to forget.
+        let reportedForNode = reportedRunNoticesFor.get(node);
+        for (const notice of analysis.notices) {
+          if (notice.level === 'info') continue;
+          const identity = `${notice.code} ${notice.message}`;
+          if (reportedForNode?.has(identity) === true) continue;
+          if (reportedForNode === undefined) {
+            reportedForNode = new Set();
+            reportedRunNoticesFor.set(node, reportedForNode);
           }
+          reportedForNode.add(identity);
+          report(node, {
+            message: `[infrastructure-failure][${notice.code}] ${notice.message}`,
+            padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
+            severity: toTextlintSeverity(notice.level),
+          });
         }
       },
     };
@@ -310,10 +353,3 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
 
   return { linter: reporter, fixer: reporter };
 }
-
-/**
- * The rule that reports run-level notices. Fixed so the notice appears exactly once per run
- * regardless of which rules the user enabled — if this rule is disabled, notices are still
- * available through the programmatic API.
- */
-export const FIRST_RULE_ID = 'sentence-length-procedural';

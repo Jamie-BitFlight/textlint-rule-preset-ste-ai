@@ -406,6 +406,48 @@ describe('abbreviation-introduction', () => {
     const result = run('| Option | Value |\n| --- | --- |\n| Mode | auto_vacuum=FULL |\n');
     expect(result.forRule(id)).toHaveLength(0);
   });
+
+  // `minLength`/`maxLength` are interpolated into a `{min,max}` regular-expression quantifier, so
+  // an inverted pair is a regex syntax error rather than a merely useless setting. Each bound
+  // satisfies its own range, so before the cross-field check the options parsed and the rule then
+  // threw inside `run`, aborting analysis of the whole document (issue #6). The pair is now
+  // rejected at parse time, which is the path the runner already handles.
+  it('rejects an inverted minLength/maxLength pair at parse time instead of throwing', () => {
+    const resolved = resolveConfig({
+      rules: { [id]: { minLength: 8, maxLength: 3 } },
+    });
+    // The document also violates `unapproved-vocabulary`, so the run's completion is observable
+    // rather than merely uneventful.
+    const doc = analyseDocument({
+      id: 't',
+      format: 'markdown',
+      text: 'Utilise the ABCDEFGH module.\n',
+    });
+
+    const result = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config: resolved,
+      pack: provisionalRulePack,
+    });
+
+    const notice = result.notices.find(
+      (n) => n.code === 'rule-options-invalid' && n.detail?.['ruleId'] === id,
+    );
+    expect(notice).toBeDefined();
+    expect(notice?.level).toBe('error');
+    expect(notice?.message).toContain('maxLength');
+    // Only this rule is skipped; the rest of the run still reports.
+    expect(result.diagnostics.filter((d) => d.ruleId === id)).toHaveLength(0);
+    expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
+  });
+
+  it('accepts minLength equal to maxLength', () => {
+    const result = run('The ZQX module failed. The ZQXY module also failed.\n', {
+      rules: { [id]: { minLength: 3, maxLength: 3 } },
+    });
+    expect(result.quotesFor(id)).toEqual(['ZQX']);
+  });
 });
 
 describe('number-unit-format', () => {

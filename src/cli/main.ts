@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgsNode, type ParseArgsOptionsConfig } from 'node:util';
 import { analyseText, analyseTextDeterministic } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
-import { steAiConfigSchema } from '../core/config.js';
+import { resolveConfig } from '../core/config.js';
 import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
@@ -111,11 +111,11 @@ function buildConfig(args: Args): SteAiConfigInput {
   const base: SteAiConfigInput =
     typeof configPath === 'string'
       ? // The file's shape is genuinely unknown until validated — `JSON.parse` returns `any`, and
-        // an assertion would only assume correctness, not check it. `steAiConfigSchema.parse`
-        // validates the same boundary `resolveConfig` validates elsewhere, so a malformed
-        // `--config` file fails loudly here instead of producing a wrongly-shaped config that only
-        // breaks later, confusingly, downstream.
-        steAiConfigSchema.parse(JSON.parse(readFileSync(configPath, 'utf8')))
+        // an assertion would only assume correctness, not check it. `resolveConfig` is the same
+        // function every other entry point (the shared config file, the programmatic API) uses for
+        // this boundary, so a malformed `--config` file fails loudly with the same named-key
+        // message as everywhere else, instead of a raw `ZodError`'s JSON issue dump.
+        resolveConfig(JSON.parse(readFileSync(configPath, 'utf8')))
       : {};
   const semanticEnabled = args.flags.get('semantic') === true;
   const endpoint = args.flags.get('endpoint');
@@ -206,9 +206,19 @@ async function lint(args: Args): Promise<number> {
     (n, r) => n + r.diagnostics.filter((d) => d.category === 'review-required').length,
     0,
   );
-  const infraFailure = results.some((r) =>
-    r.notices.some((n) => n.code === 'semantic-service-failure' && n.level === 'error'),
-  );
+  // An `error`-level run notice means "this run has less information, or fewer protections, than
+  // the operator configured" -- reported in `result.notices` either way, but loud enough there to
+  // also gate the exit code so CI notices, not just a human reading output by hand. Gating on
+  // `level` rather than a named set of codes is deliberate: an earlier version of this check listed
+  // `semantic-service-failure` and `invalid-protected-pattern` by name, and missed
+  // `rule-options-invalid` -- a skipped rule is exactly the same "operator's configuration silently
+  // didn't take effect" consequence -- because nothing forces every future `error`-level notice code
+  // to be added to that list. Every current run-notice code that can reach `error` (checked directly
+  // against the notice producers: `semantic-service-failure`, `invalid-protected-pattern`,
+  // `rule-options-invalid` -- every other code is fixed at `info` or `warning`) already belongs here;
+  // this reads that from the notices themselves instead of duplicating it into a second list that
+  // can drift from the first.
+  const infraFailure = results.some((r) => r.notices.some((n) => n.level === 'error'));
 
   if (args.flags.get('json') === true) {
     process.stdout.write(

@@ -53,9 +53,9 @@ function snapshotStores(): StoreSnapshot {
  *
  * Deliberately full-object: this is called exactly twice in the whole file (once to capture
  * {@link PRISTINE} at load time, once by `shared compromise singleton isolation` at the very end),
- * not per test — `compromise`'s base lexicon alone is ~25k entries (confirmed directly), so a
- * shallow copy of it is real but one-off cost, not something to pay on every one of this file's 30
- * tests. The two tests that deliberately mutate the singleton are cleaned up individually by
+ * not per test — `compromise`'s base lexicon is large enough (confirmed directly) that a shallow
+ * copy of it is a real, one-off cost, not something to pay on every test in this file. The two
+ * tests that deliberately mutate the singleton are cleaned up individually by
  * {@link simulateHostAddWords}'s own `afterEach` instead, at O(1) per test.
  */
 function driftFrom(snapshot: StoreSnapshot): string[] {

@@ -42,8 +42,8 @@
 # which the swap below does not survive; the digest here is still what pins the keys no other check
 # reads. Measured:
 # demoting the corpus's two confirmed `passive-voice-candidate` defects and promoting two other
-# passages of the same rule passed every gate and all 576 tests, silently moving which passages the
-# semantic evaluators are scored against. Digesting the whole annotation closes that, and covers the
+# passages of the same rule passed every gate, silently moving which passages the semantic
+# evaluators are scored against. Digesting the whole annotation closes that, and covers the
 # keys no check reads at all (`notes`, `original`, `compliant`) rather than leaving them to be
 # noticed one at a time.
 #

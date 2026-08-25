@@ -376,12 +376,13 @@ need of updating. State that in the PR description so a reviewer does not "fix" 
 
 ### What is NOT affected (and why, precisely)
 
-- **The exact class balance.** Since this analysis was written, the two asserted aggregates
-  (`{violation: 5, 'non-violation': 100, undecidable: 0}` and `noun-cluster-candidate` →
-  `{violation: 0, total: 24}`) have been replaced by a record-by-record comparison of
-  `annotation.candidateAdjudications` against `fixtures/verdicts/`. The conclusion is unchanged and
-  applies to the replacement: both sides are static JSON, **the linter is not consulted**, and
-  layering cannot move them. Same for the 105/5/100 table in `docs/provisional-rules.md`.
+- **The exact class balance.** Since this analysis was written, the two asserted aggregates that
+  used to be transcribed here have been replaced by a record-by-record comparison of
+  `annotation.candidateAdjudications` against `fixtures/verdicts/` (`test/fixtures/corpus.test.ts`).
+  The conclusion is unchanged and applies to the replacement: both sides are static JSON, **the
+  linter is not consulted**, and layering cannot move them. Same reasoning for the totals in
+  `docs/provisional-rules.md`, which derives its own figures rather than transcribing them (see the
+  `node -e` command in that file's corpus section).
 - **`scripts/ci/check-rules-provisional.sh:20`'s hard-coded `14`.** It lints the output of
   `ste-ai rules --json`, which `listRules` (`cli/main.ts:277-296`) builds from the
   `deterministicRules` registry and `r.meta.status` — **never from the pack**.

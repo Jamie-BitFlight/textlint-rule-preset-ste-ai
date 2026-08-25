@@ -31,6 +31,21 @@ describe('extraProtectedPatterns screening', () => {
     expect(screenExtraPatterns([source]).rejected[0]?.reason).toBe('source-too-long');
   });
 
+  it('screens an over-long source before compiling it, so length wins over syntax', () => {
+    // A source that is simultaneously too long and unparsable: only the length check must fire.
+    // This distinguishes the length screen actually short-circuiting from a coincidence where a
+    // reordered length/syntax check would still land on the same reason for a merely-long source.
+    const overLongAndInvalid = `(${'a'.repeat(MAX_PROTECTED_PATTERN_LENGTH)}`;
+    expect(screenExtraPatterns([overLongAndInvalid]).rejected[0]?.reason).toBe('source-too-long');
+  });
+
+  it('keeps accepted patterns in configured order', () => {
+    expect(screenExtraPatterns(['A\\d+', '(\\d+)+$', 'B\\d+']).accepted).toEqual([
+      'A\\d+',
+      'B\\d+',
+    ]);
+  });
+
   it.each([
     '(\\d+)+$',
     '^(aa?)+$',

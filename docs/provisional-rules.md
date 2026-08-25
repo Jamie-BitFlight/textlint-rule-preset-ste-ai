@@ -287,12 +287,24 @@ flagged passages is the headline result of this corpus, and it has three consequ
    noise. `formatEvaluationReport` therefore withholds recall and F1 below ten gold positives and
    prints the positive count instead. Precision over 100 negatives is informative; recall is not.
 
-The counts are derived rather than transcribed. `test/fixtures/corpus.test.ts` compares every
-committed adjudication field by field against the reviewer run in `fixtures/verdicts/` that recorded
-it, so a promotion cannot be balanced against a demotion to leave a total looking untouched, and
-`scripts/ci/check-annotation-provenance.sh` pins each annotation by digest. A change that orphans a
-verdict from the passage it was written about fails `scripts/ci/check-candidate-ground-truth.sh`, and
-the same corpus test checks both directions of that binding.
+The figures quoted above are transcribed from the reviewer run described below, so derive them
+from the corpus rather than trusting this page:
+
+```bash
+node -e "const fs = require('fs'); \
+  const a = fs.readdirSync('fixtures/annotations').flatMap(f => \
+    JSON.parse(fs.readFileSync('fixtures/annotations/' + f, 'utf8')).candidateAdjudications ?? []); \
+  const by = k => a.reduce((m, r) => (m[r[k]] = (m[r[k]] ?? 0) + 1, m), {}); \
+  console.log('adjudications', a.length); console.log('class', by('verdict')); console.log('rule', by('ruleId'))"
+```
+
+What the suite guards is the record behind each figure, not the figure itself.
+`test/fixtures/corpus.test.ts` compares every committed adjudication field by field against the
+reviewer run in `fixtures/verdicts/` that recorded it, so a promotion cannot be balanced against a
+demotion to leave a total looking untouched, and `scripts/ci/check-annotation-provenance.sh` pins
+each annotation by digest. A change that orphans a verdict from the passage it was written about
+fails `scripts/ci/check-candidate-ground-truth.sh`, and the same corpus test checks both directions
+of that binding.
 
 Reviewers judged against the intent documented here, not against ASD-STE100 — no authorised copy was
 available, and they were instructed to mark a passage `undecidable` rather than reason from recalled

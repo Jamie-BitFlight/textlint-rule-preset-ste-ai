@@ -30,10 +30,10 @@ const manifest = fixtureManifestSchema.parse(
  * Every deterministic analysis this file performs, memoised on (document, options).
  *
  * A deterministic analysis re-runs wink-nlp, compromise and sentence-splitter over a whole
- * document, and the corpus holds only 36 distinct documents: 18 originals and their rewritten
- * counterparts. Re-analysing them per assertion made this the second-slowest file in the suite,
- * about 300 analyses of those 36 documents. One analysis per (document, options) pair serves every
- * assertion below without changing what any of them assert.
+ * document, while the corpus holds each original and its rewritten counterpart only once.
+ * Re-analysing per assertion therefore repeated the same work across this file's assertions, at a
+ * cost that dominated its runtime. One analysis per (document, options) pair serves every assertion
+ * below without changing what any of them assert.
  *
  * The key carries the options as well as the document, so two tests that analyse the same text
  * under different options never share a result: the originals are analysed with a `path`, without

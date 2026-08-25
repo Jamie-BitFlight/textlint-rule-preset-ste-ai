@@ -70,42 +70,47 @@ describe('protected-region extraction', () => {
     }
   });
 
-  const cases: readonly [string, string, ProtectedRegionKind][] = [
-    ['fenced code', '```bash\nrm -rf /tmp/x\n```\n', 'fenced-code'],
-    ['inline code', 'Set `MAX_RETRIES` now.\n', 'inline-code'],
-    ['url', 'See https://example.com/x for more.\n', 'url'],
-    ['email', 'Write to ops@example.com now.\n', 'email'],
-    ['absolute path', 'Edit /etc/hosts first.\n', 'file-path'],
-    ['windows path', 'Open C:\\Program\\app.exe now.\n', 'file-path'],
-    ['identifier', 'Call requestHandler now.\n', 'identifier'],
-    ['dotted api', 'Use os.path.join here.\n', 'identifier'],
-    ['snake case', 'Set max_retry_count now.\n', 'identifier'],
-    ['cli flag', 'Pass --verbose to it.\n', 'identifier'],
-    ['quantity', 'Torque it to 25 Nm now.\n', 'numeric-expression'],
-    ['version', 'Install version 1.22.3 now.\n', 'numeric-expression'],
-    ['tolerance', 'Set 25 ± 2 now.\n', 'numeric-expression'],
-    ['placeholder', 'Replace {{TOKEN}} now.\n', 'placeholder'],
-    ['env placeholder', 'Export ${HOME} now.\n', 'placeholder'],
-    ['quoted literal', 'Click "Save As" now.\n', 'quoted-literal'],
-    ['front matter', '---\ntitle: x\n---\n\nProse.\n', 'front-matter'],
-    ['html comment', 'A <!-- hidden --> b.\n', 'comment'],
-    ['math', 'Given $x = 1$ now.\n', 'math'],
-    ['heading marker', '## Title\n', 'heading-marker'],
-    ['list marker', '- item one\n- item two\n', 'list-marker'],
-    ['blockquote marker', '> quoted line\n', 'blockquote-marker'],
-    ['reference definition', '[a]: https://example.com "T"\n', 'reference-definition'],
-    ['footnote', 'Text[^1] here.\n', 'footnote-marker'],
-    ['autolink', 'See <https://example.com> now.\n', 'autolink'],
-    ['shell prompt line', '$ make install\n', 'shell-command'],
+  // Each row names the exact substring ("needle") the pass under test is expected to protect, so
+  // the assertion below checks that a region of `kind` covers THAT span specifically -- not that
+  // a region of `kind` exists anywhere in the document. Without a needle, a pass could emit its
+  // kind for the wrong offsets (or for offsets 0-1) and every row would stay green; see `kindsAt`.
+  const cases: readonly [string, string, ProtectedRegionKind, string][] = [
+    ['fenced code', '```bash\nrm -rf /tmp/x\n```\n', 'fenced-code', '```bash\nrm -rf /tmp/x\n```'],
+    ['inline code', 'Set `MAX_RETRIES` now.\n', 'inline-code', '`MAX_RETRIES`'],
+    ['url', 'See https://example.com/x for more.\n', 'url', 'https://example.com/x'],
+    ['email', 'Write to ops@example.com now.\n', 'email', 'ops@example.com'],
+    ['absolute path', 'Edit /etc/hosts first.\n', 'file-path', '/etc/hosts'],
+    ['windows path', 'Open C:\\Program\\app.exe now.\n', 'file-path', 'C:\\Program\\app.exe'],
+    ['identifier', 'Call requestHandler now.\n', 'identifier', 'requestHandler'],
+    ['dotted api', 'Use os.path.join here.\n', 'identifier', 'os.path.join'],
+    ['snake case', 'Set max_retry_count now.\n', 'identifier', 'max_retry_count'],
+    ['cli flag', 'Pass --verbose to it.\n', 'identifier', '--verbose'],
+    ['quantity', 'Torque it to 25 Nm now.\n', 'numeric-expression', '25 Nm'],
+    ['version', 'Install version 1.22.3 now.\n', 'numeric-expression', '1.22.3'],
+    ['tolerance', 'Set 25 ± 2 now.\n', 'numeric-expression', '25 ± 2'],
+    ['placeholder', 'Replace {{TOKEN}} now.\n', 'placeholder', '{{TOKEN}}'],
+    ['env placeholder', 'Export ${HOME} now.\n', 'placeholder', '${HOME}'],
+    ['quoted literal', 'Click "Save As" now.\n', 'quoted-literal', '"Save As"'],
+    ['front matter', '---\ntitle: x\n---\n\nProse.\n', 'front-matter', '---\ntitle: x\n---'],
+    ['html comment', 'A <!-- hidden --> b.\n', 'comment', '<!-- hidden -->'],
+    ['math', 'Given $x = 1$ now.\n', 'math', '$x = 1$'],
+    ['heading marker', '## Title\n', 'heading-marker', '##'],
+    ['list marker', '- item one\n- item two\n', 'list-marker', '-'],
+    ['blockquote marker', '> quoted line\n', 'blockquote-marker', '>'],
+    [
+      'reference definition',
+      '[a]: https://example.com "T"\n',
+      'reference-definition',
+      '[a]: https://example.com "T"',
+    ],
+    ['footnote', 'Text[^1] here.\n', 'footnote-marker', '[^1]'],
+    ['autolink', 'See <https://example.com> now.\n', 'autolink', '<https://example.com>'],
+    ['shell prompt line', '$ make install\n', 'shell-command', '$ make install'],
   ];
 
-  for (const [label, text, kind] of cases) {
+  for (const [label, text, kind, needle] of cases) {
     it(`protects ${label} as ${kind}`, () => {
-      const needle =
-        kind === 'front-matter' ? '---\ntitle: x\n---' : (text.trim().split('\n')[0] ?? text);
-      const found = extractProtectedRegions(text, defaultProtectedRegionOptions).map((r) => r.kind);
-      expect(found).toContain(kind);
-      void needle;
+      expect(kindsAt(text, needle)).toContain(kind);
     });
   }
 
@@ -195,15 +200,27 @@ describe('protected-region extraction', () => {
   // Extraction returns ranges and has no channel for a notice, so refusing an unusable pattern is
   // all it can do here; `test/unit/protected-patterns.test.ts` covers the reporting side, which is
   // where the same screen runs once per analysis run and yields `invalid-protected-pattern`.
+  //
+  // The fixture token must NOT already be identifier-shaped on its own: `PN12345` (an earlier
+  // version of this fixture) is caught by identifierPass's own bare `[A-Z]{2,}[0-9]{2,}` pattern
+  // regardless of extraPatterns, so a version of this test built on it would still pass even with
+  // extraPatternPass deleted outright -- the same "does a region of this kind exist anywhere"
+  // false oracle as the loop above, just laundered through `extraPatterns`. `xz42` is lowercase and
+  // has no built-in pattern behind it (verified: `extractProtectedRegions` on the bare sentence
+  // below with no `extraPatterns` returns no regions at all), so a match here can only have come
+  // from the configured `extraPatterns`.
   it.each([
     ['an invalid one', '([unclosed'],
     ['one whose match time is unbounded', '(\\d+)+'],
   ])('applies the usable extra user patterns and skips %s without throwing', (_label, unusable) => {
-    const regions = extractProtectedRegions('Part PN12345 ships.\n', {
+    const text = 'Part xz42 ships.\n';
+    expect(extractProtectedRegions(text, defaultProtectedRegionOptions)).toHaveLength(0);
+    const regions = extractProtectedRegions(text, {
       ...defaultProtectedRegionOptions,
-      extraPatterns: ['PN\\d+', unusable],
+      extraPatterns: ['xz\\d+', unusable],
     });
-    expect(regions.some((r) => r.kind === 'identifier')).toBe(true);
+    const xz42 = regions.filter((r) => text.slice(r.range.start, r.range.end) === 'xz42');
+    expect(xz42.map((r) => r.kind)).toEqual(['identifier']);
   });
 
   it('protects table pipes but keeps cell prose visible', () => {
@@ -260,9 +277,20 @@ describe('protected-region extraction', () => {
 });
 
 describe('configFragmentPass mid-sentence alternative, identifierPass citations, and corroboratedConstantPass', () => {
-  it('protects a mid-sentence quoted config literal via configFragmentPass', () => {
+  it('protects a mid-sentence quoted config literal via configFragmentPass, not the wrapping quotes', () => {
     const text = 'Unless running in "auto_vacuum=FULL" mode, verify the setting.\n';
     expect(kindsAt(text, 'auto_vacuum=FULL')).toContain('config-fragment');
+    // Boundary check: the mid-sentence alternative is not anchored to line start/end (unlike the
+    // other two configFragmentPass alternatives), so nothing here stops its match from also
+    // swallowing the wrapping quote characters. Pinning the quotes as unprotected catches a
+    // mutation that widens the pattern to consume `"auto_vacuum=FULL"` (quotes included): the
+    // `kindsAt` overlap check above would still pass -- it only proves SOME config-fragment region
+    // touches the 16-char span, not that the span stops exactly there.
+    const doc = analyse(text);
+    const openQuote = text.indexOf('"');
+    const closeQuote = text.indexOf('"', openQuote + 1);
+    expect(doc.isProtected({ start: openQuote, end: openQuote + 1 })).toBe(false);
+    expect(doc.isProtected({ start: closeQuote, end: closeQuote + 1 })).toBe(false);
   });
 
   it('protects a mid-sentence bare-keyword assignment, leaving the sentence-final period as prose', () => {

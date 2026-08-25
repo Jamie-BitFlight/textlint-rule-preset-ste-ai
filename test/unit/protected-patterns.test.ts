@@ -96,6 +96,24 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition spelled two different ways, bare and single-char class', () => {
+    // Reported in external review of PR #73, round 6: `lastRangeQuantifiedAtom` compared the raw
+    // source text of each atom, so `a*` and `[a]*` — the same atom, spelled two different ways —
+    // were never recognised as a streak even though they are exactly as ambiguous adjacent as
+    // `a*a*`. Same proof discipline: measure first.
+    const attack = new RegExp('^a*[a]*a*[a]*a*[a]*a*[a]*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*[a]*a*[a]*a*[a]*a*[a]*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports the same adjacent repetition written with lazy quantifiers', () => {
     // Reported in external review of PR #73, on the fix above: `quantifierAt` read only the
     // greedy quantifier character, not a trailing lazy `?` (`*?`, `+?`, `??`, `{n,m}?`), so the
@@ -198,6 +216,23 @@ describe('screenExtraPatterns', () => {
     // A range that includes zero as its minimum can still consume up to its maximum — only an
     // EXACT zero count (`{0}`) can never consume.
     ['an atom that may consume zero to three times, not always zero', 'a{0,3}'],
+    // `.` is "any character" bare but a literal dot inside `[.]` — round 6's single-char-class
+    // normalization must not conflate them, in either order, or it would over-reject a harmless
+    // pattern.
+    ['a bare dot next to a single-char class of a different meaning', '.*[.]*b'],
+    ['the same pair in the other order', '[.]*.*b'],
+    // Different single literal characters, one spelled bare and one as a single-char class — not
+    // the same atom, so not a streak.
+    ['different atoms, one bare and one a single-char class', 'a*[b]*c'],
+    // A range or negated class is not a single-char class, so it must not normalize to its first
+    // character.
+    ['a character range next to the bare atom it starts with', '[a-z]*a*b'],
+    ['a negated class next to the bare atom it excludes', '[^a]*a*b'],
+    // An escape inside a class is not a bare single character either.
+    ['an escaped digit class next to the bare escape', '[\\d]*\\d*b'],
+    // A group whose own trailing quantifier has an exact-zero maximum can never actually run, so
+    // an outer repetition on the group is not reached — no different from `a{0}` on a bare atom.
+    ['a group with an exact-zero trailing quantifier, not itself repeated', '(PN){0}b'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -234,6 +269,20 @@ describe('screenExtraPatterns', () => {
     // separate one — reported in external review of PR #73 as a way to defeat the check above by
     // making the scanner misread the lazy marker as its own (non-)quantifier, breaking the streak.
     ['the same eight-way case, written lazily', 'a*?a*?a*?a*?a*?a*?a*?a*?b', 'adjacent-repetition'],
+    // Round 6: the same atom, spelled two different ways (bare and as a single-char class), is
+    // just as ambiguous adjacent as the same spelling repeated — `lastRangeQuantifiedAtom`
+    // previously compared raw source text, so `a*` and `[a]*` never matched each other.
+    ['the same atom, bare then as a single-char class', 'a*[a]*b', 'adjacent-repetition'],
+    ['the same atom, single-char class then bare', '[a]*a*b', 'adjacent-repetition'],
+    ['the same atom, single-char class both times', '[a]*[a]*b', 'adjacent-repetition'],
+    [
+      'the eight-way case, alternating spellings',
+      'a*[a]*a*[a]*a*[a]*a*[a]*b',
+      'adjacent-repetition',
+    ],
+    // A lone `-` inside a class has no adjacent character to form a range with, so it is
+    // unambiguously a literal hyphen — the same atom as the bare `-` outside a class.
+    ['a literal hyphen, bare and as a single-char class', '[-]*-*b', 'adjacent-repetition'],
     // `extraPatternPass` discards a zero-length match, so a pattern that can only ever produce one
     // protects nothing — silently, unlike every other refusal here, since it's neither invalid
     // syntax nor a complexity risk.
@@ -247,6 +296,15 @@ describe('screenExtraPatterns', () => {
     // returning as soon as it saw the atom, without checking what quantified it.
     ['an atom quantified to occur exactly zero times', 'a{0}', 'matches-only-empty'],
     ['a character class quantified to occur exactly zero times', '[A-Z]{0}', 'matches-only-empty'],
+    // Round 6: a *group's own* exact-zero trailing quantifier means its body can never run,
+    // regardless of what the body contains — the earlier version of this check judged each atom
+    // the moment it was seen, before it had scanned as far as the group's closing quantifier.
+    ['a group quantified to occur exactly zero times', '(PN){0}', 'matches-only-empty'],
+    [
+      'a group quantified to occur exactly zero times, nested two deep',
+      '((PN)){0}',
+      'matches-only-empty',
+    ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

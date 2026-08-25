@@ -212,16 +212,23 @@ still counts, since laziness changes which match is preferred, not whether more 
 possible); an exact count (`{2}`) never qualifies, so `DOC-[A-Z]{2}-\d+` stays accepted. The check is
 syntactic and therefore blunt in both directions: it refuses `(?:foo|bar)+`, which is harmless in
 practice, and it does not attempt to prove whether two _different-looking_ adjacent atoms are safe to
-combine — only identical source text is checked. Rewrite a refused pattern so the repeated group's
-body neither repeats, alternates, nor contains an optional element, and so no atom is independently
-range-quantified twice in a row — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not
-— or match the shape without the outer repetition.
+combine — comparison is by source text, normalized only for the one equivalence that is unambiguous
+to detect syntactically: a single-character class such as `[a]` is recognised as the same atom as the
+bare `a` (and `[-]` as the bare `-`, the one character a class can hold alone without meaning a
+range), so `a*[a]*` is refused exactly like `a*a*`. A class holding any other shape — a range, a
+negation, an escape, or a character whose meaning changes outside a class such as `[.]` versus bare
+`.` — is left uncompared, on the same "accept unless provably unsafe" bias as everything else in this
+screen. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
+contains an optional element, and so no atom is independently range-quantified twice in a row —
+`(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape without the
+outer repetition.
 
 `matches-only-empty` is a different kind of refusal: not a complexity risk, just a pattern that can
 never do anything. `extraPatternPass` discards a zero-length match because there is no span to
-protect, so `^` or a bare lookahead like `(?=PN)` — and an atom quantified to occur exactly zero
-times, `a{0}` — would otherwise pass every check above and silently protect nothing. Content
-_outside_ a lookaround still counts: `(?=PN)PN` consumes the second `PN` and is accepted.
+protect, so `^` or a bare lookahead like `(?=PN)` — an atom quantified to occur exactly zero times,
+`a{0}` — or a _group_ quantified to occur exactly zero times, `(PN){0}`, regardless of what its body
+contains — would otherwise pass every check above and silently protect nothing. Content _outside_ a
+lookaround still counts: `(?=PN)PN` consumes the second `PN` and is accepted.
 
 ### Option precedence
 

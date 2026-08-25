@@ -286,13 +286,28 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
  */
 function canOnlyMatchEmpty(source: string): boolean {
   let i = 0;
-  const lookaroundStack: boolean[] = [];
   let lookaroundDepth = 0;
+  const lookaroundStack: boolean[] = [];
+  // One entry per currently-open *ordinary* (non-lookaround) group not itself nested inside a
+  // lookaround, tracking whether anything in its body so far can consume. Index 0 is the whole
+  // pattern. A group whose own trailing quantifier turns out to have a maximum of exactly zero
+  // (`(PN){0}`) never runs regardless of what is marked here — found in external review of PR #73
+  // as a shape the previous, immediate-`return false` version of this function got wrong by
+  // deciding before it had seen that quantifier at all. Judgment is deferred to `)` for exactly
+  // this reason; the final verdict is read from index 0 once the whole pattern has been walked.
+  const consumingStack: boolean[] = [false];
+
+  function markConsuming(): void {
+    if (lookaroundDepth > 0) return;
+    consumingStack[consumingStack.length - 1] = true;
+  }
 
   /**
-   * Consumes the quantifier (if any) at `i` and reports whether the atom it was just called for
-   * can still consume at least sometimes — false only when that quantifier's maximum is exactly
-   * zero (`{0}`), the one shape where an otherwise-consuming atom provably never runs.
+   * Consumes the quantifier (if any) at `i` and reports whether whatever it was just called for
+   * can still run at least sometimes — false only when that quantifier's maximum is exactly zero
+   * (`{0}`), the one shape where an otherwise-consuming atom or group provably never runs. Always
+   * called, even inside a lookaround or when the preceding thing already can't consume, so `i`
+   * stays correctly positioned for the rest of the scan either way.
    */
   function stillConsumes(): boolean {
     const quantifier = quantifierAt(source, i);
@@ -305,28 +320,40 @@ function canOnlyMatchEmpty(source: string): boolean {
     if (ch === '\\') {
       const escaped = source[i + 1];
       i += 2;
-      if (lookaroundDepth === 0 && escaped !== 'b' && escaped !== 'B' && stillConsumes()) {
-        return false;
-      }
+      if (escaped !== 'b' && escaped !== 'B' && stillConsumes()) markConsuming();
       continue;
     }
     if (ch === '[') {
       i += 1;
       while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
       i += 1;
-      if (lookaroundDepth === 0 && stillConsumes()) return false;
+      if (stillConsumes()) markConsuming();
       continue;
     }
     if (ch === '(') {
       const isLookaround = isLookaroundMarker(source, i);
       lookaroundStack.push(isLookaround);
-      if (isLookaround) lookaroundDepth += 1;
+      if (isLookaround) {
+        lookaroundDepth += 1;
+      } else if (lookaroundDepth === 0) {
+        consumingStack.push(false);
+      }
       i += 1 + groupMarkerLength(source, i);
       continue;
     }
     if (ch === ')') {
-      if (lookaroundStack.pop() === true) lookaroundDepth -= 1;
+      const wasLookaround = lookaroundStack.pop();
       i += 1;
+      if (wasLookaround === true) {
+        lookaroundDepth -= 1;
+        continue;
+      }
+      // JS regular expressions have no syntax for quantifying a lookaround (`(?!x)+` is a syntax
+      // error, verified directly), so only an ordinary group's own trailing quantifier can ever
+      // neutralize what is inside it — `stillConsumes` still has to run either way, to keep `i`
+      // positioned correctly for whatever follows.
+      const closedConsumes = lookaroundDepth === 0 ? (consumingStack.pop() ?? false) : false;
+      if (closedConsumes && stillConsumes()) markConsuming();
       continue;
     }
     if (ch === '^' || ch === '$' || ch === '|') {
@@ -343,10 +370,56 @@ function canOnlyMatchEmpty(source: string): boolean {
     }
     // A bare literal atom: exactly one character, then whatever quantifier (if any) follows it.
     i += 1;
-    if (lookaroundDepth === 0 && stillConsumes()) return false;
+    if (stillConsumes()) markConsuming();
   }
 
-  return true;
+  return !consumingStack[0];
+}
+
+/**
+ * Regex metacharacters that mean something different outside a character class than the literal
+ * character they spell inside one — `.` is "any character" bare but a literal dot in `[.]`; `^`,
+ * `\`, `[`, `]`, `{`, `}`, `(`, `)`, `|`, `?`, `*`, `+` are all structural outside a class; `$` is
+ * the zero-width end-of-string anchor bare but a literal dollar sign in `[$]`. A single-character
+ * class built from one of these is therefore not a safe stand-in for the bare character.
+ *
+ * `-` is deliberately not in this set: it is only ever a range operator between two other
+ * characters, so as the sole character in a class (`[-]`, neither first-of-two nor last-of-two)
+ * it is unambiguously a literal hyphen — exactly what bare `-` already means outside a class too.
+ * Everything else inside `[x]` means the same thing as the bare `x`.
+ */
+const CLASS_UNSAFE_METACHARACTERS = new Set([
+  '\\',
+  '^',
+  '$',
+  '.',
+  '|',
+  '?',
+  '*',
+  '+',
+  '(',
+  ')',
+  '[',
+  ']',
+  '{',
+  '}',
+]);
+
+/**
+ * Reduce a single-character class such as `[a]` to the bare literal `a` it is equivalent to, so
+ * the adjacent-repetition streak below recognises `a*[a]*` as the same atom spelled two ways —
+ * found in external review of PR #73 (`a*[a]*a*[a]*a*[a]*a*[a]*b`, confirmed 5.185s for 40 `a`s
+ * before this fix, because `lastRangeQuantifiedAtom` compared the raw source text and `"a"` !==
+ * `"[a]"`). Only a class of exactly `[` + one character + `]` qualifies: that shape rules out
+ * escapes (`[\d]`), ranges (`[a-z]`), and negation (`[^a]`) without inspecting them separately, and
+ * {@link CLASS_UNSAFE_METACHARACTERS} rules out the characters whose meaning changes outside the
+ * class. Every other input is returned unchanged.
+ */
+function normalizeAtomText(atomText: string): string {
+  if (atomText.length !== 3 || atomText[0] !== '[' || atomText[2] !== ']') return atomText;
+  const inner = atomText[1];
+  if (inner === undefined || CLASS_UNSAFE_METACHARACTERS.has(inner)) return atomText;
+  return inner;
 }
 
 function complexityRejection(source: string): ProtectedPatternRejection | undefined {
@@ -387,7 +460,8 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     // chains into the identical adjacent-optional blowup (`a?a?a?…` is `2^n`, confirmed directly
     // against Node's engine), not just `*`/`+`-shaped ranges.
     if (quantifier.min !== quantifier.max) {
-      if (frame.lastRangeQuantifiedAtom === atomText) {
+      const normalized = normalizeAtomText(atomText);
+      if (frame.lastRangeQuantifiedAtom === normalized) {
         return {
           source,
           reason: 'adjacent-repetition',
@@ -396,7 +470,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
             'can be divided between the repeats in more than one way',
         };
       }
-      frame.lastRangeQuantifiedAtom = atomText;
+      frame.lastRangeQuantifiedAtom = normalized;
     } else {
       frame.lastRangeQuantifiedAtom = undefined;
     }

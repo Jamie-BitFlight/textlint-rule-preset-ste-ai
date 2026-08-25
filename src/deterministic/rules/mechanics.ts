@@ -260,14 +260,26 @@ const DEFAULT_WELL_KNOWN: readonly string[] = [
   'YAML',
 ];
 
-const abbreviationOptionsSchema = z.object({
-  minLength: z.number().int().min(2).max(10).default(2),
-  maxLength: z.number().int().min(2).max(12).default(6),
-  /** Abbreviations that need no introduction. Replaces the default list when set. */
-  wellKnown: z.array(z.string()).optional(),
-  /** Extra abbreviations added to the default list. */
-  additionalWellKnown: z.array(z.string()).default([]),
-});
+const abbreviationOptionsSchema = z
+  .object({
+    minLength: z.number().int().min(2).max(10).default(2),
+    maxLength: z.number().int().min(2).max(12).default(6),
+    /** Abbreviations that need no introduction. Replaces the default list when set. */
+    wellKnown: z.array(z.string()).optional(),
+    /** Extra abbreviations added to the default list. */
+    additionalWellKnown: z.array(z.string()).default([]),
+  })
+  // The two bounds are interpolated into a `{min,max}` regular-expression quantifier below, which
+  // is a syntax error when they are out of order. Each field validating on its own is not enough:
+  // `{ minLength: 8, maxLength: 3 }` satisfies both ranges, parses, and then throws
+  // "numbers out of order in {} quantifier" inside `run`, where nothing catches it — one
+  // misconfigured rule aborted the whole document instead of being skipped. Failing the parse
+  // instead routes it through the runner's `rule-options-invalid` notice, which skips this rule
+  // and lets the rest of the run finish.
+  .refine((options) => options.minLength <= options.maxLength, {
+    path: ['maxLength'],
+    message: 'maxLength must be greater than or equal to minLength',
+  });
 
 const abbreviationMeta: RuleMetadata = {
   id: 'abbreviation-introduction',

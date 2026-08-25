@@ -84,7 +84,10 @@ are real today, not proposed:
   - `0` — clean
   - `1` — errors present (or review-required, with `--fail-on-review`)
   - `2` — usage error
-  - `3` — semantic-service failure, under the `error` policy
+  - `3` — any `error`-level run notice: a protection mechanism itself failing (the semantic
+    service, or an `extraProtectedPatterns` entry refused by the screen in
+    [`docs/configuration.md`](docs/configuration.md#protected-patterns-are-screened-before-they-run)),
+    or a configured rule skipped for invalid options
 
 ```yaml
 # .pre-commit-config.yaml — works with prek too, same config format

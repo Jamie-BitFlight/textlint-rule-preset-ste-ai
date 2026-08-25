@@ -530,10 +530,11 @@ describe('candidate ground truth', () => {
     // edit, and it is derived from the corpus rather than transcribed from it, so no number here
     // needs maintaining when a fixture is added.
     //
-    // What those numbers documented is still true and still readable from the corpus: four
-    // independent agent reviewers judged 105 candidates and found 5 real defects, so the three
-    // heuristic candidate rules have a very high false positive rate on well-edited technical
-    // documentation, and nobody should quote a recall figure built on five cases.
+    // What those numbers documented is still true and still readable from the corpus, by running
+    // `recorded.length` and filtering `recorded` by `verdict` below: a small number of confirmed
+    // defects against a much larger set of reviewed non-defects, so the three heuristic candidate
+    // rules have a very high false positive rate on well-edited technical documentation, and
+    // nobody should quote a recall figure built on so few positive cases.
     const recorded: AdjudicationRow[] = [];
     for (const file of readdirSync(join(FIXTURES, 'verdicts')).filter((f) => f.endsWith('.json'))) {
       const run = verdictFileSchema.parse(

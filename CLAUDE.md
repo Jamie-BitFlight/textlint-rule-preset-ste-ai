@@ -108,9 +108,11 @@ Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScrip
 
 **Use the repository-pinned Vite+ toolchain, not standalone formatter, linter, compiler, or test
 commands.** Once `node_modules/.bin/vp` exists, use `vp check`, `vp test`, and `vp pack` — never a
-bare `vitest`/`oxlint`/`tsc`, and never `npm test` (this repo defines no such script; test discovery
-lives in `vite.config.ts`, and `vp test` is the only command that reads it correctly). A fresh
-worktree has no `node_modules`; run `vp install --frozen-lockfile` there, or invoke the main
+bare `vitest`/`oxlint`/`tsc`, and never `npm test` (this repo defines no such script). Bare `vitest`
+can also discover `vite.config.ts` and run the suite; the rule is not that it can't, it's that `vp`
+is the supported wrapper the toolchain is pinned around, and going around it forfeits whatever `vp`
+adds on top (its own bundled Vitest version resolution, the `check`/`pack` integration, `vp staged`).
+A fresh worktree has no `node_modules`; run `vp install --frozen-lockfile` there, or invoke the main
 checkout's pinned `vp` binary by path instead of installing a second copy.
 
 **Bootstrapping `vp` itself, from nothing.** `vp install` is the `vp` CLI's own subcommand — it

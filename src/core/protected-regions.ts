@@ -245,19 +245,16 @@ interface GroupShape {
    */
   lastRangeQuantifiedAtom: RangeQuantifiedAtom | undefined;
   /**
-   * Source text of the single bare atom this frame's body consists of, and nothing else — set the
-   * first time an atom is produced directly in this frame, cleared (along with
-   * {@link soleAtomDisqualified} becoming `true`) the moment anything disqualifies it: a second
-   * atom, a quantifier on the one atom, an alternation, or a subgroup. `undefined` while nothing
-   * has been seen yet, or once disqualified. Lets a trivial wrapper group like `(?:a)` be treated
-   * as the atom `a` when *it* is what a range quantifier is immediately applied to
-   * (`(?:a)*a*(?:a)*a*…`) — found in external review of PR #73, confirmed 5.39s for 40 `a`s before
-   * this fix, because a closed group unconditionally cleared the parent's adjacency streak
-   * regardless of what the group contained.
+   * Index into `source` where this group's body starts — right after its opening marker (`(`,
+   * `(?:`, `(?<name>`, …). Recorded so the `)` handler can slice out the group's exact body text
+   * (`source.slice(bodyStart, closingParenIndex)`) and feed it through the same adjacency
+   * comparison a bare atom gets, letting a repeated group — trivial (`(?:a)*a*`) or not
+   * (`(?:ab)*(?:ab)*`) — be recognised the same way `a*a*` already is. Found in external review of
+   * PR #73: a closed group unconditionally cleared the parent's adjacency streak regardless of
+   * what the group contained, confirmed 5.39s for 40 `a`s for the trivial-wrapper case and 5.31s
+   * for the two-atom case.
    */
-  soleAtomText: string | undefined;
-  /** Whether this frame's body has already been disqualified from sole-atom status. */
-  soleAtomDisqualified: boolean;
+  bodyStart: number;
 }
 
 /** An atom quantified with a range quantifier, retained so the next atom can be compared to it. */
@@ -691,9 +688,10 @@ function setsOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
  * is not enumerable (`.`, `\d`, `[a-z]`, …) still only matches via the exact-text path.
  *
  * Shared between {@link consumeQuantifier}, for a bare atom, and the `)` handler below, for a
- * closed group whose entire body was exactly one bare atom (`(?:a)`, tracked via
- * {@link GroupShape.soleAtomText}) — the same comparison applies either way, since `(?:a)*a*` is
- * exactly as ambiguous as `a*a*`.
+ * closed non-empty ordinary group, fed its own body text (`GroupShape.bodyStart` through the
+ * closing `)`) in place of a bare atom's text — the same comparison applies either way, since
+ * `(?:a)*a*` is exactly as ambiguous as `a*a*`, and `(?:ab)*(?:ab)*` exactly as ambiguous as two
+ * identical multi-character bodies repeated.
  */
 function applyAdjacentAtom(
   source: string,
@@ -732,8 +730,7 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       alternates: false,
       optional: false,
       lastRangeQuantifiedAtom: undefined,
-      soleAtomText: undefined,
-      soleAtomDisqualified: false,
+      bodyStart: 0,
     },
   ];
   // Parallel to `stack`, one entry per `(`: whether that group is a lookaround. Kept separate
@@ -756,26 +753,12 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
    * `lastRangeQuantifiedAtom` for it before the *next* atom is checked against a stale value —
    * splitting atom production from quantifier detection across iterations, as the rest of this
    * scanner does, would leave that reset one atom late.
-   *
-   * Also tracks `frame.soleAtomText`/`soleAtomDisqualified`: the first atom this frame produces is
-   * a sole-atom candidate, but only if it is not itself quantified (`(?:a)` qualifies, `(?:a*)`
-   * does not — the group would no longer mean the same thing as the bare atom); a second atom in
-   * the same frame disqualifies it. See {@link applyAdjacentAtom}'s doc comment for why this
-   * exists.
    */
   function consumeQuantifier(
     frame: GroupShape,
     atomText: string,
   ): ProtectedPatternRejection | undefined {
     const quantifier = quantifierAt(source, i);
-    if (!frame.soleAtomDisqualified) {
-      if (frame.soleAtomText === undefined && quantifier === undefined) {
-        frame.soleAtomText = atomText;
-      } else {
-        frame.soleAtomText = undefined;
-        frame.soleAtomDisqualified = true;
-      }
-    }
     if (quantifier === undefined) {
       frame.lastRangeQuantifiedAtom = undefined;
       return undefined;
@@ -824,32 +807,27 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     if (ch === '|') {
       frame.alternates = true;
       frame.lastRangeQuantifiedAtom = undefined;
-      frame.soleAtomText = undefined;
-      frame.soleAtomDisqualified = true;
       i += 1;
       continue;
     }
     if (ch === '(') {
-      // Opening a subgroup disqualifies *this* frame from sole-atom status: `(?:(?:a))`'s outer
-      // body is a subgroup, not a bare atom, even though its inner group alone would qualify.
       // `frame.lastRangeQuantifiedAtom` is deliberately left untouched here, unlike every other
-      // event in this scanner — the subgroup itself may turn out to be sole-atom-comparable
+      // event in this scanner — the subgroup about to be pushed may turn out to be comparable
       // against exactly that streak value once it closes (`applyAdjacentAtom` in the `)` handler
       // below), so resetting it on open would destroy the state the comparison needs before it
-      // ever runs. The `)` handler resets it in every case that does *not* qualify, so nothing is
-      // left stale afterward — it is just cleared one step later than the other reset points.
-      frame.soleAtomText = undefined;
-      frame.soleAtomDisqualified = true;
+      // ever runs. The `)` handler resets it in every case that does *not* end up comparable, so
+      // nothing is left stale afterward — it is just cleared one step later than the other reset
+      // points.
       isLookaroundStack.push(isLookaroundMarker(source, i));
+      const bodyStart = i + 1 + groupMarkerLength(source, i);
       stack.push({
         repeats: false,
         alternates: false,
         optional: false,
         lastRangeQuantifiedAtom: undefined,
-        soleAtomText: undefined,
-        soleAtomDisqualified: false,
+        bodyStart,
       });
-      i += 1 + groupMarkerLength(source, i);
+      i = bodyStart;
       continue;
     }
     if (ch === ')') {
@@ -896,28 +874,29 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // optional, e.g. the `(a+)?` in `((a+)?)+` — either way, a later outer repetition on `parent`
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
-      if (wasLookaround === true) {
-        // A lookaround never advances the match position, so it cannot break adjacency between
-        // the atom before it and the atom after it — `parent.lastRangeQuantifiedAtom` is left
-        // exactly as it was, regardless of what the lookaround's own body contains. Found in
-        // external review of PR #73: `a*(?=a*)a*(?=a*)…` (eight `a*` separated by lookaheads)
-        // confirmed 6.589s for 40 `a`s before this fix, because every closing `)` — lookaround or
-        // not — unconditionally reset the streak. JS regular expressions have no syntax for
-        // quantifying a lookaround, so `quantifier` here is always `undefined`; this branch does
-        // not touch it.
-      } else if (
-        // A closed *ordinary* group is not itself a bare atom for the parent's adjacency streak —
-        // except when its entire body was exactly one un-quantified bare atom (`(?:a)`,
-        // `closed.soleAtomText`) and the group's own trailing quantifier is a *range* quantifier:
-        // `(?:a)*a*` is exactly as ambiguous as `a*a*`, and `applyAdjacentAtom` already knows how
-        // to compare one atom's text/character-set against the streak — this just feeds it the
-        // group's sole atom instead of a bare one.
-        closed.soleAtomText !== undefined &&
-        !closed.soleAtomDisqualified &&
-        quantifier !== undefined &&
-        quantifier.min !== quantifier.max
-      ) {
-        const rejection = applyAdjacentAtom(source, parent, closed.soleAtomText);
+      const bodyText = source.slice(closed.bodyStart, i);
+      if (wasLookaround === true || bodyText === '') {
+        // Neither a lookaround nor a syntactically empty group (`()`) can advance the match
+        // position, so neither can break adjacency between the atom before it and the atom after
+        // it — `parent.lastRangeQuantifiedAtom` is left exactly as it was, regardless of what the
+        // lookaround's own body contains (it never runs at the surrounding match position anyway)
+        // or the empty group's own trailing quantifier says (repeating nothing is still nothing).
+        // Found in external review of PR #73: `a*(?=a*)a*(?=a*)…` (eight `a*` separated by
+        // lookaheads) confirmed 6.589s for 40 `a`s, and `a*()a*()…` (eight `a*` separated by empty
+        // captures) confirmed 4.802s, both before this fix, because every closing `)` unconditionally
+        // reset the streak. JS regular expressions have no syntax for quantifying a lookaround, so
+        // `quantifier` here is always `undefined` for that case; this branch does not touch it.
+      } else if (quantifier !== undefined && quantifier.min !== quantifier.max) {
+        // A closed *ordinary*, non-empty group is compared against the streak the same way a bare
+        // atom is, using its exact body text — `(?:a)*a*` is exactly as ambiguous as `a*a*`
+        // (`applyAdjacentAtom`'s normalization and character-set logic still applies to a
+        // single-character body), and `(?:ab)*(?:ab)*` is exactly as ambiguous as two identical
+        // multi-character bodies repeated, caught by the same exact-text comparison the atom path
+        // already relies on. Found in external review of PR #73: an earlier version of this fix
+        // only recognised a group whose body was exactly one un-quantified bare atom, so
+        // `(?:ab)*(?:ab)*…` (eight two-atom groups) confirmed 5.309s for 40 `ab` pairs before this
+        // fix, because a group with more than one atom never had anything recorded to compare.
+        const rejection = applyAdjacentAtom(source, parent, bodyText);
         if (rejection !== undefined) return rejection;
       } else {
         parent.lastRangeQuantifiedAtom = undefined;

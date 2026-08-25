@@ -268,6 +268,45 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition of a repeated multi-atom group', () => {
+    // Reported in external review of PR #73, round 10: the round-8 fix only recognised a closed
+    // group as comparable when its entire body was exactly one un-quantified bare atom, so
+    // `(?:ab)*(?:ab)*` — two atoms, not one — still reset the streak on every close. Same proof
+    // discipline: measure first.
+    const attack = new RegExp('^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$', 'u');
+    const input = `${'ab'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition across an intervening syntactically empty group', () => {
+    // Reported in external review of PR #73, round 10: an ordinary group that is syntactically
+    // empty (`()`) can never advance the match position either, the same reasoning as the
+    // lookaround case above, but only the lookaround case was fixed — every closing `)` for an
+    // ordinary group still reset the streak regardless of whether the group had any body at all.
+    // Same proof discipline: measure first.
+    const attack = new RegExp('^a*()a*()a*()a*()a*()a*()a*()a*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*()a*()a*()a*()a*()a*()a*()a*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -409,6 +448,18 @@ describe('screenExtraPatterns', () => {
     // `optional` up to the enclosing frame, but nothing wraps that frame here, so it stays
     // accepted regardless.
     ['an optional element inside a lookahead, with consuming content after it', 'a*(?=a?)b'],
+    // Round 10: a repeated group is compared by exact body text, not overlap — two different
+    // multi-character bodies stay accepted, and only a single occurrence never has a streak
+    // partner to compare against.
+    ['two repeated groups with different, non-overlapping bodies', '(?:ab)*(?:ba)*c'],
+    ['a single repeated multi-atom group, no adjacency at all', '(?:ab)*c'],
+    ['a multi-atom group at an exact count next to the same group repeated', '(?:ab){3}(?:ab)*c'],
+    // Round 10: an empty group's own trailing quantifier is irrelevant (repeating nothing is
+    // still nothing) and it must not fabricate an overlap where the surrounding atoms don't
+    // create one on their own.
+    ['a syntactically empty group, no adjacency at all', '()b'],
+    ['an empty group after only one range-quantified atom', 'a*()b'],
+    ['an empty group after an atom that is not range-quantified', '(a)()b'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -571,6 +622,27 @@ describe('screenExtraPatterns', () => {
     [
       'an unrelated lookahead does not shield the adjacency either',
       'a*(?=x)a*b',
+      'adjacent-repetition',
+    ],
+    // Round 10: a repeated group is now compared by its exact body text, not just when that body
+    // is a single bare atom — two identical multi-atom bodies are just as ambiguous adjacent as
+    // two identical bare atoms.
+    [
+      'two adjacent groups with identical two-atom bodies',
+      '(?:ab)*(?:ab)*c',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, repeated two-atom groups',
+      '^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$',
+      'adjacent-repetition',
+    ],
+    // Round 10: a syntactically empty ordinary group (`()`) is zero-width the same way a
+    // lookaround is, and must not break adjacency between the atoms on either side of it.
+    ['two atoms adjacent across an intervening empty group', 'a*()a*b', 'adjacent-repetition'],
+    [
+      'the reported eight-way case, separated by empty groups',
+      '^a*()a*()a*()a*()a*()a*()a*()a*b$',
       'adjacent-repetition',
     ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],

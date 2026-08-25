@@ -212,17 +212,18 @@ counts, since laziness changes which match is preferred, not whether more than o
 that can match the same character — the same atom spelled identically (`a*a*`), a single-character
 class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
 adjacent character to form a range with and is unambiguously literal), two different classes that
-share a member (`a*[ab]*`, `[ab]*[bc]*`), or a trivial wrapper group and the bare atom it wraps
-(`(?:a)*a*`, since `(?:a)` means exactly `a` — but only when the group's entire body is that one
-un-quantified atom and nothing else; `(?:ab)*a*` and `(?:a*)*a*` do not qualify). A multi-character
-escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
-for this comparison, never several unrelated characters — but different notations of what happens to
-be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
-identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`)
-between two otherwise-adjacent atoms does not break the adjacency, since it never advances the match
-position — `a*(?=a*)a*` is refused exactly like `a*a*`, and this holds regardless of what the
-lookaround itself asserts, since the atoms on either side are still exactly as ambiguous either way.
-An exact count (`{2}`) never qualifies, so
+share a member (`a*[ab]*`, `[ab]*[bc]*`), or a repeated group and the exact text it wraps — a
+trivial wrapper (`(?:a)*a*`, since `(?:a)` means exactly `a`) or a multi-atom body repeated
+(`(?:ab)*(?:ab)*`), compared by exact text either way rather than a character set, since a group's
+body is not itself a single enumerable character. A multi-character escape (`\p{Letter}`,
+`\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom for this comparison,
+never several unrelated characters — but different notations of what happens to be the same
+underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings identical
+after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`) or a
+syntactically empty group (`()`) between two otherwise-adjacent atoms does not break the adjacency,
+since neither ever advances the match position — `a*(?=a*)a*` and `a*()a*` are both refused exactly
+like `a*a*`, and this holds regardless of what the lookaround itself asserts, since the atoms on
+either side are still exactly as ambiguous either way. An exact count (`{2}`) never qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
 character sets are cheaply enumerable — a bare literal, or a class built entirely of individual
@@ -331,10 +332,11 @@ npx ste-ai evaluators
 ```
 
 Exit codes: `0` clean, `1` errors present (or review-required with `--fail-on-review`), `2` usage
-error, `3` a protection mechanism failed rather than a document finding — a semantic-service failure
-under the `error` policy, or a refused `extraProtectedPatterns` entry (see "Protected patterns are
-screened before they run" above): both mean the run has less protection than the operator's
-configuration asked for, not that the document itself has a finding.
+error, `3` any `error`-level run notice — the run has less protection, or fewer of its configured
+rules ran, than the operator's configuration asked for, not that the document itself has a finding.
+Current examples: a semantic-service failure under the `error` policy, a refused
+`extraProtectedPatterns` entry (see "Protected patterns are screened before they run" above), or a
+rule skipped over invalid options (`rule-options-invalid`, just above).
 
 ## Programmatic API
 

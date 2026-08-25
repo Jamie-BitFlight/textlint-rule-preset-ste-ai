@@ -34,13 +34,26 @@ const analysisCache = new Map<string, AnalysisCacheEntry>();
 const MAX_CACHE_ENTRIES = 32;
 
 /**
- * Which Document AST nodes have already had this run's run-level notices reported.
+ * Which run-level notices have already been reported for a given Document AST node this run,
+ * identified by `code` + `message`.
  *
- * Keyed by object identity, not content: a fresh AST node is a fresh key, so this needs no manual
- * reset between lint runs the way {@link analysisCache} does (see {@link clearAnalysisCache}) — an
- * old node simply becomes unreachable and is collected once its run ends.
+ * Keyed by object identity on the outer map, not content: a fresh AST node is a fresh key, so this
+ * needs no manual reset between lint runs the way {@link analysisCache} does (see
+ * {@link clearAnalysisCache}) — an old node simply becomes unreachable and is collected once its
+ * run ends.
+ *
+ * Deduplicates rather than gating on "has any rule reported yet" (an earlier version's design,
+ * found broken in external review): `getAnalysis` computes a config scoped to whichever rule is
+ * calling it — its own `perRuleOptions` entry merges in, every other rule's does not — so two
+ * rules enabled in the same run can genuinely compute *different* `AnalysisResult`s, each with its
+ * own distinct notices (e.g. a `rule-options-invalid` specific to the second rule's own bad
+ * options, absent from the first rule's differently-scoped analysis). Gating on "the first rule to
+ * arrive claims it" silently dropped every notice specific to a rule that was not first. Identity
+ * by content, rather than object identity on the notice itself, is what lets the *same* notice
+ * computed redundantly by several rules (e.g. one that depends only on `shared`, not on any rule's
+ * own options) still collapse to one report, while distinct notices all surface.
  */
-const reportedRunNoticesFor = new WeakSet<object>();
+const reportedRunNoticesFor = new WeakMap<object, Set<string>>();
 
 /**
  * Options a rule accepts from textlint.
@@ -309,20 +322,30 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
         // This used to be gated on `ruleId === FIRST_RULE_ID`, a single hardcoded rule id. That
         // silently dropped every run notice whenever the user's own `.textlintrc.json` did not
         // enable that specific rule — precisely the silent-drop this mechanism exists to prevent,
-        // just one level up. `node` is confirmed the same object across every rule's `Document`
-        // handler within one `lintText()` call (textlint parses the AST once and shares it), and a
-        // fresh object every subsequent call, so a `WeakSet` keyed on it reports exactly once per
-        // run regardless of which rule enters first, with no explicit reset between runs to forget.
-        if (!reportedRunNoticesFor.has(node)) {
-          reportedRunNoticesFor.add(node);
-          for (const notice of analysis.notices) {
-            if (notice.level === 'info') continue;
-            report(node, {
-              message: `[infrastructure-failure][${notice.code}] ${notice.message}`,
-              padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
-              severity: toTextlintSeverity(notice.level),
-            });
+        // just one level up. A later fix replaced it with "whichever rule's handler arrives first
+        // reports, every other rule this run stays silent" — also wrong, per the class comment on
+        // `reportedRunNoticesFor` above: different rules can compute genuinely different notices
+        // for the same document, so "first one wins" silently dropped every notice specific to a
+        // rule that was not first. Dedupe by content instead: `node` is confirmed the same object
+        // across every rule's `Document` handler within one `lintText()` call (textlint parses the
+        // AST once and shares it), and a fresh object every subsequent call, so this reports each
+        // distinct notice exactly once per run regardless of which rule computed it, with no
+        // explicit reset between runs to forget.
+        let reportedForNode = reportedRunNoticesFor.get(node);
+        for (const notice of analysis.notices) {
+          if (notice.level === 'info') continue;
+          const identity = `${notice.code} ${notice.message}`;
+          if (reportedForNode?.has(identity) === true) continue;
+          if (reportedForNode === undefined) {
+            reportedForNode = new Set();
+            reportedRunNoticesFor.set(node, reportedForNode);
           }
+          reportedForNode.add(identity);
+          report(node, {
+            message: `[infrastructure-failure][${notice.code}] ${notice.message}`,
+            padding: locator.range([0, Math.min(1, Math.max(0, text.length))]),
+            severity: toTextlintSeverity(notice.level),
+          });
         }
       },
     };

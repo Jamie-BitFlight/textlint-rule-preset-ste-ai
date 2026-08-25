@@ -376,6 +376,57 @@ describe('run-level notices, reported once regardless of which rules are enabled
     const notices = result.messages.filter((m) => m.message.includes('invalid-protected-pattern'));
     expect(notices).toHaveLength(1);
   });
+
+  it('surfaces distinct notices from different rules, not just whichever ran first', async () => {
+    // Found in external review of PR #73, on the fix above: `getAnalysis` computes a config
+    // scoped to whichever rule is calling it, so two rules can genuinely compute *different*
+    // notices for the same document -- here, each rule's own rule-options-invalid, which only
+    // shows up in the analysis call carrying THAT rule's own bad inline options. Gating on "the
+    // first rule to arrive reports, everyone else this run stays silent" (the fix above's own
+    // first version) silently dropped every notice specific to a rule that was not first.
+    const result = await kernel.lintText('Some text.\n', {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'sentence-length-procedural',
+          rule: mustGetRule('sentence-length-procedural'),
+          options: true,
+        },
+        {
+          ruleId: 'abbreviation-introduction',
+          rule: mustGetRule('abbreviation-introduction'),
+          options: { minLength: 8, maxLength: 3 },
+        },
+      ],
+    });
+    const notices = result.messages.filter((m) => m.message.includes('rule-options-invalid'));
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.message).toContain('abbreviation-introduction');
+  });
+
+  it('surfaces two distinct rule-specific notices together, neither dropped nor duplicated', async () => {
+    const result = await kernel.lintText('Some text.\n', {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'abbreviation-introduction',
+          rule: mustGetRule('abbreviation-introduction'),
+          options: { minLength: 8, maxLength: 3 },
+        },
+        {
+          ruleId: 'punctuation-constraints',
+          rule: mustGetRule('punctuation-constraints'),
+          options: { maxCommas: -1 },
+        },
+      ],
+    });
+    const notices = result.messages.filter((m) => m.message.includes('rule-options-invalid'));
+    expect(notices).toHaveLength(2);
+    expect(notices.map((n) => n.message).join('\n')).toContain('abbreviation-introduction');
+    expect(notices.map((n) => n.message).join('\n')).toContain('punctuation-constraints');
+  });
 });
 
 describe('preset shape', () => {

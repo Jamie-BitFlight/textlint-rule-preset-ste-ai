@@ -490,6 +490,31 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition between two heavily-overlapping character ranges near the size cap', () => {
+    // Reported in external review of PR #73/#76, round 16/17: the size-cap check summed each
+    // range's own width against the running total ahead of time, instead of measuring the Set's
+    // actual deduplicated size — two ranges that individually approach the cap but overlap in
+    // nearly all of their members were both abandoned (150 + 150 > 256) even though their true
+    // union is small. Same proof discipline: measure first.
+    const attack = new RegExp(
+      '^[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*X$',
+      'u',
+    );
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*[a-öb-÷]*[a-öc-ø]*X$'])
+        .notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`

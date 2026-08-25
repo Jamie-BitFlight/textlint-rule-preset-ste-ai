@@ -862,11 +862,17 @@ function atomCharSet(atomText: string): ReadonlySet<string> | undefined {
       if (startCodePoint > 0xffff || endCodePoint > 0xffff || endCodePoint < startCodePoint) {
         return undefined;
       }
-      if (chars.size + (endCodePoint - startCodePoint + 1) > MAX_EXPANDED_CLASS_SIZE) {
-        return undefined;
-      }
+      // Checked by adding members and re-measuring the `Set`'s actual size, not by summing this
+      // range's own width against the running total ahead of time: two ranges can overlap almost
+      // entirely, so the *union* stays small even when each range's own width does not. Found in
+      // external review of PR #73/#76, round 16/17: `[a-öb-÷]` and `[a-öc-ø]` — two ~150-wide
+      // ranges overlapping in ~149 of those members — were each abandoned by the old width-sum
+      // check (150 + 150 > 256) despite a true union nowhere near the cap. A single range's width
+      // is already bounded by the astral-endpoint check above (BMP-only, so at most 65,536
+      // codepoints), so iterating it fully before re-checking is itself cheap.
       for (let code = startCodePoint; code <= endCodePoint; code += 1) {
         chars.add(String.fromCodePoint(code));
+        if (chars.size > MAX_EXPANDED_CLASS_SIZE) return undefined;
       }
       k = dashIndex + 1 + endLength;
     }

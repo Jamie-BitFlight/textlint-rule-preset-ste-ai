@@ -107,9 +107,31 @@ Use `npx tsx` (not bare `tsx` — not a project dependency) for ad hoc TypeScrip
 `dist/` immediately before using it. Never run stale `dist/` output with plain `node`.
 
 **Use the repository-pinned Vite+ toolchain, not standalone formatter, linter, compiler, or test
-commands.** Install it with `vp install --frozen-lockfile`, then use `vp check`, `vp test`, and
-`vp pack`. A fresh worktree has no `node_modules`; run `vp install` there or invoke the main
-checkout's pinned `vp` binary by path. Do not use `npx` to fetch an unrelated tool version.
+commands.** Once `node_modules/.bin/vp` exists, use `vp check`, `vp test`, and `vp pack` — never a
+bare `vitest`/`oxlint`/`tsc`, and never `npm test` (this repo defines no such script; test discovery
+lives in `vite.config.ts`, and `vp test` is the only command that reads it correctly). A fresh
+worktree has no `node_modules`; run `vp install --frozen-lockfile` there, or invoke the main
+checkout's pinned `vp` binary by path instead of installing a second copy.
+
+**Bootstrapping `vp` itself, from nothing.** `vp install` is the `vp` CLI's own subcommand — it
+cannot run before `node_modules/.bin/vp` exists, and this environment has no global `vp`. The one
+correct use of `npx` in this repo is to fetch that first binary: read the pinned version from
+`package.json`'s `devDependencies.vite-plus`, then run
+`npx -p vite-plus@<that version> vp install --frozen-lockfile` from the repo root. That installs
+through `vp`'s own resolver into the real `node_modules` — verify with `git diff package-lock.json`
+(must be empty under `--frozen-lockfile`) and `node_modules/.bin/vp toolchain`. Do not fall back to
+`npm ci` or `npm install` for this step, even though they produce a working `node_modules`: they
+skip whatever `vp install` does beyond dependency resolution (see `vp config`, below), and using them
+is exactly the "standalone command" this rule exists to prevent.
+
+**Pre-commit formatting and linting run through `vp`'s own hook dispatcher, not Husky** — this repo
+has no Husky dependency. `vite.config.ts`'s `staged` block defines what runs; `.vite-hooks/pre-commit`
+(committed) invokes `vp staged`, which reads that block. The generated dispatcher itself
+(`.vite-hooks/_`) is gitignored and machine-local — `npm install`'s `prepare` lifecycle script runs
+`vp config` to (re)install it, so a fresh clone activates hooks automatically. Never hand-edit
+`.vite-hooks/_`; change `.vite-hooks/pre-commit` or the `staged` block instead, and run
+`vp hooks status` to confirm `core.hooksPath` actually points at the dispatcher before trusting that
+a commit was checked.
 
 ## `send_later` (self-scheduled check-ins)
 

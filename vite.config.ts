@@ -95,4 +95,11 @@ export default defineConfig({
       },
     },
   },
+  staged: {
+    // Runs from `.vite-hooks/pre-commit` via `vp staged`. `vp check --fix` type-checks the whole
+    // project on every invocation regardless of which paths are passed (see `vp check --help`),
+    // so source and prose are split: source files pay that cost, prose/config files only format.
+    '*.{ts,mjs}': 'vp check --fix',
+    '*.{md,json,yml,yaml}': 'vp fmt --write',
+  },
 });

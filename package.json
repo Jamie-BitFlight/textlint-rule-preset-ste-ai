@@ -74,6 +74,7 @@
     }
   },
   "scripts": {
+    "prepare": "vp config",
     "prepublishOnly": "vp pack"
   },
   "dependencies": {

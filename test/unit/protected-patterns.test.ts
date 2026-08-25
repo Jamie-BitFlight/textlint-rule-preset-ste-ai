@@ -8,6 +8,9 @@ import type { RunNotice } from '../../src/core/types.js';
 
 const SAMPLE = 'Part PN1234 is ready.\n';
 
+/** The note `extraPatternPass` stamps on every region it contributes, and nothing else does. */
+const USER_PATTERN_NOTE = 'User-supplied protected pattern.';
+
 function patternNotices(notices: readonly RunNotice[]): RunNotice[] {
   return notices.filter((n) => n.code === 'invalid-protected-pattern');
 }
@@ -18,9 +21,23 @@ function analyse(patterns: readonly string[]) {
   });
 }
 
-function pnIsProtected(result: ReturnType<typeof analyseTextDeterministic>): boolean {
-  const at = SAMPLE.indexOf('PN1234');
-  return result.document.isProtected({ start: at, end: at + 'PN1234'.length });
+/**
+ * Whether `PN1234` is protected *by a user-supplied pattern* — not merely protected at all.
+ *
+ * The distinction is the entire point of the assertion. `PN1234` is code-shaped, so the bare
+ * identifier heuristic protects it whatever `extraProtectedPatterns` contains; an oracle that only
+ * asked `document.isProtected(...)` stayed `true` even when `extraPatternPass` contributed nothing,
+ * so it could not tell "the configured pattern was applied" apart from "the configured pattern was
+ * ignored". Only `extraPatternPass` stamps {@link USER_PATTERN_NOTE}, so requiring a region that
+ * carries that note *and* covers the span is what actually proves the configured pattern ran — the
+ * same discriminating check the `matches-only-empty` test below already relies on for its negative.
+ */
+function pnProtectedByUserPattern(result: ReturnType<typeof analyseTextDeterministic>): boolean {
+  const start = SAMPLE.indexOf('PN1234');
+  const end = start + 'PN1234'.length;
+  return result.document.protectedRegions.some(
+    (r) => r.note === USER_PATTERN_NOTE && r.range.start <= start && r.range.end >= end,
+  );
 }
 
 describe('refused extraProtectedPatterns entries are reported, never dropped silently', () => {
@@ -35,8 +52,10 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('invalid-syntax');
     expect(notices[0]?.message).toContain('([unclosed');
 
-    // One bad entry must not disable the rest of the list.
-    expect(pnIsProtected(result)).toBe(true);
+    // One bad entry must not disable the rest of the list — and "the rest of the list still ran"
+    // has to be read off a region `extraPatternPass` itself contributed, not off `PN1234` merely
+    // being protected by something.
+    expect(pnProtectedByUserPattern(result)).toBe(true);
     expect(result.document.protectedRegions.some((r) => r.kind === 'identifier')).toBe(true);
   });
 
@@ -48,126 +67,13 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.level).toBe('error');
     expect(notices[0]?.detail?.['reason']).toBe('nested-quantifier');
     expect(notices[0]?.detail?.['pattern']).toBe('(\\d+)+$');
-    expect(pnIsProtected(result)).toBe(true);
+    expect(pnProtectedByUserPattern(result)).toBe(true);
   });
 
   it('reports a quantified alternation, whose branches the screen cannot prove unambiguous', () => {
     const notices = patternNotices(analyse(['(a|ab)*']).notices);
     expect(notices).toHaveLength(1);
     expect(notices[0]?.detail?.['reason']).toBe('quantified-alternation');
-  });
-
-  it('reports a quantified optional, whose iterations can split the same span two ways', () => {
-    // Reported in external review of PR #73: an earlier version of the screen checked only for a
-    // nested repetition or alternation inside the repeated group, so `(aa?)+` — an optional atom,
-    // not an explicit `+`/`*` — compiled and passed straight through to `matchAll`. Proving the
-    // shape it exploits is really dangerous, not just differently classified: run the pattern
-    // `screenExtraPatterns` refuses directly against Node's own engine, on the input from that
-    // review comment, and confirm it would have taken over a second, not that it merely "looks
-    // slow" by inspection.
-    const attack = new RegExp('^(aa?)+$', 'u');
-    const input = `${'a'.repeat(35)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^(aa?)+$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('quantified-optional');
-  });
-
-  it('reports an adjacent repetition, whose ambiguity is at the boundary, not inside either repeat', () => {
-    // Reported in external review of PR #73: `^a*a*a*a*a*a*a*a*b$` has no nesting and no
-    // alternation inside either `*` — the ambiguity is entirely in how many characters the first
-    // `a*` consumes versus the second, third, etc. Same proof discipline as the quantified-optional
-    // case above: measure the pattern the screen refuses against Node's own engine first.
-    const attack = new RegExp('^a*a*a*a*a*a*a*a*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*a*a*a*a*a*a*a*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition spelled two different ways, bare and single-char class', () => {
-    // Reported in external review of PR #73, round 6: `lastRangeQuantifiedAtom` compared the raw
-    // source text of each atom, so `a*` and `[a]*` — the same atom, spelled two different ways —
-    // were never recognised as a streak even though they are exactly as ambiguous adjacent as
-    // `a*a*`. Same proof discipline: measure first.
-    const attack = new RegExp('^a*[a]*a*[a]*a*[a]*a*[a]*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*[a]*a*[a]*a*[a]*a*[a]*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports the same adjacent repetition written with lazy quantifiers', () => {
-    // Reported in external review of PR #73, on the fix above: `quantifierAt` read only the
-    // greedy quantifier character, not a trailing lazy `?` (`*?`, `+?`, `??`, `{n,m}?`), so the
-    // lazy marker was read as a separate, unrelated quantifier on the next loop iteration and
-    // incorrectly cleared the streak this check tracks. Same proof discipline: measure first.
-    const attack = new RegExp('^a*?a*?a*?a*?a*?a*?a*?a*?b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*?a*?a*?a*?a*?a*?a*?a*?b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition of a Unicode property escape, not four unrelated atoms', () => {
-    // Reported in external review of PR #73, round 7: the escape branch always read exactly two
-    // characters, so `\p{L}` split into the unrelated atoms `\p`, `{`, `L`, `}` — only the
-    // trailing `}` ever got quantified, and the unquantified atoms between one `}` and the next
-    // reset the adjacent-repetition streak every time. Same proof discipline: measure first.
-    const attack = new RegExp('^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition between two different classes that overlap', () => {
-    // Reported in external review of PR #73, round 7: round 6's single-character-class
-    // normalization recognised `[a]` as the same atom as bare `a`, but not `[ab]` as an atom that
-    // *overlaps* with `a` — the raw source text still differed, so the streak was never caught.
-    // Same proof discipline: measure first.
-    const attack = new RegExp('^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
   it('reports a backreference to an empty capture as matches-only-empty, not a consuming atom', () => {
@@ -180,64 +86,6 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
   });
 
-  it('reports an adjacent repetition of a braced Unicode code point escape', () => {
-    // Reported in external review of PR #73, round 8: `escapeAtomLength` only special-cased `\p`
-    // and `\P`, so `\u{61}` still split into `\u`, `{`, `6`, `1`, `}` as unrelated atoms. Same
-    // proof discipline: measure first.
-    const attack = new RegExp(
-      '^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$',
-      'u',
-    );
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition of a two-digit hex escape', () => {
-    // Reported in external review of PR #73, round 8, alongside the braced form: `\x61` split the
-    // same way. Same proof discipline: measure first.
-    const attack = new RegExp('^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition where a trivial wrapper group stands in for a bare atom', () => {
-    // Reported in external review of PR #73, round 8: a closed group unconditionally reset the
-    // parent's adjacent-repetition streak, so `(?:a)*a*` — a trivial wrapper group and the bare
-    // atom it wraps, alternating — was never compared even though `(?:a)` means exactly `a`. Same
-    // proof discipline: measure first.
-    const attack = new RegExp('^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
   it('reports a forward backreference to an empty capture as matches-only-empty', () => {
     // Reported in external review of PR #73, round 8: a backreference to a group that has not yet
     // closed at the point it's scanned — including a genuine forward reference, `\1()` — was
@@ -246,172 +94,6 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     const notices = patternNotices(analyse(['\\1()']).notices);
     expect(notices).toHaveLength(1);
     expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
-  });
-
-  it('reports an adjacent repetition across an intervening zero-width lookaround', () => {
-    // Reported in external review of PR #73, round 9: a lookaround never advances the match
-    // position, so it cannot break adjacency between the atom before it and the atom after it —
-    // but every closing `)`, lookaround or not, unconditionally reset the streak. Same proof
-    // discipline: measure first.
-    const attack = new RegExp('^a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*b$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition of a repeated multi-atom group', () => {
-    // Reported in external review of PR #73, round 10: the round-8 fix only recognised a closed
-    // group as comparable when its entire body was exactly one un-quantified bare atom, so
-    // `(?:ab)*(?:ab)*` — two atoms, not one — still reset the streak on every close. Same proof
-    // discipline: measure first.
-    const attack = new RegExp('^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$', 'u');
-    const input = `${'ab'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition across an intervening syntactically empty group', () => {
-    // Reported in external review of PR #73, round 10: an ordinary group that is syntactically
-    // empty (`()`) can never advance the match position either, the same reasoning as the
-    // lookaround case above, but only the lookaround case was fixed — every closing `)` for an
-    // ordinary group still reset the streak regardless of whether the group had any body at all.
-    // Same proof discipline: measure first.
-    const attack = new RegExp('^a*()a*()a*()a*()a*()a*()a*()a*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*()a*()a*()a*()a*()a*()a*()a*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition across an intervening word-boundary escape', () => {
-    // Reported in external review of PR #73, round 11: `\B` never consumes, the same reasoning as
-    // a lookaround or an empty group, but the escape branch always fed it through
-    // `consumeQuantifier` like an ordinary consuming atom. Same proof discipline: measure first.
-    const attack = new RegExp('^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(analyse(['^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$']).notices);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition between group bodies that spell the same atoms differently', () => {
-    // Reported in external review of PR #73, round 11: the round-10 fix compared raw, unnormalized
-    // group body text, so `(?:ab)*` and the equivalent `(?:a[b])*` — same atoms, one spelled with
-    // a single-character class — were never recognised as the same body. Same proof discipline:
-    // measure first.
-    const attack = new RegExp(
-      '^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$',
-      'u',
-    );
-    const input = `${'ab'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition across a group proven zero-width, not just literally empty', () => {
-    // Reported in external review of PR #73, round 11: the round-10 fix only recognised a group
-    // as zero-width when its body was literally empty (`()`), so `(?:x{0})` — a non-empty body
-    // that can still only ever match empty — still reset the streak. Same proof discipline:
-    // measure first.
-    const attack = new RegExp(
-      '^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$',
-      'u',
-    );
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$'])
-        .notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition across a bare atom quantified to occur exactly zero times', () => {
-    // Reported in external review of PR #73, round 12: round 11's zero-width fix only covered a
-    // *group* proven zero-width (`(?:x{0})`), not a bare atom quantified the same way — the exact
-    // case that already produces the `matches-only-empty` verdict for a whole pattern
-    // (`a{0}` in the `screenExtraPatterns` table below) still unconditionally reset the parent's
-    // adjacent-repetition streak inside `consumeQuantifier`. Same proof discipline: measure first.
-    const attack = new RegExp('^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
-  });
-
-  it('reports an adjacent repetition across a backreference proven zero-width', () => {
-    // Reported in external review of PR #73, round 12: `canOnlyMatchEmpty` already proves a
-    // backreference to an always-empty capture is zero-width (for the whole-pattern
-    // `matches-only-empty` verdict), but `complexityRejection`'s own separate scan never consulted
-    // that proof — the escape branch fed every backreference through `consumeQuantifier` like an
-    // ordinary consuming atom, regardless of what it referred to. Same proof discipline: measure
-    // first.
-    const attack = new RegExp('^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$', 'u');
-    const input = `${'a'.repeat(40)}!`;
-    const start = performance.now();
-    const matched = attack.test(input);
-    const elapsedMs = performance.now() - start;
-    expect(matched).toBe(false);
-    expect(elapsedMs).toBeGreaterThan(500);
-
-    const notices = patternNotices(
-      analyse(['^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$']).notices,
-    );
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
@@ -428,9 +110,7 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     // code-shaped-identifier heuristic, not by this refused pattern. Had `^` silently been
     // accepted and produced nothing, this specific pass's contribution would be indistinguishable
     // from a config with no extraProtectedPatterns configured at all.
-    expect(
-      result.document.protectedRegions.some((r) => r.note === 'User-supplied protected pattern.'),
-    ).toBe(false);
+    expect(result.document.protectedRegions.some((r) => r.note === USER_PATTERN_NOTE)).toBe(false);
   });
 
   it('reports an over-long source, so a pathological pattern never reaches the engine', () => {
@@ -454,7 +134,7 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
   it('emits nothing for a configuration whose patterns are all usable', () => {
     const result = analyse(['PN\\d+', 'DOC-[A-Z]{2}-\\d+']);
     expect(patternNotices(result.notices)).toEqual([]);
-    expect(pnIsProtected(result)).toBe(true);
+    expect(pnProtectedByUserPattern(result)).toBe(true);
   });
 
   it('surfaces the same notice on the full analysis path', async () => {
@@ -467,6 +147,29 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     ]);
   });
 });
+
+// The explanation each refusal carries is what an operator reads to learn why their configuration
+// was refused, so the reject table below asserts the sentence its own row produces rather than
+// merely that some non-empty string came back. These are the clauses `screenExtraPatterns` builds,
+// split out so each row supplies only the part that is specific to it.
+const NESTED_QUANTIFIER_SAYS =
+  'a repetition quantifier is applied to a group whose body already repeats';
+const QUANTIFIED_ALTERNATION_SAYS =
+  'a group containing an alternation, whose branches this screen cannot prove unambiguous';
+const QUANTIFIED_OPTIONAL_SAYS =
+  'a group containing an optional element, so the same input span has more than one way to divide across iterations';
+const MATCHES_ONLY_EMPTY_SAYS =
+  'every possible match is zero-length, so it can never protect a span of text';
+
+/** The adjacent-repetition sentence for two occurrences of the *same* atom, which it names. */
+function repeatedAtomSays(atom: string): string {
+  return `"${atom}" is independently repeated more than once in a row`;
+}
+
+/** The adjacent-repetition sentence for two *different* atoms whose character sets overlap. */
+function overlappingAtomsSay(first: string, second: string): string {
+  return `"${first}" and "${second}" can match overlapping characters and are independently repeated back to back`;
+}
 
 describe('screenExtraPatterns', () => {
   it.each([
@@ -584,223 +287,476 @@ describe('screenExtraPatterns', () => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
 
+  // Every source below is a real defect: issue #21, or one of the rounds of external review on
+  // PR #73 that the comments name. Seventeen of them were, until this table absorbed them, also
+  // asserted by a second test that first built the same regex by hand, ran `.test()` on a short
+  // input, and required `elapsedMs > 500`.
+  //
+  // That timing half is gone, and deliberately not replaced. It measured the HOST V8's
+  // backtracking, not `screenExtraPatterns`, so it was uncorrelated with product correctness in
+  // both directions: a faster engine fails it while the screen is perfectly healthy, and a slower
+  // engine passes it while the screen is broken. Two of the seventeen were already measuring 493ms
+  // and 286ms against their own `> 500` bound on CI-class hardware — passing, when they passed, by
+  // luck of the box. And the product never runs these patterns at all: `screenExtraPatterns`
+  // refuses each one statically (measured at 0.7ms for the eight-way adjacent-repetition case,
+  // against 6779ms for a single `RegExp.test` of the same source). The regression value was always
+  // the refusal — this source, this reason, this explanation — which is exactly what these rows
+  // assert, deterministically and in microseconds.
   it.each([
-    ['nested repetition', '(\\d+)+', 'nested-quantifier'],
-    ['a repeated star group', '(a*)*', 'nested-quantifier'],
-    ['repetition nested two groups deep', '((\\d+))+', 'nested-quantifier'],
-    ['a repeated alternation of repetitions', '(?:x+|y)+', 'nested-quantifier'],
-    ['a repeated ambiguous alternation', '(a|ab)*', 'quantified-alternation'],
+    ['nested repetition', '(\\d+)+', 'nested-quantifier', NESTED_QUANTIFIER_SAYS],
+    ['a repeated star group', '(a*)*', 'nested-quantifier', NESTED_QUANTIFIER_SAYS],
+    ['repetition nested two groups deep', '((\\d+))+', 'nested-quantifier', NESTED_QUANTIFIER_SAYS],
+    [
+      'a repeated alternation of repetitions',
+      '(?:x+|y)+',
+      'nested-quantifier',
+      NESTED_QUANTIFIER_SAYS,
+    ],
+    [
+      'a repeated ambiguous alternation',
+      '(a|ab)*',
+      'quantified-alternation',
+      QUANTIFIED_ALTERNATION_SAYS,
+    ],
     // Each iteration of the outer `+` can consume the optional atom or skip it, so the same input
     // has more than one way to split across iterations — the same mechanism as a nested repetition,
-    // reached through `?` instead of `+`/`*`. Node's own engine takes >1s matching `^(aa?)+$`
-    // against 35 `a`s followed by a non-matching character; this is the shape that bypassed an
-    // earlier version of this screen, reported in external review of PR #73.
-    ['a repeated group with a trailing optional atom', '(aa?)+', 'quantified-optional'],
-    ['the minimal repeated-optional shape', '(a?)+', 'quantified-optional'],
-    ['a repeated optional shape inside a named group', '(?<part>a?)+', 'quantified-optional'],
-    ['a repeated optional shape nested two groups deep', '((a?))+', 'quantified-optional'],
-    ['a bounded optional repetition, min zero', '(a{0,3})+', 'nested-quantifier'],
-    // Reported in external review of PR #73: `^a*a*a*a*a*a*a*a*b$` compiled and passed the screen
-    // above (neither nested nor alternating) despite Node's own engine taking over 3s to match it
+    // reached through `?` instead of `+`/`*`. This is the shape that bypassed an earlier version of
+    // this screen, reported in external review of PR #73: that version checked only for a nested
+    // repetition or alternation inside the repeated group, so an optional atom — not an explicit
+    // `+`/`*` — compiled and passed straight through to `matchAll`.
+    [
+      'a repeated group with a trailing optional atom',
+      '(aa?)+',
+      'quantified-optional',
+      QUANTIFIED_OPTIONAL_SAYS,
+    ],
+    [
+      'the reported case as written, anchored',
+      '^(aa?)+$',
+      'quantified-optional',
+      QUANTIFIED_OPTIONAL_SAYS,
+    ],
+    [
+      'the minimal repeated-optional shape',
+      '(a?)+',
+      'quantified-optional',
+      QUANTIFIED_OPTIONAL_SAYS,
+    ],
+    [
+      'a repeated optional shape inside a named group',
+      '(?<part>a?)+',
+      'quantified-optional',
+      QUANTIFIED_OPTIONAL_SAYS,
+    ],
+    [
+      'a repeated optional shape nested two groups deep',
+      '((a?))+',
+      'quantified-optional',
+      QUANTIFIED_OPTIONAL_SAYS,
+    ],
+    [
+      'a bounded optional repetition, min zero',
+      '(a{0,3})+',
+      'nested-quantifier',
+      NESTED_QUANTIFIER_SAYS,
+    ],
+    // Reported in external review of PR #73: `a*a*a*a*a*a*a*a*b` compiled and passed the screen
+    // above (neither nested nor alternating) despite Node's own engine taking seconds to match it
     // against 40 `a`s followed by a non-matching character — the ambiguity is not inside either
     // repeat, but in how the same run of characters can be divided between two adjacent ones.
-    ['the same atom independently repeated twice in a row', 'a*a*b', 'adjacent-repetition'],
-    ['the reported eight-way case', 'a*a*a*a*a*a*a*a*b', 'adjacent-repetition'],
+    [
+      'the same atom independently repeated twice in a row',
+      'a*a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the reported eight-way case',
+      'a*a*a*a*a*a*a*a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the reported eight-way case as written, anchored',
+      '^a*a*a*a*a*a*a*a*b$',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     // `?` (min 0, max 1) has the same "consume it or don't" choice as `*` and chains the same way.
     [
       'the same optional atom repeated many times in a row',
       'a?a?a?a?a?a?a?a?a?a?b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // A lazy `?` suffix (`*?`, `+?`, `??`, `{n,m}?`) is part of the same quantifier, not a
-    // separate one — reported in external review of PR #73 as a way to defeat the check above by
-    // making the scanner misread the lazy marker as its own (non-)quantifier, breaking the streak.
-    ['the same eight-way case, written lazily', 'a*?a*?a*?a*?a*?a*?a*?a*?b', 'adjacent-repetition'],
+    // separate one — reported in external review of PR #73 as a way to defeat the check above:
+    // `quantifierAt` read only the greedy quantifier character, so the lazy marker was read as a
+    // separate, unrelated quantifier on the next loop iteration and cleared the streak.
+    [
+      'the same eight-way case, written lazily',
+      'a*?a*?a*?a*?a*?a*?a*?a*?b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the same eight-way lazy case as written, anchored',
+      '^a*?a*?a*?a*?a*?a*?a*?a*?b$',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     // Round 6: the same atom, spelled two different ways (bare and as a single-char class), is
     // just as ambiguous adjacent as the same spelling repeated — `lastRangeQuantifiedAtom`
-    // previously compared raw source text, so `a*` and `[a]*` never matched each other.
-    ['the same atom, bare then as a single-char class', 'a*[a]*b', 'adjacent-repetition'],
-    ['the same atom, single-char class then bare', '[a]*a*b', 'adjacent-repetition'],
-    ['the same atom, single-char class both times', '[a]*[a]*b', 'adjacent-repetition'],
+    // previously compared raw source text, so `a*` and `[a]*` never matched each other. The
+    // explanation names the atom as the operator spelled it, which is what makes each of these
+    // three orderings distinguishable from the others.
+    [
+      'the same atom, bare then as a single-char class',
+      'a*[a]*b',
+      'adjacent-repetition',
+      repeatedAtomSays('[a]'),
+    ],
+    [
+      'the same atom, single-char class then bare',
+      '[a]*a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the same atom, single-char class both times',
+      '[a]*[a]*b',
+      'adjacent-repetition',
+      repeatedAtomSays('[a]'),
+    ],
     [
       'the eight-way case, alternating spellings',
       'a*[a]*a*[a]*a*[a]*a*[a]*b',
       'adjacent-repetition',
+      repeatedAtomSays('[a]'),
+    ],
+    [
+      'the eight-way alternating-spelling case as written, anchored',
+      '^a*[a]*a*[a]*a*[a]*a*[a]*b$',
+      'adjacent-repetition',
+      repeatedAtomSays('[a]'),
     ],
     // A lone `-` inside a class has no adjacent character to form a range with, so it is
     // unambiguously a literal hyphen — the same atom as the bare `-` outside a class.
-    ['a literal hyphen, bare and as a single-char class', '[-]*-*b', 'adjacent-repetition'],
+    [
+      'a literal hyphen, bare and as a single-char class',
+      '[-]*-*b',
+      'adjacent-repetition',
+      repeatedAtomSays('-'),
+    ],
     // `extraPatternPass` discards a zero-length match, so a pattern that can only ever produce one
     // protects nothing — silently, unlike every other refusal here, since it's neither invalid
     // syntax nor a complexity risk.
-    ['a bare anchor, no consuming content at all', '^', 'matches-only-empty'],
-    ['a bare word boundary', '\\b', 'matches-only-empty'],
-    ['a lookahead with nothing outside it', '(?=PN)', 'matches-only-empty'],
-    ['a lookbehind with nothing outside it', '(?<=PN)', 'matches-only-empty'],
-    ['two lookarounds and nothing that consumes', '(?=PN)(?!SN)', 'matches-only-empty'],
+    [
+      'a bare anchor, no consuming content at all',
+      '^',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
+    ['a bare word boundary', '\\b', 'matches-only-empty', MATCHES_ONLY_EMPTY_SAYS],
+    [
+      'a lookahead with nothing outside it',
+      '(?=PN)',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
+    [
+      'a lookbehind with nothing outside it',
+      '(?<=PN)',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
+    [
+      'two lookarounds and nothing that consumes',
+      '(?=PN)(?!SN)',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
     // An exact zero-count quantifier means the atom it quantifies can never actually run —
     // reported in external review of PR #73 as a shape the first version of this check missed by
     // returning as soon as it saw the atom, without checking what quantified it.
-    ['an atom quantified to occur exactly zero times', 'a{0}', 'matches-only-empty'],
-    ['a character class quantified to occur exactly zero times', '[A-Z]{0}', 'matches-only-empty'],
+    [
+      'an atom quantified to occur exactly zero times',
+      'a{0}',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
+    [
+      'a character class quantified to occur exactly zero times',
+      '[A-Z]{0}',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
     // Round 6: a *group's own* exact-zero trailing quantifier means its body can never run,
     // regardless of what the body contains — the earlier version of this check judged each atom
     // the moment it was seen, before it had scanned as far as the group's closing quantifier.
-    ['a group quantified to occur exactly zero times', '(PN){0}', 'matches-only-empty'],
+    [
+      'a group quantified to occur exactly zero times',
+      '(PN){0}',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
     [
       'a group quantified to occur exactly zero times, nested two deep',
       '((PN)){0}',
       'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
     ],
     // Round 7: a Unicode property escape is one atom, not the four unrelated characters an
-    // earlier version of the scanner split it into — so the same adjacent-repetition ambiguity
-    // as `a*a*` applies to `\p{L}*\p{L}*` too, and its negation `\P{...}` the same way.
+    // earlier version of the scanner split it into — the escape branch always read exactly two
+    // characters, so `\p{L}` became the unrelated atoms `\p`, `{`, `L`, `}`, only the trailing `}`
+    // was ever quantified, and the unquantified atoms between one `}` and the next reset the
+    // streak every time. So the same adjacent-repetition ambiguity as `a*a*` applies to
+    // `\p{L}*\p{L}*` too, and to its negation `\P{...}` the same way.
     [
       'the same Unicode property escape, repeated adjacently, eight-way',
       '^\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*\\p{L}*X$',
       'adjacent-repetition',
+      repeatedAtomSays('\\p{L}'),
     ],
     [
       'a negated Unicode property escape, repeated adjacently',
       '\\P{L}*\\P{L}*b',
       'adjacent-repetition',
+      repeatedAtomSays('\\P{L}'),
     ],
     // Round 7: two atoms that are not textually identical but can still match the same character
-    // are just as ambiguous adjacent as the same atom repeated.
+    // are just as ambiguous adjacent as the same atom repeated. Round 6's single-character-class
+    // normalization recognised `[a]` as the same atom as bare `a`, but not `[ab]` as an atom that
+    // *overlaps* with `a` — the raw source text still differed, so the streak was never caught.
+    // The explanation names both atoms, in the order they appear.
     [
       'a bare literal and a multi-character class that contains it',
       'a*[ab]*b',
       'adjacent-repetition',
+      overlappingAtomsSay('a', '[ab]'),
     ],
-    ['two multi-character classes that share a character', '[ab]*[bc]*d', 'adjacent-repetition'],
+    [
+      'two multi-character classes that share a character',
+      '[ab]*[bc]*d',
+      'adjacent-repetition',
+      overlappingAtomsSay('[ab]', '[bc]'),
+    ],
     [
       'the reported eight-way case, alternating a bare literal and an overlapping class',
       '^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$',
       'adjacent-repetition',
+      overlappingAtomsSay('a', '[ab]'),
     ],
     // Round 7: a backreference to a group that can only ever capture empty is itself zero-width —
     // the escape branch previously treated every backreference as an ordinary consuming escape.
-    ['a backreference to an empty capture', '()\\1', 'matches-only-empty'],
+    ['a backreference to an empty capture', '()\\1', 'matches-only-empty', MATCHES_ONLY_EMPTY_SAYS],
     [
       'a backreference to a capture whose own content is quantified to zero',
       '(a{0})\\1',
       'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
     ],
-    ['a named backreference to an empty capture', '(?<x>)\\k<x>', 'matches-only-empty'],
+    [
+      'a named backreference to an empty capture',
+      '(?<x>)\\k<x>',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
     // Round 8: a multi-character escape is one atom, not several unrelated characters, so the same
-    // adjacent-repetition ambiguity as `a*a*` applies to each of these escape forms too.
+    // adjacent-repetition ambiguity as `a*a*` applies to each of these escape forms too —
+    // `escapeAtomLength` only special-cased `\p`/`\P`, so `\u{61}` still split into `\u`, `{`,
+    // `6`, `1`, `}`, and `\x61` split the same way.
     [
       'a braced Unicode code point escape, repeated adjacently, eight-way',
       '^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$',
       'adjacent-repetition',
+      repeatedAtomSays('\\u{61}'),
     ],
     [
       'a fixed-width Unicode escape, repeated adjacently, eight-way',
       '^\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*b$',
       'adjacent-repetition',
+      repeatedAtomSays('\\u0061'),
     ],
     [
       'a two-digit hex escape, repeated adjacently, eight-way',
       '^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$',
       'adjacent-repetition',
+      repeatedAtomSays('\\x61'),
     ],
     // Round 8: a trivial wrapper group whose entire body is exactly one bare atom is, for this
-    // check, indistinguishable from that atom written bare.
-    ['a wrapper group next to the bare atom it wraps', '(?:a)*a*b', 'adjacent-repetition'],
-    ['the bare atom next to the wrapper group that wraps it', 'a*(?:a)*b', 'adjacent-repetition'],
-    ['a wrapper group next to itself, twice', '(?:a)*(?:a)*b', 'adjacent-repetition'],
+    // check, indistinguishable from that atom written bare — a closed group used to reset the
+    // parent's streak unconditionally, so `(?:a)*a*` was never compared even though `(?:a)` means
+    // exactly `a`.
+    [
+      'a wrapper group next to the bare atom it wraps',
+      '(?:a)*a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the bare atom next to the wrapper group that wraps it',
+      'a*(?:a)*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'a wrapper group next to itself, twice',
+      '(?:a)*(?:a)*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     [
       'a wrapper group next to an overlapping multi-character class',
       '(?:a)*[ab]*c',
       'adjacent-repetition',
+      overlappingAtomsSay('a', '[ab]'),
     ],
     [
       'the reported eight-way case, alternating a wrapper group and the bare atom it wraps',
       '^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 8: a backreference to a group not yet closed at the point it's scanned is either a
     // forward reference (always empty, per spec — the group has not yet participated) or a
     // reference this walk cannot resolve, but a *forward* reference must not be conflated with the
     // latter, conservative-consuming case.
-    ['a forward backreference to an empty capture', '\\1()', 'matches-only-empty'],
-    ['a forward named backreference to an empty capture', '\\k<x>(?<x>)', 'matches-only-empty'],
+    [
+      'a forward backreference to an empty capture',
+      '\\1()',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
+    [
+      'a forward named backreference to an empty capture',
+      '\\k<x>(?<x>)',
+      'matches-only-empty',
+      MATCHES_ONLY_EMPTY_SAYS,
+    ],
     // Round 9: a lookaround is zero-width, so it cannot break adjacency between the atom before
-    // it and the atom after it, regardless of what the lookaround itself asserts.
-    ['two atoms adjacent across an intervening lookahead', 'a*(?=a*)a*b', 'adjacent-repetition'],
+    // it and the atom after it, regardless of what the lookaround itself asserts — every closing
+    // `)`, lookaround or not, used to reset the streak.
+    [
+      'two atoms adjacent across an intervening lookahead',
+      'a*(?=a*)a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
+    [
+      'the reported eight-way case, separated by lookaheads',
+      '^a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*(?=a*)a*b$',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     [
       'two atoms adjacent across an intervening negative lookahead',
       'a*(?!a*)a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
-    ['two atoms adjacent across an intervening lookbehind', 'a*(?<=a*)a*b', 'adjacent-repetition'],
+    [
+      'two atoms adjacent across an intervening lookbehind',
+      'a*(?<=a*)a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     [
       'two atoms adjacent across an intervening negative lookbehind',
       'a*(?<!a*)a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     [
       'an unrelated lookahead does not shield the adjacency either',
       'a*(?=x)a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 10: a repeated group is now compared by its exact body text, not just when that body
-    // is a single bare atom — two identical multi-atom bodies are just as ambiguous adjacent as
-    // two identical bare atoms.
+    // is a single bare atom — the round-8 fix only recognised a closed group as comparable when
+    // its entire body was exactly one un-quantified bare atom, so `(?:ab)*(?:ab)*` (two atoms, not
+    // one) still reset the streak on every close. Two identical multi-atom bodies are just as
+    // ambiguous adjacent as two identical bare atoms, and the explanation names the body.
     [
       'two adjacent groups with identical two-atom bodies',
       '(?:ab)*(?:ab)*c',
       'adjacent-repetition',
+      repeatedAtomSays('ab'),
     ],
     [
       'the reported eight-way case, repeated two-atom groups',
       '^(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*(?:ab)*c$',
       'adjacent-repetition',
+      repeatedAtomSays('ab'),
     ],
     // Round 10: a syntactically empty ordinary group (`()`) is zero-width the same way a
-    // lookaround is, and must not break adjacency between the atoms on either side of it.
-    ['two atoms adjacent across an intervening empty group', 'a*()a*b', 'adjacent-repetition'],
+    // lookaround is, and must not break adjacency between the atoms on either side of it — only
+    // the lookaround case had been fixed, so every closing `)` for an ordinary group still reset
+    // the streak regardless of whether the group had any body at all.
+    [
+      'two atoms adjacent across an intervening empty group',
+      'a*()a*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     [
       'the reported eight-way case, separated by empty groups',
       '^a*()a*()a*()a*()a*()a*()a*()a*b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 11: `\B`/`\b` never consume, so — like a lookaround or an empty group — they cannot
-    // break adjacency between the atoms on either side.
+    // break adjacency between the atoms on either side; the escape branch used to feed them
+    // through `consumeQuantifier` like an ordinary consuming atom.
     [
       'two atoms adjacent across an intervening non-word-boundary',
       'a*\\Ba*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
-    ['two atoms adjacent across an intervening word-boundary', 'a*\\ba*b', 'adjacent-repetition'],
+    [
+      'two atoms adjacent across an intervening word-boundary',
+      'a*\\ba*b',
+      'adjacent-repetition',
+      repeatedAtomSays('a'),
+    ],
     [
       'the reported eight-way case, separated by non-word-boundaries',
       '^a*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*\\Ba*b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 11: two group bodies that spell the same atom sequence differently are just as
-    // ambiguous adjacent as two identical spellings.
+    // ambiguous adjacent as two identical spellings — the round-10 fix compared raw, unnormalized
+    // body text, so `(?:ab)*` and the equivalent `(?:a[b])*` were never recognised as the same
+    // body. The normalized body is what the explanation names.
     [
       'two repeated groups whose bodies differ only by single-char-class spelling',
       '(?:ab)*(?:a[b])*c',
       'adjacent-repetition',
+      repeatedAtomSays('ab'),
     ],
     [
       'the reported eight-way case, alternating body spellings',
       '^(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*(?:ab)*(?:a[b])*c$',
       'adjacent-repetition',
+      repeatedAtomSays('ab'),
     ],
     // Round 11: a group whose body is provably zero-width — not just literally empty — is zero-
-    // width the same way `()` is, and must not break adjacency either.
+    // width the same way `()` is, and must not break adjacency either; the round-10 fix only
+    // recognised a literally empty body, so `(?:x{0})` still reset the streak.
     [
       'two atoms adjacent across a group proven zero-width, not literally empty',
       'a*(?:x{0})a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     [
       'the reported eight-way case, separated by provably zero-width groups',
       '^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 12: a *bare atom* proven zero-width by its own quantifier — not just a group wrapping
     // one — must not break adjacency either; the group case above and this bare-atom case are
@@ -810,11 +766,13 @@ describe('screenExtraPatterns', () => {
       'two atoms adjacent across a bare atom quantified to occur exactly zero times',
       'a*x{0}a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     [
       'the reported eight-way case, separated by a bare zero-count atom',
       '^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     // Round 12: a backreference proven zero-width (per `canOnlyMatchEmpty`'s own group-emptiness
     // proof) must not break adjacency either — `complexityRejection` previously never consulted
@@ -823,21 +781,39 @@ describe('screenExtraPatterns', () => {
       'two atoms adjacent across a backreference proven zero-width',
       '()a*\\1a*b',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
     [
       'the reported eight-way case, separated by a backreference to an empty capture',
       '^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$',
       'adjacent-repetition',
+      repeatedAtomSays('a'),
     ],
-    ['an unterminated character class', '([unclosed', 'invalid-syntax'],
-    ['an unmatched group', '(?:', 'invalid-syntax'],
-  ])('rejects %s', (_label, source, reason) => {
+    // The engine's own diagnosis is passed through verbatim, so the operator can tell an
+    // unterminated class from an unterminated group without re-running the regex themselves.
+    [
+      'an unterminated character class',
+      '([unclosed',
+      'invalid-syntax',
+      'it is not a valid regular expression (Invalid regular expression: /([unclosed/gu: Unterminated character class)',
+    ],
+    [
+      'an unmatched group',
+      '(?:',
+      'invalid-syntax',
+      'it is not a valid regular expression (Invalid regular expression: /(?:/gu: Unterminated group)',
+    ],
+  ])('rejects %s', (_label, source, reason, explanationSays) => {
     const screened = screenExtraPatterns([source]);
     expect(screened.accepted).toEqual([]);
     expect(screened.rejected).toHaveLength(1);
     expect(screened.rejected[0]?.reason).toBe(reason);
     expect(screened.rejected[0]?.source).toBe(source);
-    expect(screened.rejected[0]?.explanation.length).toBeGreaterThan(0);
+    // Not merely non-empty: the explanation has to name the construct this row is about. A screen
+    // that returned one constant sentence for every refusal — or named the wrong atom of an
+    // adjacent pair, or dropped the engine's own syntax diagnosis — passes a length check and
+    // fails here.
+    expect(screened.rejected[0]?.explanation).toContain(explanationSays);
   });
 
   it('keeps accepted patterns in configured order', () => {

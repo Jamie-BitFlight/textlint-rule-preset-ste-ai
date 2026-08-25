@@ -96,6 +96,24 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports the same adjacent repetition written with lazy quantifiers', () => {
+    // Reported in external review of PR #73, on the fix above: `quantifierAt` read only the
+    // greedy quantifier character, not a trailing lazy `?` (`*?`, `+?`, `??`, `{n,m}?`), so the
+    // lazy marker was read as a separate, unrelated quantifier on the next loop iteration and
+    // incorrectly cleared the streak this check tracks. Same proof discipline: measure first.
+    const attack = new RegExp('^a*?a*?a*?a*?a*?a*?a*?a*?b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^a*?a*?a*?a*?a*?a*?a*?a*?b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -177,6 +195,9 @@ describe('screenExtraPatterns', () => {
     // *outside* it does — this is not zero-width-only.
     ['a lookahead with consuming content after it', '(?=PN)PN'],
     ['an anchor plus consuming content', '^PN'],
+    // A range that includes zero as its minimum can still consume up to its maximum — only an
+    // EXACT zero count (`{0}`) can never consume.
+    ['an atom that may consume zero to three times, not always zero', 'a{0,3}'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -209,6 +230,10 @@ describe('screenExtraPatterns', () => {
       'a?a?a?a?a?a?a?a?a?a?b',
       'adjacent-repetition',
     ],
+    // A lazy `?` suffix (`*?`, `+?`, `??`, `{n,m}?`) is part of the same quantifier, not a
+    // separate one — reported in external review of PR #73 as a way to defeat the check above by
+    // making the scanner misread the lazy marker as its own (non-)quantifier, breaking the streak.
+    ['the same eight-way case, written lazily', 'a*?a*?a*?a*?a*?a*?a*?a*?b', 'adjacent-repetition'],
     // `extraPatternPass` discards a zero-length match, so a pattern that can only ever produce one
     // protects nothing — silently, unlike every other refusal here, since it's neither invalid
     // syntax nor a complexity risk.
@@ -217,6 +242,11 @@ describe('screenExtraPatterns', () => {
     ['a lookahead with nothing outside it', '(?=PN)', 'matches-only-empty'],
     ['a lookbehind with nothing outside it', '(?<=PN)', 'matches-only-empty'],
     ['two lookarounds and nothing that consumes', '(?=PN)(?!SN)', 'matches-only-empty'],
+    // An exact zero-count quantifier means the atom it quantifies can never actually run —
+    // reported in external review of PR #73 as a shape the first version of this check missed by
+    // returning as soon as it saw the atom, without checking what quantified it.
+    ['an atom quantified to occur exactly zero times', 'a{0}', 'matches-only-empty'],
+    ['a character class quantified to occur exactly zero times', '[A-Z]{0}', 'matches-only-empty'],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

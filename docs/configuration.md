@@ -194,26 +194,34 @@ output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the
 | `quantified-alternation` | a repetition is applied to a group containing an alternation                                      | `(a\|ab)*`   |
 | `quantified-optional`    | a repetition is applied to a group containing an optional element                                 | `(a?)+`      |
 | `adjacent-repetition`    | the same atom is independently range-quantified twice in a row                                    | `a*a*`       |
+| `matches-only-empty`     | every possible match is zero-length, so nothing is ever protected                                 | `^`          |
 
 A refused entry is never silently ignored, because the consequence is not local: the literals it
 named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
 of the passages sent to the semantic service. Silence there would look exactly like a clean run.
 
-The last four grounds bound match time. A repetition nested inside a repetition, wrapped around a
+The first four grounds bound match time. A repetition nested inside a repetition, wrapped around a
 group with an optional element, or repeated immediately next to itself, can take time exponential in
 document length — `(a?)+` matches the same span more than one way per iteration for the same reason
 `(a+)+` does, just reached through `?` instead of `+`/`*`; `a*a*` has no nesting or alternation at
 all, but the same ambiguity in how much of a run of `a`s the first repeat consumed versus the second
 — and a JavaScript regular expression cannot be interrupted once matching has begun, so each shape is
 refused up front rather than timed. `adjacent-repetition` triggers on the _same_ atom appearing twice
-in a row with a range quantifier on each (`\d+\d+`, not just `a*a*`); an exact count (`{2}`) never
-qualifies, so `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both
-directions: it refuses `(?:foo|bar)+`, which is harmless in practice, and it does not attempt to
-prove whether two _different-looking_ adjacent atoms are safe to combine — only identical source text
-is checked. Rewrite a refused pattern so the repeated group's body neither repeats, alternates, nor
-contains an optional element, and so no atom is independently range-quantified twice in a row —
-`(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not — or match the shape without the
-outer repetition.
+in a row with a range quantifier on each (`\d+\d+`, not just `a*a*`; a lazy quantifier like `\d+?`
+still counts, since laziness changes which match is preferred, not whether more than one is
+possible); an exact count (`{2}`) never qualifies, so `DOC-[A-Z]{2}-\d+` stays accepted. The check is
+syntactic and therefore blunt in both directions: it refuses `(?:foo|bar)+`, which is harmless in
+practice, and it does not attempt to prove whether two _different-looking_ adjacent atoms are safe to
+combine — only identical source text is checked. Rewrite a refused pattern so the repeated group's
+body neither repeats, alternates, nor contains an optional element, and so no atom is independently
+range-quantified twice in a row — `(?:[A-Z][A-Z]-)+\d+` is accepted where `(?:[A-Z]{2}-)+\d+` is not
+— or match the shape without the outer repetition.
+
+`matches-only-empty` is a different kind of refusal: not a complexity risk, just a pattern that can
+never do anything. `extraPatternPass` discards a zero-length match because there is no span to
+protect, so `^` or a bare lookahead like `(?=PN)` — and an atom quantified to occur exactly zero
+times, `a{0}` — would otherwise pass every check above and silently protect nothing. Content
+_outside_ a lookaround still counts: `(?=PN)PN` consumes the second `PN` and is accepted.
 
 ### Option precedence
 

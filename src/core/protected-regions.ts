@@ -139,20 +139,43 @@ interface QuantifierAt {
 /**
  * Read a quantifier at `index`, or `undefined` when no quantifier starts there.
  *
- * A lazy or possessive modifier (`+?`, `*+`) changes match semantics, not the size of the search
- * space, and is counted the same.
+ * A trailing lazy modifier (`*?`, `+?`, `??`, `{n,m}?`) changes match semantics, not the size of
+ * the search space this screen reasons about, so it is consumed as part of the same quantifier —
+ * `length` covers it too. Missing it would let the caller's next iteration read the lazy `?` as a
+ * *separate* quantifier applying to nothing, silently breaking whatever streak this file is
+ * tracking through that position (confirmed: this was exactly how `^a*?a*?a*?a*?a*?a*?a*?a*?b$`
+ * bypassed the adjacent-repetition check — each lazy `?` reset it). JS regular expressions have no
+ * possessive-quantifier syntax (`a*+` is a syntax error, verified directly), so lazy is the only
+ * suffix that exists to check for.
  */
 function quantifierAt(source: string, index: number): QuantifierAt | undefined {
   const ch = source[index];
-  if (ch === '*') return { min: 0, max: Number.POSITIVE_INFINITY, length: 1 };
-  if (ch === '+') return { min: 1, max: Number.POSITIVE_INFINITY, length: 1 };
-  if (ch === '?') return { min: 0, max: 1, length: 1 };
-  if (ch !== '{') return undefined;
-  const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(index));
-  if (m === null) return undefined;
-  const min = Number(m[1]);
-  const max = m[2] === undefined ? min : m[3] === '' ? Number.POSITIVE_INFINITY : Number(m[3]);
-  return { min, max, length: m[0].length };
+  let min: number;
+  let max: number;
+  let length: number;
+  if (ch === '*') {
+    min = 0;
+    max = Number.POSITIVE_INFINITY;
+    length = 1;
+  } else if (ch === '+') {
+    min = 1;
+    max = Number.POSITIVE_INFINITY;
+    length = 1;
+  } else if (ch === '?') {
+    min = 0;
+    max = 1;
+    length = 1;
+  } else if (ch === '{') {
+    const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(index));
+    if (m === null) return undefined;
+    min = Number(m[1]);
+    max = m[2] === undefined ? min : m[3] === '' ? Number.POSITIVE_INFINITY : Number(m[3]);
+    length = m[0].length;
+  } else {
+    return undefined;
+  }
+  if (source[index + length] === '?') length += 1;
+  return { min, max, length };
 }
 
 /** One group's accumulated shape, used to judge the quantifier that may follow its `)`. */
@@ -248,10 +271,15 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
  *
  * Walks the pattern once, tracking one thing: whether a *consuming* atom — a literal character, an
  * escape other than the zero-width assertions `\b`/`\B`, or a character class — occurs anywhere
- * outside a lookaround assertion. Lookaround content never advances the match position no matter
- * what it contains, so `(?=PN)` alone is zero-width-only even though `PN` inside it consumes two
- * characters when the assertion itself is tested; `(?=PN)PN` is not, because of the second `PN`
- * outside the assertion. `^`, `$` and `|` are structural, not consuming, either way.
+ * outside a lookaround assertion, is itself capable of consuming at all. Lookaround content never
+ * advances the match position no matter what it contains, so `(?=PN)` alone is zero-width-only even
+ * though `PN` inside it consumes two characters when the assertion itself is tested; `(?=PN)PN` is
+ * not, because of the second `PN` outside the assertion. `^`, `$` and `|` are structural, not
+ * consuming, either way. An atom quantified with an exact zero count (`a{0}`) can never actually
+ * consume regardless of what it is, so it does not count either — resolved together with the atom
+ * it quantifies, the same way {@link complexityRejection} resolves an atom and its quantifier as
+ * one step, for the same reason: checking only the atom itself, without looking at what quantifies
+ * it, would call `a{0}` consuming when it can never run.
  *
  * This under-approximates on purpose, matching the rest of this screen: a pattern this walk cannot
  * prove is zero-width-only is accepted, not flagged on suspicion.
@@ -261,19 +289,32 @@ function canOnlyMatchEmpty(source: string): boolean {
   const lookaroundStack: boolean[] = [];
   let lookaroundDepth = 0;
 
+  /**
+   * Consumes the quantifier (if any) at `i` and reports whether the atom it was just called for
+   * can still consume at least sometimes — false only when that quantifier's maximum is exactly
+   * zero (`{0}`), the one shape where an otherwise-consuming atom provably never runs.
+   */
+  function stillConsumes(): boolean {
+    const quantifier = quantifierAt(source, i);
+    if (quantifier !== undefined) i += quantifier.length;
+    return quantifier?.max !== 0;
+  }
+
   while (i < source.length) {
     const ch = source[i];
     if (ch === '\\') {
       const escaped = source[i + 1];
-      if (lookaroundDepth === 0 && escaped !== 'b' && escaped !== 'B') return false;
       i += 2;
+      if (lookaroundDepth === 0 && escaped !== 'b' && escaped !== 'B' && stillConsumes()) {
+        return false;
+      }
       continue;
     }
     if (ch === '[') {
-      if (lookaroundDepth === 0) return false;
       i += 1;
       while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
       i += 1;
+      if (lookaroundDepth === 0 && stillConsumes()) return false;
       continue;
     }
     if (ch === '(') {
@@ -292,16 +333,17 @@ function canOnlyMatchEmpty(source: string): boolean {
       i += 1;
       continue;
     }
-    const quantifier = quantifierAt(source, i);
-    if (quantifier !== undefined) {
-      // A quantifier here is repeating whatever atom preceded it, which this walk has already
-      // classified (returning `false` immediately for any consuming one) — it cannot turn a
-      // zero-width assertion into something that consumes.
-      i += quantifier.length;
+    const bareQuantifier = quantifierAt(source, i);
+    if (bareQuantifier !== undefined) {
+      // A quantifier reached here without a preceding atom in this same iteration is repeating
+      // whatever the *previous* iteration already classified and consumed past — nothing left to
+      // re-check.
+      i += bareQuantifier.length;
       continue;
     }
-    if (lookaroundDepth === 0) return false;
+    // A bare literal atom: exactly one character, then whatever quantifier (if any) follows it.
     i += 1;
+    if (lookaroundDepth === 0 && stillConsumes()) return false;
   }
 
   return true;

@@ -288,20 +288,24 @@ describe('screenExtraPatterns', () => {
   });
 
   // Every source below is a real defect: issue #21, or one of the rounds of external review on
-  // PR #73 that the comments name. Seventeen of them were, until this table absorbed them, also
-  // asserted by a second test that first built the same regex by hand, ran `.test()` on a short
-  // input, and required `elapsedMs > 500`.
+  // PR #73 that the comments name. Some of them were, until this table absorbed them, also asserted
+  // by a second test that built the same regex by hand, ran `.test()` on a short input, and
+  // required the elapsed time to exceed a fixed threshold.
   //
-  // That timing half is gone, and deliberately not replaced. It measured the HOST V8's
+  // That timing half is gone, and deliberately not replaced. It measured the host engine's
   // backtracking, not `screenExtraPatterns`, so it was uncorrelated with product correctness in
   // both directions: a faster engine fails it while the screen is perfectly healthy, and a slower
-  // engine passes it while the screen is broken. Two of the seventeen were already measuring 493ms
-  // and 286ms against their own `> 500` bound on CI-class hardware — passing, when they passed, by
-  // luck of the box. And the product never runs these patterns at all: `screenExtraPatterns`
-  // refuses each one statically (measured at 0.7ms for the eight-way adjacent-repetition case,
-  // against 6779ms for a single `RegExp.test` of the same source). The regression value was always
-  // the refusal — this source, this reason, this explanation — which is exactly what these rows
-  // assert, deterministically and in microseconds.
+  // engine passes it while the screen is broken. Some of those bounds were already marginal on
+  // CI-class hardware, so they passed by luck of the box rather than by anything the screen did.
+  //
+  // The product never runs these patterns at all. `screenExtraPatterns` refuses each one by reading
+  // its source, so the cost of screening is independent of how catastrophically the pattern would
+  // backtrack if it were ever compiled and executed — which it is not. To see that for yourself,
+  // time `screenExtraPatterns([source])` against `new RegExp(source, 'u').test('a'.repeat(40) + '!')`
+  // for any row below whose reason is `adjacent-repetition`.
+  //
+  // The regression value was always the refusal — this source, this reason, this explanation —
+  // which is exactly what these rows assert, deterministically.
   it.each([
     ['nested repetition', '(\\d+)+', 'nested-quantifier', NESTED_QUANTIFIER_SAYS],
     ['a repeated star group', '(a*)*', 'nested-quantifier', NESTED_QUANTIFIER_SAYS],

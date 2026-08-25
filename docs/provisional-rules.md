@@ -287,9 +287,12 @@ flagged passages is the headline result of this corpus, and it has three consequ
    noise. `formatEvaluationReport` therefore withholds recall and F1 below ten gold positives and
    prints the positive count instead. Precision over 100 negatives is informative; recall is not.
 
-The counts are asserted in `test/fixtures/corpus.test.ts` so that a rule change which moves them
-cannot pass unnoticed, and `scripts/ci/check-candidate-ground-truth.sh` fails the build if a change
-orphans a verdict from the passage it was written about.
+The counts are derived rather than transcribed. `test/fixtures/corpus.test.ts` compares every
+committed adjudication field by field against the reviewer run in `fixtures/verdicts/` that recorded
+it, so a promotion cannot be balanced against a demotion to leave a total looking untouched, and
+`scripts/ci/check-annotation-provenance.sh` pins each annotation by digest. A change that orphans a
+verdict from the passage it was written about fails `scripts/ci/check-candidate-ground-truth.sh`, and
+the same corpus test checks both directions of that binding.
 
 Reviewers judged against the intent documented here, not against ASD-STE100 — no authorised copy was
 available, and they were instructed to mark a passage `undecidable` rather than reason from recalled

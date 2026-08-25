@@ -195,7 +195,8 @@ recording because the narrower version looked obviously sufficient. An adjudicat
 candidate passage, so it seemed anchored — but the binding constrains _where a record sits_, not
 _what it says_. `verdict`, `reason` and `reviewerConfidence` are copied from the reviewer row and
 checked against nothing, and the only things constraining them were two aggregates in
-`corpus.test.ts`. Measured: demoting the corpus's two confirmed `passive-voice-candidate` defects
+`corpus.test.ts` — since replaced by a record-by-record comparison against `fixtures/verdicts/`.
+Measured: demoting the corpus's two confirmed `passive-voice-candidate` defects
 while promoting two other passages of the same rule preserved both aggregates, passed every gate,
 and quietly changed which passages the semantic evaluators are scored against.
 

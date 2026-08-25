@@ -59,10 +59,10 @@ the test suite.
   key) is **rejected** by the current union (`z.union([z.string(), z.record(...)])`,
   `config.ts:124`) — executed: `Invalid input`. **Recommendation: widen the existing `rulePack` key
   rather than introduce a new one.** Old versions then fail loud instead of failing quiet.
-- **Corpus numbers are safer than they look.** The exact class balance
-  `{violation: 5, 'non-violation': 100, undecidable: 0}` (`test/fixtures/corpus.test.ts:373`) and
-  the per-rule `{violation: 0, total: 24}` (`:388`) are computed from
-  `annotation.candidateAdjudications` — static JSON in `fixtures/annotations/` — **not** from linter
+- **Corpus numbers are safer than they look.** The corpus's adjudication assertions in
+  `test/fixtures/corpus.test.ts` — the class balance and per-rule tally when this was written, a
+  record-by-record comparison against `fixtures/verdicts/` since — are computed from
+  `annotation.candidateAdjudications`, static JSON in `fixtures/annotations/`, **not** from linter
   output. Layering cannot move them. What layering _can_ break is
   `corpus.test.ts:327-341` and `scripts/ci/check-candidate-ground-truth.sh`, which do run the
   linter. Both are safe iff the no-config default path still resolves to exactly
@@ -376,12 +376,12 @@ need of updating. State that in the PR description so a reviewer does not "fix" 
 
 ### What is NOT affected (and why, precisely)
 
-- **The exact class balance.** `corpus.test.ts:363-374` asserts
-  `{violation: 5, 'non-violation': 100, undecidable: 0}`. The counts are accumulated from
-  `annotation.candidateAdjudications` (`:365-366`) — static JSON in `fixtures/annotations/*.json`,
-  merged in from `fixtures/verdicts/`. **The linter is not consulted.** Layering cannot move this
-  number. Same for `corpus.test.ts:376-389` (`noun-cluster-candidate` → `{violation: 0, total: 24}`)
-  and for the 105/5/100 table in `docs/provisional-rules.md:262-268`.
+- **The exact class balance.** Since this analysis was written, the two asserted aggregates
+  (`{violation: 5, 'non-violation': 100, undecidable: 0}` and `noun-cluster-candidate` →
+  `{violation: 0, total: 24}`) have been replaced by a record-by-record comparison of
+  `annotation.candidateAdjudications` against `fixtures/verdicts/`. The conclusion is unchanged and
+  applies to the replacement: both sides are static JSON, **the linter is not consulted**, and
+  layering cannot move them. Same for the 105/5/100 table in `docs/provisional-rules.md`.
 - **`scripts/ci/check-rules-provisional.sh:20`'s hard-coded `14`.** It lints the output of
   `ste-ai rules --json`, which `listRules` (`cli/main.ts:277-296`) builds from the
   `deterministicRules` registry and `r.meta.status` — **never from the pack**.

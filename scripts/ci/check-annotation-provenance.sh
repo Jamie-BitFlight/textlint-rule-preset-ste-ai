@@ -37,7 +37,10 @@
 # demonstrated it: the binding constrains *where a record sits*, not *what it says*. `verdict`,
 # `reason` and `reviewerConfidence` are copied from the reviewer row verbatim and checked against
 # nothing. What constrained them was two aggregates in `test/fixtures/corpus.test.ts` — the global
-# class balance, and one per-rule tally — and a balanced promote/demote preserves both. Measured:
+# class balance, and one per-rule tally — and a balanced promote/demote preserves both. Those two
+# aggregates have since been replaced by a record-by-record comparison against `fixtures/verdicts/`,
+# which the swap below does not survive; the digest here is still what pins the keys no other check
+# reads. Measured:
 # demoting the corpus's two confirmed `passive-voice-candidate` defects and promoting two other
 # passages of the same rule passed every gate and all 576 tests, silently moving which passages the
 # semantic evaluators are scored against. Digesting the whole annotation closes that, and covers the

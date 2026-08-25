@@ -214,15 +214,15 @@ counts, since laziness changes which match is preferred, not whether more than o
 that can match the same character — the same atom spelled identically (`a*a*`), a single-character
 class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
 adjacent character to form a range with and is unambiguously literal), two different classes that
-share a member (`a*[ab]*`, `[ab]*[bc]*`), or a repeated group and the text it wraps — a trivial
+share a member (`a*[ab]*`, `[ab]*[bc]*`), semantically equivalent atoms resolved by the independent
+AST analyser (`[\d]*\d*`, `\u{61}*\x61*`), or a repeated group and the text it wraps — a trivial
 wrapper (`(?:a)*a*`, since `(?:a)` means exactly `a`) or a multi-atom body repeated
 (`(?:ab)*(?:ab)*`), compared by exact text either way rather than a character set (since a group's
 body is not itself a single enumerable character), normalized the same way a single-character class
 atom already is — `(?:ab)*(?:a[b])*` is refused as the same body spelled two ways. A multi-character
 escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
-for this comparison, never several unrelated characters — but different notations of what happens to
-be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
-identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`),
+for this comparison, never several unrelated characters. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`,
+`(?<!…)`),
 a word-boundary escape (`\b`, `\B`), a group _provably_ unable to consume — not just literally
 empty (`()`), but anything the same zero-width proof `matches-only-empty` uses can show, such as
 `(?:x{0})` — a bare atom quantified to occur exactly zero times (`x{0}`), or a backreference to a

@@ -434,6 +434,12 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('treats supplementary characters as whole character-class members', () => {
+    const notices = patternNotices(analyse(['[😀]*[😁]*X']).notices);
+
+    expect(notices).toHaveLength(0);
+  });
+
   it('reports an adjacent repetition across a wrapped backreference that loses capture context in isolation', () => {
     // Reported in external review of PR #73, round 13: the `)` handler called `canOnlyMatchEmpty`
     // on the closed group's isolated body text alone, so a backreference inside a wrapper group
@@ -568,11 +574,6 @@ describe('screenExtraPatterns', () => {
     // A range that includes zero as its minimum can still consume up to its maximum — only an
     // EXACT zero count (`{0}`) can never consume.
     ['an atom that may consume zero to three times, not always zero', 'a{0,3}'],
-    // `.` is "any character" bare but a literal dot inside `[.]` — round 6's single-char-class
-    // normalization must not conflate them, in either order, or it would over-reject a harmless
-    // pattern.
-    ['a bare dot next to a single-char class of a different meaning', '.*[.]*b'],
-    ['the same pair in the other order', '[.]*.*b'],
     // Different single literal characters, one spelled bare and one as a single-char class — not
     // the same atom, so not a streak.
     ['different atoms, one bare and one a single-char class', 'a*[b]*c'],
@@ -582,8 +583,6 @@ describe('screenExtraPatterns', () => {
     // negated class stays unenumerated (round 13 only expanded ordinary ranges, not negation) and
     // still belongs in this list.
     ['a negated class next to the bare atom it excludes', '[^a]*a*b'],
-    // An escape inside a class is not a bare single character either.
-    ['an escaped digit class next to the bare escape', '[\\d]*\\d*b'],
     // A group whose own trailing quantifier has an exact-zero maximum can never actually run, so
     // an outer repetition on the group is not reached — no different from `a{0}` on a bare atom.
     ['a group with an exact-zero trailing quantifier, not itself repeated', '(PN){0}b'],
@@ -602,12 +601,10 @@ describe('screenExtraPatterns', () => {
     // in the first place, so overlap with another atom is never claimed for either.
     ['two disjoint multi-character classes, adjacent', '[ab]*[cd]*e'],
     // Round 8: a multi-character escape (`\u{...}`, `\u` + four hex digits, `\x` + two hex digits)
-    // is one atom, not several unrelated characters, so a single repeated escape and two different
-    // escape notations of the same character (never decoded, so never compared) both stay accepted.
+    // is one atom, not several unrelated characters, so a single repeated escape stays accepted.
     ['a repeated braced Unicode code point escape, alone', '\\u{61}+'],
     ['a repeated fixed-width Unicode escape, alone', '\\u0061+'],
     ['a repeated two-digit hex escape, alone', '\\x61+'],
-    ['two different notations of the same character, never decoded or compared', '\\u{61}*\\x61*b'],
     // Round 8: a trivial wrapper group `(?:a)` is treated as its sole atom only when nothing else
     // disqualifies it — a group with more than one atom, or whose own atom is itself quantified,
     // does not qualify, so no false positive is claimed for either.
@@ -759,6 +756,12 @@ describe('screenExtraPatterns', () => {
       'adjacent-repetition',
     ],
     ['two multi-character classes that share a character', '[ab]*[bc]*d', 'adjacent-repetition'],
+    // The independent AST analyser resolves character semantics that the legacy syntactic screen
+    // deliberately did not decode. These pairs overlap even though their source text differs.
+    ['a wildcard and a literal dot class', '.*[.]*b', 'adjacent-repetition'],
+    ['a literal dot class and a wildcard', '[.]*.*b', 'adjacent-repetition'],
+    ['equivalent digit classes written differently', '[\\d]*\\d*b', 'adjacent-repetition'],
+    ['equivalent character escapes written differently', '\\u{61}*\\x61*b', 'adjacent-repetition'],
     [
       'the reported eight-way case, alternating a bare literal and an overlapping class',
       '^a*[ab]*a*[ab]*a*[ab]*a*[ab]*b$',

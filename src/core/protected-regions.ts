@@ -1,3 +1,4 @@
+import { analyseRegexSafety } from './regex-safety.js';
 import { MASK_CHAR, maskRanges, mergeRanges } from './text.js';
 import type { DocumentFormat, ProtectedRegion, ProtectedRegionKind, SourceRange } from './types.js';
 
@@ -1203,9 +1204,20 @@ export function screenExtraPatterns(sources: readonly string[]): ScreenedProtect
       });
       continue;
     }
-    const complexity = complexityRejection(source);
-    if (complexity !== undefined) {
-      rejected.push(complexity);
+    // Keep the established conservative policy classifications while the independent analyser
+    // closes semantic gaps the local classifier cannot see (for example equivalent escape forms).
+    const policyRejection = complexityRejection(source);
+    if (policyRejection !== undefined) {
+      rejected.push(policyRejection);
+      continue;
+    }
+    const safety = analyseRegexSafety(source);
+    if (safety.status === 'vulnerable') {
+      rejected.push({
+        source,
+        reason: safety.category,
+        explanation: safety.explanation,
+      });
       continue;
     }
     if (canOnlyMatchEmpty(source)) {

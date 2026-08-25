@@ -180,6 +180,74 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
   });
 
+  it('reports an adjacent repetition of a braced Unicode code point escape', () => {
+    // Reported in external review of PR #73, round 8: `escapeAtomLength` only special-cased `\p`
+    // and `\P`, so `\u{61}` still split into `\u`, `{`, `6`, `1`, `}` as unrelated atoms. Same
+    // proof discipline: measure first.
+    const attack = new RegExp(
+      '^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$',
+      'u',
+    );
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition of a two-digit hex escape', () => {
+    // Reported in external review of PR #73, round 8, alongside the braced form: `\x61` split the
+    // same way. Same proof discipline: measure first.
+    const attack = new RegExp('^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition where a trivial wrapper group stands in for a bare atom', () => {
+    // Reported in external review of PR #73, round 8: a closed group unconditionally reset the
+    // parent's adjacent-repetition streak, so `(?:a)*a*` — a trivial wrapper group and the bare
+    // atom it wraps, alternating — was never compared even though `(?:a)` means exactly `a`. Same
+    // proof discipline: measure first.
+    const attack = new RegExp('^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(analyse(['^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports a forward backreference to an empty capture as matches-only-empty', () => {
+    // Reported in external review of PR #73, round 8: a backreference to a group that has not yet
+    // closed at the point it's scanned — including a genuine forward reference, `\1()` — was
+    // treated as an unresolved, conservatively-consuming reference instead of the always-empty
+    // match JavaScript itself gives an unparticipated capture's backreference.
+    const notices = patternNotices(analyse(['\\1()']).notices);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('matches-only-empty');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -295,6 +363,24 @@ describe('screenExtraPatterns', () => {
     // escape-inside-a-class cases just above already cover why `[a-z]`/`[\d]` are not enumerable
     // in the first place, so overlap with another atom is never claimed for either.
     ['two disjoint multi-character classes, adjacent', '[ab]*[cd]*e'],
+    // Round 8: a multi-character escape (`\u{...}`, `\u` + four hex digits, `\x` + two hex digits)
+    // is one atom, not several unrelated characters, so a single repeated escape and two different
+    // escape notations of the same character (never decoded, so never compared) both stay accepted.
+    ['a repeated braced Unicode code point escape, alone', '\\u{61}+'],
+    ['a repeated fixed-width Unicode escape, alone', '\\u0061+'],
+    ['a repeated two-digit hex escape, alone', '\\x61+'],
+    ['two different notations of the same character, never decoded or compared', '\\u{61}*\\x61*b'],
+    // Round 8: a trivial wrapper group `(?:a)` is treated as its sole atom only when nothing else
+    // disqualifies it — a group with more than one atom, or whose own atom is itself quantified,
+    // does not qualify, so no false positive is claimed for either.
+    ['a wrapper group next to a bare atom of a different letter', '(?:a)*(?:b)*c'],
+    ['a two-atom group body, not a sole-atom shape', '(?:ab)*a*c'],
+    ['a wrapper group with an exact-count trailing quantifier, not a range', '(?:a){3}a*b'],
+    // Round 8: `\1` and other backreference forms that resolve to a group actually consuming stay
+    // ordinary consuming atoms — only a reference to a *provably empty* capture, forward or
+    // backward, is treated as zero-width. `\1(a)` is a forward reference (always empty on its own)
+    // immediately followed by the group it refers to, which still consumes when reached.
+    ['a forward backreference immediately followed by the group it refers to', '\\1(a)'],
   ])('accepts %s', (_label, source) => {
     expect(screenExtraPatterns([source])).toEqual({ accepted: [source], rejected: [] });
   });
@@ -402,6 +488,44 @@ describe('screenExtraPatterns', () => {
       'matches-only-empty',
     ],
     ['a named backreference to an empty capture', '(?<x>)\\k<x>', 'matches-only-empty'],
+    // Round 8: a multi-character escape is one atom, not several unrelated characters, so the same
+    // adjacent-repetition ambiguity as `a*a*` applies to each of these escape forms too.
+    [
+      'a braced Unicode code point escape, repeated adjacently, eight-way',
+      '^\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*\\u{61}*b$',
+      'adjacent-repetition',
+    ],
+    [
+      'a fixed-width Unicode escape, repeated adjacently, eight-way',
+      '^\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*\\u0061*b$',
+      'adjacent-repetition',
+    ],
+    [
+      'a two-digit hex escape, repeated adjacently, eight-way',
+      '^\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*\\x61*b$',
+      'adjacent-repetition',
+    ],
+    // Round 8: a trivial wrapper group whose entire body is exactly one bare atom is, for this
+    // check, indistinguishable from that atom written bare.
+    ['a wrapper group next to the bare atom it wraps', '(?:a)*a*b', 'adjacent-repetition'],
+    ['the bare atom next to the wrapper group that wraps it', 'a*(?:a)*b', 'adjacent-repetition'],
+    ['a wrapper group next to itself, twice', '(?:a)*(?:a)*b', 'adjacent-repetition'],
+    [
+      'a wrapper group next to an overlapping multi-character class',
+      '(?:a)*[ab]*c',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, alternating a wrapper group and the bare atom it wraps',
+      '^(?:a)*a*(?:a)*a*(?:a)*a*(?:a)*a*b$',
+      'adjacent-repetition',
+    ],
+    // Round 8: a backreference to a group not yet closed at the point it's scanned is either a
+    // forward reference (always empty, per spec — the group has not yet participated) or a
+    // reference this walk cannot resolve, but a *forward* reference must not be conflated with the
+    // latter, conservative-consuming case.
+    ['a forward backreference to an empty capture', '\\1()', 'matches-only-empty'],
+    ['a forward named backreference to an empty capture', '\\k<x>(?<x>)', 'matches-only-empty'],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],
     ['an unmatched group', '(?:', 'invalid-syntax'],
   ])('rejects %s', (_label, source, reason) => {

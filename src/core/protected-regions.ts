@@ -180,23 +180,45 @@ function quantifierAt(source: string, index: number): QuantifierAt | undefined {
 
 /**
  * Length of the escape sequence starting at the `\` at `index` — `2` for an ordinary escape
- * (`\d`, `\.`, `\1`), or the full extent of a Unicode property escape (`\p{Letter}`,
- * `\P{Script=Greek}`) through its closing `}`.
+ * (`\d`, `\.`, `\1`), or the full extent of a multi-character escape: a Unicode property escape
+ * (`\p{Letter}`, `\P{Script=Greek}`) through its closing `}`, a braced Unicode code point escape
+ * (`\u{1F600}`) through its closing `}`, a fixed four-hex-digit Unicode escape (`\u` followed by
+ * four hex digits, e.g. `0061`), or a fixed two-hex-digit hex escape (`\x61`).
  *
  * Reading only two characters for `\p{L}` splits it into `\p`, then reads `{`, `L`, `}` as three
  * unrelated bare atoms — corrupting every per-atom check downstream, since none of them is aware
- * they were ever part of one escape. Found in external review of PR #73:
+ * they were ever part of one escape. Found in external review of PR #73, round 7:
  * `\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*\p{L}*X` passed adjacent-repetition because only the
  * trailing `}` was ever quantified and compared, and the unquantified `\p`/`{`/`L` atoms between
- * one `}` and the next reset the streak every time; confirmed 7.187s for 40 `a`s before this fix.
- * Every source reaching this already compiled via `new RegExp`, so a `\p`/`\P` here is guaranteed
- * to be followed by a well-formed `{...}`.
+ * one `}` and the next reset the streak every time; confirmed 7.187s for 40 `a`s before that fix.
+ * Round 8, same mechanism, three more escape forms — the braced code point escape, the fixed
+ * four-hex-digit escape, and `\x61` — all reduced to their prefix plus separately-scanned
+ * digit/brace characters, each confirmed over 5s for 40 `a`s before this fix.
+ *
+ * Every source reaching this already compiled via `new RegExp`, so `\p`/`\P`/`\u`/`\x` here are
+ * each guaranteed to be followed by one of these well-formed shapes. This function does not
+ * attempt to decode any of them to the character they represent — `\x61` and bare `a` are both
+ * accepted independently but never compared as the same atom, the same "provable, not exhaustive"
+ * limitation `atomCharSet` already documents for other atom shapes.
  */
 function escapeAtomLength(source: string, index: number): number {
   const kind = source[index + 1];
   if (kind === 'p' || kind === 'P') {
     const closeBrace = source.indexOf('}', index + 2);
     if (closeBrace >= 0) return closeBrace - index + 1;
+  }
+  if (kind === 'u') {
+    if (source[index + 2] === '{') {
+      const closeBrace = source.indexOf('}', index + 3);
+      if (closeBrace >= 0) return closeBrace - index + 1;
+    } else {
+      const m = /^\\u[0-9A-Fa-f]{4}/.exec(source.slice(index));
+      if (m !== null) return m[0].length;
+    }
+  }
+  if (kind === 'x') {
+    const m = /^\\x[0-9A-Fa-f]{2}/.exec(source.slice(index));
+    if (m !== null) return m[0].length;
   }
   return 2;
 }
@@ -222,6 +244,20 @@ interface GroupShape {
    * consumed which character, not whether either individually can.
    */
   lastRangeQuantifiedAtom: RangeQuantifiedAtom | undefined;
+  /**
+   * Source text of the single bare atom this frame's body consists of, and nothing else — set the
+   * first time an atom is produced directly in this frame, cleared (along with
+   * {@link soleAtomDisqualified} becoming `true`) the moment anything disqualifies it: a second
+   * atom, a quantifier on the one atom, an alternation, or a subgroup. `undefined` while nothing
+   * has been seen yet, or once disqualified. Lets a trivial wrapper group like `(?:a)` be treated
+   * as the atom `a` when *it* is what a range quantifier is immediately applied to
+   * (`(?:a)*a*(?:a)*a*…`) — found in external review of PR #73, confirmed 5.39s for 40 `a`s before
+   * this fix, because a closed group unconditionally cleared the parent's adjacency streak
+   * regardless of what the group contained.
+   */
+  soleAtomText: string | undefined;
+  /** Whether this frame's body has already been disqualified from sole-atom status. */
+  soleAtomDisqualified: boolean;
 }
 
 /** An atom quantified with a range quantifier, retained so the next atom can be compared to it. */
@@ -310,6 +346,70 @@ function isLookaroundMarker(source: string, openParenIndex: number): boolean {
 }
 
 /**
+ * Every capturing-group key (its ordinal as a string, and its name if it has one) for a group not
+ * nested inside a lookaround, anywhere in `source` — a lightweight pre-pass mirroring the same
+ * group-numbering and lookaround-nesting rules {@link canOnlyMatchEmpty}'s main walk uses
+ * ({@link capturingGroupNameAt}, {@link isLookaroundMarker}), but without tracking consumption,
+ * since numbering is all this needs.
+ *
+ * Exists so a *forward* backreference (`\1()`, `\k<x>(?<x>)`) can be told apart from a reference to
+ * a group the main walk never tracks at all (nested inside a lookaround): both are absent from
+ * `canOnlyMatchEmpty`'s `groupEmptyOnly` map at the point the backreference is scanned, in a single
+ * left-to-right pass, but they mean opposite things — a forward reference to a group *this walk
+ * will eventually see* always matches empty (JavaScript: a backreference to a capture that has not
+ * yet participated matches the empty string), while a reference to a group permanently out of this
+ * walk's scope is genuinely unknown and stays conservatively "may consume". Found in external
+ * review of PR #73: `\1()` and `\k<x>(?<x>)` — both provably zero-width-only — were accepted
+ * because the earlier version of the backreference lookup could not distinguish the two.
+ */
+function collectTrackableGroupKeys(source: string): ReadonlySet<string> {
+  const keys = new Set<string>();
+  const lookaroundStack: boolean[] = [];
+  let lookaroundDepth = 0;
+  let nextGroupNumber = 1;
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === '\\') {
+      i += escapeAtomLength(source, i);
+      continue;
+    }
+    if (ch === '[') {
+      i += 1;
+      while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
+      i += 1;
+      continue;
+    }
+    if (ch === '(') {
+      const isLookaround = isLookaroundMarker(source, i);
+      lookaroundStack.push(isLookaround);
+      if (isLookaround) {
+        lookaroundDepth += 1;
+      } else {
+        const capture = capturingGroupNameAt(source, i);
+        if (capture !== false) {
+          const number = nextGroupNumber;
+          nextGroupNumber += 1;
+          if (lookaroundDepth === 0) {
+            keys.add(String(number));
+            if (capture !== undefined) keys.add(capture);
+          }
+        }
+      }
+      i += 1 + groupMarkerLength(source, i);
+      continue;
+    }
+    if (ch === ')') {
+      if (lookaroundStack.pop() === true) lookaroundDepth -= 1;
+      i += 1;
+      continue;
+    }
+    i += 1;
+  }
+  return keys;
+}
+
+/**
  * Whether `(` at `openParenIndex` opens a capturing group, and its name if it has one — `false`
  * for a non-capturing group or a lookaround, `undefined` for an unnamed capturing group, or the
  * name for a named one. Used by {@link canOnlyMatchEmpty} to assign JavaScript's left-to-right
@@ -359,6 +459,7 @@ function capturingGroupNameAt(source: string, openParenIndex: number): string | 
  * lookaround content is never tracked for consumption — is conservatively treated as consuming.
  */
 function canOnlyMatchEmpty(source: string): boolean {
+  const trackableGroupKeys = collectTrackableGroupKeys(source);
   let i = 0;
   let lookaroundDepth = 0;
   const lookaroundStack: boolean[] = [];
@@ -404,7 +505,12 @@ function canOnlyMatchEmpty(source: string): boolean {
       if (backreference !== null) {
         const key = backreference[1] ?? backreference[2] ?? '';
         i += backreference[0].length;
-        const emptyOnly = groupEmptyOnly.get(key) === true;
+        // `resolved` is set once the target group has closed (this pass is left-to-right, same
+        // order source appears in). Not yet set means either a forward reference to a group this
+        // walk hasn't reached yet — always empty, see `collectTrackableGroupKeys` — or a
+        // reference to a group permanently out of scope, conservatively treated as consuming.
+        const resolved = groupEmptyOnly.get(key);
+        const emptyOnly = resolved ?? trackableGroupKeys.has(key);
         if (!emptyOnly && stillConsumes()) markConsuming();
         continue;
       }
@@ -573,22 +679,67 @@ function setsOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return false;
 }
 
+/**
+ * Compare `atomText` (already established to be directly under a *range* quantifier) against
+ * `frame.lastRangeQuantifiedAtom`, returning a rejection on a match and otherwise recording
+ * `atomText` as the new value to compare the next one against.
+ *
+ * The comparison is two-layered: exact normalized text (`normalizeAtomText`) catches literal
+ * spelling repeats and the single-character-class equivalence, and character-set overlap
+ * (`atomCharSet`/`setsOverlap`) additionally catches two *different* atoms that can still match
+ * the same character (`a*[ab]*`). Either is sufficient; neither is necessary — an atom whose set
+ * is not enumerable (`.`, `\d`, `[a-z]`, …) still only matches via the exact-text path.
+ *
+ * Shared between {@link consumeQuantifier}, for a bare atom, and the `)` handler below, for a
+ * closed group whose entire body was exactly one bare atom (`(?:a)`, tracked via
+ * {@link GroupShape.soleAtomText}) — the same comparison applies either way, since `(?:a)*a*` is
+ * exactly as ambiguous as `a*a*`.
+ */
+function applyAdjacentAtom(
+  source: string,
+  frame: GroupShape,
+  atomText: string,
+): ProtectedPatternRejection | undefined {
+  const normalized = normalizeAtomText(atomText);
+  const charSet = atomCharSet(normalized);
+  const previous = frame.lastRangeQuantifiedAtom;
+  const sameText = previous?.text === normalized;
+  const overlappingSets =
+    previous?.charSet !== undefined &&
+    charSet !== undefined &&
+    setsOverlap(previous.charSet, charSet);
+  if (previous !== undefined && (sameText || overlappingSets)) {
+    return {
+      source,
+      reason: 'adjacent-repetition',
+      explanation: sameText
+        ? `"${atomText}" is independently repeated more than once in a row, so the same input ` +
+          'can be divided between the repeats in more than one way'
+        : `"${previous.text}" and "${atomText}" can match overlapping characters and are ` +
+          'independently repeated back to back, so the same input can be divided between the ' +
+          'repeats in more than one way',
+    };
+  }
+  frame.lastRangeQuantifiedAtom = { text: normalized, charSet };
+  return undefined;
+}
+
 function complexityRejection(source: string): ProtectedPatternRejection | undefined {
   // Index 0 is the whole pattern, which nothing can quantify; each `(` pushes a frame.
   const stack: GroupShape[] = [
-    { repeats: false, alternates: false, optional: false, lastRangeQuantifiedAtom: undefined },
+    {
+      repeats: false,
+      alternates: false,
+      optional: false,
+      lastRangeQuantifiedAtom: undefined,
+      soleAtomText: undefined,
+      soleAtomDisqualified: false,
+    },
   ];
   let i = 0;
 
   /**
    * Read the quantifier (if any) at `i`, apply it to `frame`, and advance `i` past it.
-   *
-   * The comparison for the adjacent-repetition streak is two-layered: exact normalized text
-   * (`normalizeAtomText`) catches literal spelling repeats and the single-character-class
-   * equivalence, and character-set overlap (`atomCharSet`/`setsOverlap`) additionally catches two
-   * *different* atoms that can still match the same character (`a*[ab]*`). Either is sufficient;
-   * neither is necessary — an atom whose set is not enumerable (`.`, `\d`, `[a-z]`, …) still only
-   * matches via the exact-text path, same limitation as before this fix.
    *
    * `atomText` is the exact source span of the bare atom this quantifier would apply to (escape,
    * character class, or single literal character), so an atom and its quantifier are always
@@ -599,12 +750,26 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
    * `lastRangeQuantifiedAtom` for it before the *next* atom is checked against a stale value —
    * splitting atom production from quantifier detection across iterations, as the rest of this
    * scanner does, would leave that reset one atom late.
+   *
+   * Also tracks `frame.soleAtomText`/`soleAtomDisqualified`: the first atom this frame produces is
+   * a sole-atom candidate, but only if it is not itself quantified (`(?:a)` qualifies, `(?:a*)`
+   * does not — the group would no longer mean the same thing as the bare atom); a second atom in
+   * the same frame disqualifies it. See {@link applyAdjacentAtom}'s doc comment for why this
+   * exists.
    */
   function consumeQuantifier(
     frame: GroupShape,
     atomText: string,
   ): ProtectedPatternRejection | undefined {
     const quantifier = quantifierAt(source, i);
+    if (!frame.soleAtomDisqualified) {
+      if (frame.soleAtomText === undefined && quantifier === undefined) {
+        frame.soleAtomText = atomText;
+      } else {
+        frame.soleAtomText = undefined;
+        frame.soleAtomDisqualified = true;
+      }
+    }
     if (quantifier === undefined) {
       frame.lastRangeQuantifiedAtom = undefined;
       return undefined;
@@ -618,27 +783,8 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     // chains into the identical adjacent-optional blowup (`a?a?a?…` is `2^n`, confirmed directly
     // against Node's engine), not just `*`/`+`-shaped ranges.
     if (quantifier.min !== quantifier.max) {
-      const normalized = normalizeAtomText(atomText);
-      const charSet = atomCharSet(normalized);
-      const previous = frame.lastRangeQuantifiedAtom;
-      const sameText = previous?.text === normalized;
-      const overlappingSets =
-        previous?.charSet !== undefined &&
-        charSet !== undefined &&
-        setsOverlap(previous.charSet, charSet);
-      if (previous !== undefined && (sameText || overlappingSets)) {
-        return {
-          source,
-          reason: 'adjacent-repetition',
-          explanation: sameText
-            ? `"${atomText}" is independently repeated more than once in a row, so the same input ` +
-              'can be divided between the repeats in more than one way'
-            : `"${previous.text}" and "${atomText}" can match overlapping characters and are ` +
-              'independently repeated back to back, so the same input can be divided between the ' +
-              'repeats in more than one way',
-        };
-      }
-      frame.lastRangeQuantifiedAtom = { text: normalized, charSet };
+      const rejection = applyAdjacentAtom(source, frame, atomText);
+      if (rejection !== undefined) return rejection;
     } else {
       frame.lastRangeQuantifiedAtom = undefined;
     }
@@ -672,18 +818,29 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     if (ch === '|') {
       frame.alternates = true;
       frame.lastRangeQuantifiedAtom = undefined;
+      frame.soleAtomText = undefined;
+      frame.soleAtomDisqualified = true;
       i += 1;
       continue;
     }
     if (ch === '(') {
-      // A subgroup is not itself a bare atom this check tracks — it is handled by the
-      // nested-quantifier/quantified-alternation/quantified-optional checks below instead.
-      frame.lastRangeQuantifiedAtom = undefined;
+      // Opening a subgroup disqualifies *this* frame from sole-atom status: `(?:(?:a))`'s outer
+      // body is a subgroup, not a bare atom, even though its inner group alone would qualify.
+      // `frame.lastRangeQuantifiedAtom` is deliberately left untouched here, unlike every other
+      // event in this scanner — the subgroup itself may turn out to be sole-atom-comparable
+      // against exactly that streak value once it closes (`applyAdjacentAtom` in the `)` handler
+      // below), so resetting it on open would destroy the state the comparison needs before it
+      // ever runs. The `)` handler resets it in every case that does *not* qualify, so nothing is
+      // left stale afterward — it is just cleared one step later than the other reset points.
+      frame.soleAtomText = undefined;
+      frame.soleAtomDisqualified = true;
       stack.push({
         repeats: false,
         alternates: false,
         optional: false,
         lastRangeQuantifiedAtom: undefined,
+        soleAtomText: undefined,
+        soleAtomDisqualified: false,
       });
       i += 1 + groupMarkerLength(source, i);
       continue;
@@ -731,8 +888,23 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
       // optional, e.g. the `(a+)?` in `((a+)?)+` — either way, a later outer repetition on `parent`
       // must see it.
       parent.optional = parent.optional || closed.optional || quantifier?.min === 0;
-      // A closed group is not itself a bare atom either — the same reasoning as opening one.
-      parent.lastRangeQuantifiedAtom = undefined;
+      // A closed group is ordinarily not itself a bare atom for the parent's adjacency streak —
+      // except when its entire body was exactly one un-quantified bare atom (`(?:a)`,
+      // `closed.soleAtomText`) and the group's own trailing quantifier is a *range* quantifier:
+      // `(?:a)*a*` is exactly as ambiguous as `a*a*`, and `applyAdjacentAtom` already knows how to
+      // compare one atom's text/character-set against the streak — this just feeds it the group's
+      // sole atom instead of a bare one.
+      if (
+        closed.soleAtomText !== undefined &&
+        !closed.soleAtomDisqualified &&
+        quantifier !== undefined &&
+        quantifier.min !== quantifier.max
+      ) {
+        const rejection = applyAdjacentAtom(source, parent, closed.soleAtomText);
+        if (rejection !== undefined) return rejection;
+      } else {
+        parent.lastRangeQuantifiedAtom = undefined;
+      }
       i += 1 + (quantifier?.length ?? 0);
       continue;
     }

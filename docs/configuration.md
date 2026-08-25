@@ -211,8 +211,14 @@ independently range-quantified (`\d+\d+`, not just `a*a*`; a lazy quantifier lik
 counts, since laziness changes which match is preferred, not whether more than one is possible),
 that can match the same character — the same atom spelled identically (`a*a*`), a single-character
 class and the bare character it holds (`a*[a]*`, and `[-]*-*`, since a lone `-` in a class has no
-adjacent character to form a range with and is unambiguously literal), or two different classes
-that share a member (`a*[ab]*`, `[ab]*[bc]*`). An exact count (`{2}`) never qualifies, so
+adjacent character to form a range with and is unambiguously literal), two different classes that
+share a member (`a*[ab]*`, `[ab]*[bc]*`), or a trivial wrapper group and the bare atom it wraps
+(`(?:a)*a*`, since `(?:a)` means exactly `a` — but only when the group's entire body is that one
+un-quantified atom and nothing else; `(?:ab)*a*` and `(?:a*)*a*` do not qualify). A multi-character
+escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`) is always one atom
+for this comparison, never several unrelated characters — but different notations of what happens to
+be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
+identical after that atomicity is accounted for. An exact count (`{2}`) never qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
 character sets are cheaply enumerable — a bare literal, or a class built entirely of individual
@@ -231,10 +237,13 @@ without the outer repetition.
 never do anything. `extraPatternPass` discards a zero-length match because there is no span to
 protect, so `^` or a bare lookahead like `(?=PN)` — an atom quantified to occur exactly zero times,
 `a{0}` — a _group_ quantified to occur exactly zero times, `(PN){0}`, regardless of what its body
-contains — or a backreference to a group that can only ever capture empty, `()\1` — would otherwise
-pass every check above and silently protect nothing. Content _outside_ a lookaround still counts:
-`(?=PN)PN` consumes the second `PN` and is accepted, and a backreference to a group that actually
-consumes, `(a)\1`, is an ordinary consuming atom.
+contains — or a backreference to a group that can only ever capture empty, `()\1`, whether the
+backreference comes after the group or, as a forward reference (`\1()`, always empty per JavaScript
+itself, since the target has not yet participated), before it — would otherwise pass every check
+above and silently protect nothing. Content _outside_ a lookaround still counts: `(?=PN)PN` consumes
+the second `PN` and is accepted, and a backreference to a group that actually consumes, `(a)\1`, is
+an ordinary consuming atom — including a forward reference immediately followed by the group it
+names, `\1(a)`, since the group itself still consumes once reached.
 
 ### Option precedence
 

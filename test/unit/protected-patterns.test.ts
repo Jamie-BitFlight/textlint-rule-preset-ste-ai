@@ -5,7 +5,7 @@ import {
   screenExtraPatterns,
 } from '../../src/core/protected-regions.js';
 
-const SAMPLE = 'Part PN1234 is ready.\n';
+const SAMPLE = 'The sprocket7 needs replacing.\n';
 
 function analyse(patterns: readonly string[]) {
   return analyseTextDeterministic(SAMPLE, {
@@ -15,15 +15,18 @@ function analyse(patterns: readonly string[]) {
 
 describe('extraProtectedPatterns screening', () => {
   it('reports invalid syntax without disabling valid neighbours', () => {
-    const result = analyse(['PN\\d+', '([unclosed']);
+    // "sprocket7" is plain lowercase-plus-digits: none of protected-regions.ts's built-in
+    // passes (e.g. the identifier pass's mixed-alphanumeric part-number heuristic) protect it
+    // on their own, so isProtected here can only be true because 'sprocket\\d+' was applied.
+    const result = analyse(['sprocket\\d+', '([unclosed']);
     const notices = result.notices.filter((notice) => notice.code === 'invalid-protected-pattern');
 
     expect(notices).toHaveLength(1);
     expect(notices[0]?.detail?.['reason']).toBe('invalid-syntax');
     expect(notices[0]?.detail?.['pattern']).toBe('([unclosed');
 
-    const start = SAMPLE.indexOf('PN1234');
-    expect(result.document.isProtected({ start, end: start + 'PN1234'.length })).toBe(true);
+    const start = SAMPLE.indexOf('sprocket7');
+    expect(result.document.isProtected({ start, end: start + 'sprocket7'.length })).toBe(true);
   });
 
   it('rejects sources beyond the configuration limit before analysis', () => {

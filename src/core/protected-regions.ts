@@ -430,6 +430,16 @@ function capturingGroupNameAt(source: string, openParenIndex: number): string | 
 /**
  * Whether `source` can only ever produce a zero-length match, e.g. `^`, `(?=PN)`, `\b` alone.
  *
+ * A thin wrapper around {@link analyzeEmptiness}, which does the actual walk; see there for the
+ * per-group emptiness map {@link complexityRejection} also needs, to tell whether a *specific*
+ * backreference it encounters mid-scan is zero-width, the same way this function tells whether an
+ * entire group body is.
+ */
+function canOnlyMatchEmpty(source: string): boolean {
+  return analyzeEmptiness(source).matchesOnlyEmpty;
+}
+
+/**
  * Walks the pattern once, tracking one thing: whether a *consuming* atom — a literal character, an
  * escape other than the zero-width assertions `\b`/`\B`, or a character class — occurs anywhere
  * outside a lookaround assertion, is itself capable of consuming at all. Lookaround content never
@@ -448,14 +458,19 @@ function capturingGroupNameAt(source: string, openParenIndex: number): string | 
  * treated every backreference as an ordinary consuming escape). Groups are recorded as they close,
  * keyed by both number and name, so a later backreference — the only order this matters in, since a
  * backreference to a group that has not yet closed can never have captured anything and is already
- * always empty regardless — can look its group up.
+ * always empty regardless — can look its group up. The completed `groupEmptyOnly` map is returned
+ * alongside the overall verdict so {@link complexityRejection} can reuse it directly instead of
+ * re-deriving group emptiness with a second, separately-maintained walk.
  *
  * This under-approximates on purpose, matching the rest of this screen: a pattern this walk cannot
  * prove is zero-width-only is accepted, not flagged on suspicion. A backreference to a group this
  * walk did not resolve — including one nested inside a lookaround, out of scope for the same reason
  * lookaround content is never tracked for consumption — is conservatively treated as consuming.
  */
-function canOnlyMatchEmpty(source: string): boolean {
+function analyzeEmptiness(source: string): {
+  readonly matchesOnlyEmpty: boolean;
+  readonly groupEmptyOnly: ReadonlyMap<string, boolean>;
+} {
   const trackableGroupKeys = collectTrackableGroupKeys(source);
   let i = 0;
   let lookaroundDepth = 0;
@@ -587,7 +602,7 @@ function canOnlyMatchEmpty(source: string): boolean {
     if (stillConsumes()) markConsuming();
   }
 
-  return !consumingStack[0];
+  return { matchesOnlyEmpty: !consumingStack[0], groupEmptyOnly };
 }
 
 /**
@@ -762,6 +777,10 @@ function applyAdjacentAtom(
 }
 
 function complexityRejection(source: string): ProtectedPatternRejection | undefined {
+  // Computed once for the whole pattern so the escape branch below can look up, by number or
+  // name, whether a backreference it encounters refers to a group already proven zero-width —
+  // the same map {@link canOnlyMatchEmpty} builds and consults for exactly this purpose.
+  const { groupEmptyOnly } = analyzeEmptiness(source);
   // Index 0 is the whole pattern, which nothing can quantify; each `(` pushes a frame.
   const stack: GroupShape[] = [
     {
@@ -813,9 +832,16 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     if (quantifier.min !== quantifier.max) {
       const rejection = applyAdjacentAtom(source, frame, atomText);
       if (rejection !== undefined) return rejection;
-    } else {
+    } else if (quantifier.max !== 0) {
       frame.lastRangeQuantifiedAtom = undefined;
     }
+    // `quantifier.max === 0` (`x{0}`) consumes nothing, so — like a provably-empty group body in
+    // the `)` handler below — it cannot participate in or break the adjacent-repetition streak;
+    // `frame.lastRangeQuantifiedAtom` is left exactly as it was. Found in external review of PR
+    // #73, round 12: `a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b` (eight `a*` separated by a
+    // bare zero-count atom) confirmed 4.548s for 40 `a`s before this fix, because this branch
+    // unconditionally cleared the streak for every exact quantifier, not just the ones that
+    // actually consume something.
     i += quantifier.length;
     return undefined;
   }
@@ -826,6 +852,31 @@ function complexityRejection(source: string): ProtectedPatternRejection | undefi
     if (frame === undefined) break; // Unbalanced `)`: `new RegExp` has already rejected it.
 
     if (ch === '\\') {
+      // A backreference is checked before the generic escape-atom path below because
+      // `escapeAtomLength` has no special case for it and would default to a bare 2-character
+      // slice (`\1` out of `\12`), silently mis-keying the `groupEmptyOnly` lookup and leaving a
+      // stray literal `2` for the next iteration to misread as an unrelated atom. Matched with the
+      // same regex `analyzeEmptiness` uses, so both walks agree on where a backreference begins
+      // and ends.
+      const backreference = /^\\(?:([1-9]\d*)|k<([^>]+)>)/.exec(source.slice(i));
+      if (backreference !== null) {
+        const key = backreference[1] ?? backreference[2] ?? '';
+        i += backreference[0].length;
+        if (groupEmptyOnly.get(key) === true) {
+          // Proven zero-width — like `\b`/`\B` or an empty group, cannot participate in or break
+          // the adjacent-repetition streak. Found in external review of PR #73, round 12:
+          // `()a*\1a*\1a*\1a*\1a*\1a*\1a*\1a*\1b` (eight `a*` separated by a backreference to an
+          // always-empty capture) confirmed 9.965s for 40 `a`s before this fix, because this
+          // branch treated every backreference as an ordinary consuming escape regardless of what
+          // it referred to.
+          const quantifier = quantifierAt(source, i);
+          if (quantifier !== undefined) i += quantifier.length;
+          continue;
+        }
+        const rejection = consumeQuantifier(frame, backreference[0]);
+        if (rejection !== undefined) return rejection;
+        continue;
+      }
       // An escape sequence is one atom — `\(`, `\[`, `\|`, `\*` must not be read as structure, and
       // a Unicode property escape (`\p{L}`) is one atom through its closing `}`, not several.
       const atomStart = i;

@@ -223,13 +223,15 @@ escape (`\p{Letter}`, `\u{1F600}`, a fixed four-hex-digit Unicode escape, `\x61`
 for this comparison, never several unrelated characters — but different notations of what happens to
 be the same underlying character (`\x61` and bare `a`) are never decoded or compared, only spellings
 identical after that atomicity is accounted for. A lookaround (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`),
-a word-boundary escape (`\b`, `\B`), or a group _provably_ unable to consume — not just literally
+a word-boundary escape (`\b`, `\B`), a group _provably_ unable to consume — not just literally
 empty (`()`), but anything the same zero-width proof `matches-only-empty` uses can show, such as
-`(?:x{0})` — between two otherwise-adjacent atoms does not break the adjacency, since none of them
-ever advances the match position — `a*(?=a*)a*`, `a*\Ba*`, `a*()a*`, and `a*(?:x{0})a*` are all
-refused exactly like `a*a*`, and this holds regardless of what the lookaround itself asserts, since
-the atoms on either side are still exactly as ambiguous either way. An exact count (`{2}`) never
-qualifies, so
+`(?:x{0})` — a bare atom quantified to occur exactly zero times (`x{0}`), or a backreference to a
+group already proven unable to consume (`()\1`, resolved the same way `matches-only-empty` resolves
+one, see below) — between two otherwise-adjacent atoms does not break the adjacency, since none of
+these ever advances the match position — `a*(?=a*)a*`, `a*\Ba*`, `a*()a*`, `a*(?:x{0})a*`,
+`a*x{0}a*`, and `()a*\1a*` are all refused exactly like `a*a*`, and this holds regardless of what
+the lookaround itself asserts, since the atoms on either side are still exactly as ambiguous either
+way. An exact count that consumes something (`{2}`) never qualifies, so
 `DOC-[A-Z]{2}-\d+` stays accepted. The check is syntactic and therefore blunt in both directions: it
 refuses `(?:foo|bar)+`, which is harmless in practice, and it only proves overlap when both atoms'
 character sets are cheaply enumerable — a bare literal, or a class built entirely of individual

@@ -371,6 +371,49 @@ describe('refused extraProtectedPatterns entries are reported, never dropped sil
     expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
   });
 
+  it('reports an adjacent repetition across a bare atom quantified to occur exactly zero times', () => {
+    // Reported in external review of PR #73, round 12: round 11's zero-width fix only covered a
+    // *group* proven zero-width (`(?:x{0})`), not a bare atom quantified the same way — the exact
+    // case that already produces the `matches-only-empty` verdict for a whole pattern
+    // (`a{0}` in the `screenExtraPatterns` table below) still unconditionally reset the parent's
+    // adjacent-repetition streak inside `consumeQuantifier`. Same proof discipline: measure first.
+    const attack = new RegExp('^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
+  it('reports an adjacent repetition across a backreference proven zero-width', () => {
+    // Reported in external review of PR #73, round 12: `canOnlyMatchEmpty` already proves a
+    // backreference to an always-empty capture is zero-width (for the whole-pattern
+    // `matches-only-empty` verdict), but `complexityRejection`'s own separate scan never consulted
+    // that proof — the escape branch fed every backreference through `consumeQuantifier` like an
+    // ordinary consuming atom, regardless of what it referred to. Same proof discipline: measure
+    // first.
+    const attack = new RegExp('^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$', 'u');
+    const input = `${'a'.repeat(40)}!`;
+    const start = performance.now();
+    const matched = attack.test(input);
+    const elapsedMs = performance.now() - start;
+    expect(matched).toBe(false);
+    expect(elapsedMs).toBeGreaterThan(500);
+
+    const notices = patternNotices(
+      analyse(['^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$']).notices,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.detail?.['reason']).toBe('adjacent-repetition');
+  });
+
   it('reports a pattern that can only ever match empty, not a silent no-op', () => {
     // Reported in external review of PR #73: `^` and a pure lookahead like `(?=PN)` compile and
     // pass every complexity check (there is nothing to be complex), but `extraPatternPass`
@@ -757,6 +800,33 @@ describe('screenExtraPatterns', () => {
     [
       'the reported eight-way case, separated by provably zero-width groups',
       '^a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*(?:x{0})a*b$',
+      'adjacent-repetition',
+    ],
+    // Round 12: a *bare atom* proven zero-width by its own quantifier — not just a group wrapping
+    // one — must not break adjacency either; the group case above and this bare-atom case are
+    // resolved by two different branches (`)` handler vs. `consumeQuantifier`) and round 11 only
+    // fixed the former.
+    [
+      'two atoms adjacent across a bare atom quantified to occur exactly zero times',
+      'a*x{0}a*b',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, separated by a bare zero-count atom',
+      '^a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*x{0}a*b$',
+      'adjacent-repetition',
+    ],
+    // Round 12: a backreference proven zero-width (per `canOnlyMatchEmpty`'s own group-emptiness
+    // proof) must not break adjacency either — `complexityRejection` previously never consulted
+    // that proof and treated every backreference as an ordinary consuming escape.
+    [
+      'two atoms adjacent across a backreference proven zero-width',
+      '()a*\\1a*b',
+      'adjacent-repetition',
+    ],
+    [
+      'the reported eight-way case, separated by a backreference to an empty capture',
+      '^()a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1a*\\1b$',
       'adjacent-repetition',
     ],
     ['an unterminated character class', '([unclosed', 'invalid-syntax'],

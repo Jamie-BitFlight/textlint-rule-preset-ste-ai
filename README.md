@@ -111,14 +111,14 @@ npx ste-ai lint docs/**/*.md --fail-on-review
 check its own draft voluntarily, during composition, not just after the fact:
 
 - Exporting the merged vocabulary as a machine-readable artefact would let the agent consult it
-  before drafting. Tracked as [issue #2](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/2).
+  before drafting. Tracked as [issue #2](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/2).
 - A Model Context Protocol (MCP) server would expose `check_text`, `lookup_term`, and
   `list_vocabulary`. The agent could then check text and look up terms in-loop. It would no longer
   need to shell out to the CLI on every iteration. Tracked as
-  [issue #5](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/5).
+  [issue #5](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/5).
 - A rule pack could also resolve from a package name or a URL, with a required integrity digest. That
   would let an organisation share one vocabulary across every repository, instead of copying a JSON
-  file into each. Tracked as [issue #3](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/3).
+  file into each. Tracked as [issue #3](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/3).
 
 **3. A blocking Claude Code hook gating live agent or user communication — proposed, not built, and
 currently blocked**. The goal is to check outgoing messages before they are sent. That covers
@@ -133,9 +133,12 @@ It cannot be wired up yet. `lint` only reads files, via `readFileSync`, and exit
 arguments. There is no stdin path. The programmatic API (`analyseTextDeterministic`/`analyseText`)
 already accepts an arbitrary string, with no file dependency. This gap is in the CLI surface only, not
 in the underlying analysis. Tracked as
-[issue #26](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/26).
+[issue #26](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/26).
 
-## The 14 rules
+## The rules
+
+Run `npx ste-ai rules` for the current list and count, or `npx ste-ai rules --json | jq length` for
+just the count. Both read from the live registry, so they stay correct as rules are added or removed.
 
 | Rule                           | Decides?           | Fix                                  |
 | ------------------------------ | ------------------ | ------------------------------------ |

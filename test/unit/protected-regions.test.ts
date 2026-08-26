@@ -7,12 +7,23 @@ import {
 import { MASK_CHAR } from '../../src/core/text.js';
 import type { ProtectedRegionKind } from '../../src/core/types.js';
 
-function kindsAt(text: string, needle: string): ProtectedRegionKind[] {
-  const start = text.indexOf(needle);
-  expect(start, `"${needle}" must appear in the sample`).toBeGreaterThanOrEqual(0);
+/**
+ * Kinds of every region that fully encloses the needle, not merely overlaps it. Containment, not
+ * overlap: a pass that returned only one character of a longer needle under the right kind used to
+ * satisfy an overlap check while leaving the rest of that needle exposed to analysis. Requiring the
+ * region to enclose `[start, end)` catches that -- verified directly by mutating
+ * `extraPatternPass.find` in `protected-regions.ts` to return a 1-character region at the needle's
+ * start: the overlap check still passed, this containment check fails.
+ */
+function kindsAt(text: string, needle: string, searchFrom = 0): ProtectedRegionKind[] {
+  const start = text.indexOf(needle, searchFrom);
+  expect(
+    start,
+    `"${needle}" must appear in the sample at or after ${searchFrom}`,
+  ).toBeGreaterThanOrEqual(0);
   const end = start + needle.length;
   return extractProtectedRegions(text, defaultProtectedRegionOptions)
-    .filter((r) => r.range.start < end && start < r.range.end)
+    .filter((r) => r.range.start <= start && end <= r.range.end)
     .map((r) => r.kind);
 }
 
@@ -313,22 +324,26 @@ describe('configFragmentPass mid-sentence alternative, identifierPass citations,
   });
 
   it('corroborates a bare constant via an exact-match config-fragment value', () => {
+    // corroboratedConstantPass protects only the bare all-caps token itself, not the sentence
+    // around it -- the needle below must match that exactly, or the containment check in
+    // `kindsAt` fails even though the pass is working. `searchFrom` skips past the corroborating
+    // `secure_delete=ON` occurrence to the standalone token the pass actually protects.
     const text = 'Enable secure_delete=ON now. ON is the recommended value for most systems.\n';
     expect(kindsAt(text, 'secure_delete=ON')).toContain('config-fragment');
-    expect(kindsAt(text, 'ON is the recommended')).toContain('constant');
+    expect(kindsAt(text, 'ON', text.indexOf(' now.'))).toContain('constant');
   });
 
   it('corroborates a bare constant via a segment of an identifier region', () => {
     const text =
       'Set LLVM_ENABLE_PROJECTS to clang. LLVM is the compiler infrastructure used here.\n';
     expect(kindsAt(text, 'LLVM_ENABLE_PROJECTS')).toContain('identifier');
-    expect(kindsAt(text, 'LLVM is the compiler')).toContain('constant');
+    expect(kindsAt(text, 'LLVM', text.indexOf(' to clang'))).toContain('constant');
   });
 
   it('corroborates a bare constant via a config-fragment occurrence of WAL', () => {
     const text = 'Set journal_mode=WAL for better concurrency. WAL is the write-ahead log mode.\n';
     expect(kindsAt(text, 'journal_mode=WAL')).toContain('config-fragment');
-    expect(kindsAt(text, 'WAL is the write-ahead')).toContain('constant');
+    expect(kindsAt(text, 'WAL', text.indexOf(' for better'))).toContain('constant');
   });
 
   it('does not protect an uncorroborated bare all-caps token as a constant', () => {

@@ -26,7 +26,7 @@ Accepted licences:
 - public domain (US federal government works, SQLite)
 - `MIT`
 - `BSD`
-- `Apache-2.0`
+- `Apache-2.0` (including the `Apache-2.0 WITH LLVM-exception` variant)
 - the curl licence
 - the PostgreSQL licence
 - `CC-BY-4.0`

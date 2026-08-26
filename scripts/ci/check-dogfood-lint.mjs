@@ -18,44 +18,64 @@
  * What the baseline records, and why it is not a plain per-file count.
  *
  * A first version of this script recorded one integer per file: how many error-severity findings
- * it had. Review on the PR that introduced it found two ways that hid a regression:
+ * it had. Review found three ways that hid a regression, each fixed in turn:
  *
  *   - `--update` rewrote the baseline with whatever the working tree currently produced, including
  *     a larger count than before. A contributor who introduced new errors and ran `--update` to
  *     "fix" the resulting CI failure would launder the regression into the baseline instead of
  *     seeing it. `--update` now refuses to raise any existing entry unless `--accept-regressions`
  *     is passed explicitly, which is the only way a maintainer deliberately accepts new debt.
- *   - A file's total can stay unchanged while its content of errors changes: fix one
- *     sentence-length finding, introduce a different punctuation finding in the same edit, and the
- *     count before and after is identical. The baseline now records, per file, a count for every
- *     distinct (ruleId, message) pair rather than one total. Line and column are deliberately not
- *     part of that identity -- prose gets reflowed and restructured, and a line-anchored identity
- *     would flag every finding in a file as "new" the moment an unrelated paragraph shifted them
- *     down. (ruleId, message) stays stable under reflow because these are deterministic rules and
- *     every message already carries the specific numbers that make it point at one finding (a
- *     Flesch-Kincaid grade level, a comma count), so collisions between genuinely different
- *     findings are not expected in practice.
+ *   - A file's total can stay unchanged while its content of errors changes: fix one finding,
+ *     introduce a different one in the same edit, and the count before and after is identical. The
+ *     baseline moved from one total per file to one count per distinct (ruleId, message) pair.
+ *   - Even that was not enough: the same (ruleId, message) pair can occur many times in one file
+ *     with no distinguishing detail in the message itself -- `docs/architecture.md` carries 31
+ *     separate semicolons, every one reported as the identical string. Fixing five of those and
+ *     introducing five different ones left the per-message count unchanged, so the swap was
+ *     invisible. Each finding's key now also folds in a normalized slice of the source text
+ *     surrounding it (see `findingKey` and `localContext`), not merely its rule and message. Line
+ *     and column stay out of the key on purpose: prose gets reflowed and restructured, and a
+ *     line-anchored identity would flag every finding in a file as "new" the moment an unrelated
+ *     paragraph shifted them down. Nearby source text does not have that problem, because it moves
+ *     with the finding rather than the file's other content.
+ *   - A related gap: a file that improves without reaching zero was never required to record that
+ *     improvement, since only a fully clean file counted as `stale`. The unrecorded slack could
+ *     then be spent back later -- reintroducing exactly the findings that were removed -- without
+ *     the ratchet noticing, because the current count would still sit at or under the stale
+ *     baseline. `findImprovements` now flags any file whose current findings are a strict subset,
+ *     by count, of what its baseline entry allows, and assert mode requires `--update` for it the
+ *     same as for a fully-cleaned file.
  *
  * This file is machine-written and not meant to be hand-edited, the same way
- * fixtures/provenance.lock.json is (see docs/fixtures.md): both exist so a change that affects
+ * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
  * their subject is a reviewable diff, not so a human composes them by hand.
  *
  * From these rules:
  *
  *   - A file with no baseline entry must be clean. New and renamed files cannot add debt.
- *   - A file's (ruleId, message) counts must not exceed what the baseline records for that pair.
- *     Existing debt cannot grow, and swapping one finding for a different one is not free.
- *   - A baseline entry that is now clean must be removed. Progress is recorded, not quietly banked,
- *     so the baseline can only ever shrink and the campaign has a visible finish line.
+ *   - A file's finding counts must not exceed what the baseline records for each. Existing debt
+ *     cannot grow, and swapping one finding for a different one, even a same-message one, is not
+ *     free.
+ *   - A file whose findings shrink, whether to zero or only partway, must have that recorded.
+ *     Progress cannot be silently banked and spent back later, so the baseline can only ever
+ *     shrink and the campaign has a visible finish line.
  *
- * The counts are error-severity only. review-required findings are info and depend on semantic
+ * The counts are error-severity only. `review-required` findings are `info` and depend on semantic
  * adjudication that does not run here, so counting them would make the baseline depend on whether a
  * model was configured.
  *
- * What is out of scope entirely, not merely ratcheted: .textlintignore (repository root) lists
- * content this repository does not hold itself to -- a fixture whose violations are the point
- * (examples/sample.md), and licensed excerpts this project did not author (fixtures/). textlint
- * auto-detects that file, so the exclusion applies to every invocation, not only this script.
+ * What files this covers, and what is out of scope entirely rather than merely ratcheted.
+ *
+ * Every `*.md` file this repository tracks in git is in scope, discovered fresh on each run via
+ * `git ls-files`, not a hand-maintained glob list -- a curated list is exactly the kind of thing
+ * that silently stops covering a new directory, which is what review found: `.claude/rules`,
+ * `.claude/skills` (every `SKILL.md`), and the authored `fixtures/LICENSES.md` were all outside
+ * the old glob set despite being prose this repository writes for itself.
+ *
+ * `.textlintignore` (repository root) is where content that is genuinely out of scope belongs
+ * instead: a fixture whose violations are the point (`examples/sample.md`), and licensed excerpts
+ * this project did not author (`fixtures/original/`, `fixtures/compliant/`). textlint auto-detects
+ * that file, so the exclusion applies to every invocation, not only this script.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -68,40 +88,55 @@ const CONFIG = resolve(REPO_ROOT, '.textlintrc.json');
 
 const FINDING_KEY_SEPARATOR = '\n';
 
-/**
- * Prose this repository authors and therefore owns.
- *
- * Globs, not a file list, for the reason check-textlint-configs-resolve.sh gives: a check that
- * names the files it guards stops guarding the moment someone adds a file. .textlintignore narrows
- * this further for content that is in scope by glob but not in scope by intent.
- */
-const TARGETS = [
-  'README.md',
-  'AGENTS.md',
-  'CLAUDE.md',
-  'docs/**/*.md',
-  'prompts/**/*.md',
-  'examples/**/*.md',
-];
+/** Characters of source text kept on each side of a finding, for its local-context fingerprint. */
+const CONTEXT_RADIUS = 40;
 
 /**
- * ruleId and message joined into one baseline key, with a separator that cannot appear in either
- * field: textlint messages are single-line strings, so a raw newline only ever comes from this
- * join. Split with splitFindingKey, never a plain string split on a space -- message itself
- * contains spaces.
+ * Every `*.md` file this repository tracks in git, repository-root-relative.
+ *
+ * Discovered, not listed: a hand-maintained target list is the failure mode this function exists
+ * to rule out. `.textlintignore` is where deliberate exclusions belong instead -- see the module
+ * doc comment.
  */
-function findingKey(ruleId, message) {
-  return ruleId + FINDING_KEY_SEPARATOR + message;
+function discoverMarkdownFiles() {
+  const output = execFileSync('git', ['ls-files', '-z', '--', '*.md'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  });
+  return output.split('\0').filter((path) => path.length > 0);
+}
+
+/**
+ * A short, whitespace-normalized slice of `source` centered on `index`.
+ *
+ * This is the finding's occurrence fingerprint. It survives the file being reflowed elsewhere,
+ * because it travels with the finding rather than with the file's line numbers, but it still tells
+ * two occurrences of the identical `(ruleId, message)` pair apart when they sit in different
+ * sentences.
+ */
+function localContext(source, index) {
+  const start = Math.max(0, index - CONTEXT_RADIUS);
+  const end = Math.min(source.length, index + CONTEXT_RADIUS);
+  return source.slice(start, end).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * `ruleId`, `message`, and a local-context fingerprint joined into one baseline key, with a
+ * separator that cannot appear in any of the three fields: `message` is a single-line string, and
+ * `localContext` collapses all whitespace, including newlines, to single spaces.
+ */
+function findingKey(ruleId, message, context) {
+  return [ruleId, message, context].join(FINDING_KEY_SEPARATOR);
 }
 
 function splitFindingKey(key) {
-  const at = key.indexOf(FINDING_KEY_SEPARATOR);
-  return [key.slice(0, at), key.slice(at + FINDING_KEY_SEPARATOR.length)];
+  const [ruleId, message, context] = key.split(FINDING_KEY_SEPARATOR);
+  return { ruleId, message, context };
 }
 
 /**
- * Run the preset over every target and return, per file, how many times each distinct
- * (ruleId, message) pair appears at error severity.
+ * Run the preset over every tracked `*.md` file and return, per file, how many times each distinct
+ * finding (by `findingKey`) appears at error severity.
  *
  * Returns a Map<string, Map<string, number>>: file path -> (findingKey -> count), containing only
  * files with at least one error. Returns undefined if the build is not ready to lint.
@@ -118,9 +153,11 @@ function lint() {
     return undefined;
   }
 
+  const targets = discoverMarkdownFiles();
+
   let stdout;
   try {
-    stdout = execFileSync(TEXTLINT_BIN, ['--config', CONFIG, '--format', 'json', ...TARGETS], {
+    stdout = execFileSync(TEXTLINT_BIN, ['--config', CONFIG, '--format', 'json', ...targets], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
       maxBuffer: 128 * 1024 * 1024,
@@ -134,13 +171,17 @@ function lint() {
   const byFile = new Map();
   for (const file of JSON.parse(stdout)) {
     const path = relative(REPO_ROOT, file.filePath);
+    const errorMessages = file.messages.filter((message) => message.severity === 2);
+    if (errorMessages.length === 0) continue;
+    // Read once per file with at least one error, not once per message.
+    const source = readFileSync(file.filePath, 'utf8');
     const findings = new Map();
-    for (const message of file.messages) {
-      if (message.severity !== 2) continue;
-      const key = findingKey(message.ruleId, message.message);
+    for (const message of errorMessages) {
+      const context = localContext(source, message.index);
+      const key = findingKey(message.ruleId, message.message, context);
       findings.set(key, (findings.get(key) ?? 0) + 1);
     }
-    if (findings.size > 0) byFile.set(path, findings);
+    byFile.set(path, findings);
   }
   return byFile;
 }
@@ -164,7 +205,7 @@ function toBaselineShape(byFile) {
 }
 
 /**
- * Every (file, findingKey) pair whose current count exceeds what baseline allows for it. Covers
+ * Every (file, findingKey) pair whose current count exceeds what `baseline` allows for it. Covers
  * both a brand-new finding (baseline count 0) and an existing one that got more frequent.
  */
 function findRegressions(byFile, baseline) {
@@ -174,12 +215,35 @@ function findRegressions(byFile, baseline) {
     for (const [key, count] of findings) {
       const before = allowed[key] ?? 0;
       if (count > before) {
-        const [ruleId, message] = splitFindingKey(key);
+        const { ruleId, message } = splitFindingKey(key);
         regressions.push({ path, ruleId, message, before, after: count });
       }
     }
   }
   return regressions;
+}
+
+/**
+ * Files present in the baseline whose recorded findings no longer match what linting currently
+ * produces for them, in the improving direction: a finding key that dropped in count or vanished,
+ * with no compensating growth elsewhere in the same file (`findRegressions` already covers growth).
+ * Includes a file that became fully clean -- `byFile` simply has no entry for it in that case.
+ *
+ * This is what makes an improvement mandatory to record rather than optional: without it, fixing
+ * some findings in a still-dirty file leaves slack in the baseline that a later change could spend
+ * back by reintroducing exactly what was fixed, and assert mode would not notice either edit.
+ */
+function findImprovements(byFile, baseline) {
+  const improved = [];
+  for (const path of Object.keys(baseline)) {
+    const allowed = baseline[path].findings;
+    const current = byFile.get(path);
+    for (const [key, before] of Object.entries(allowed)) {
+      const after = current?.get(key) ?? 0;
+      if (after < before) improved.push(path);
+    }
+  }
+  return [...new Set(improved)];
 }
 
 function printRegressions(regressions) {
@@ -241,6 +305,7 @@ function main() {
     });
   const regressions = findRegressions(byFile, baseline);
   const stale = Object.keys(baseline).filter((path) => !byFile.has(path));
+  const improved = findImprovements(byFile, baseline).filter((path) => !stale.includes(path));
 
   if (added.length > 0) {
     console.error('These files are not clean and are not in the baseline:');
@@ -254,10 +319,16 @@ function main() {
   if (stale.length > 0) {
     console.error('These files are clean now, so their baseline entries must be removed:');
     for (const path of stale) console.error('  ' + path);
+  }
+  if (improved.length > 0) {
+    console.error('These files improved but the baseline still allows the old, higher count:');
+    for (const path of improved) console.error('  ' + path);
+  }
+  if (stale.length > 0 || improved.length > 0) {
     console.error("Run 'node scripts/ci/check-dogfood-lint.mjs --update' and commit the result.");
   }
 
-  if (added.length > 0 || regressions.length > 0 || stale.length > 0) {
+  if (added.length > 0 || regressions.length > 0 || stale.length > 0 || improved.length > 0) {
     process.exitCode = 1;
     return;
   }

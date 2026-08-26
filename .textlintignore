@@ -18,9 +18,9 @@
 #      are verbatim (or licensed-rewrite) excerpts of other projects' documentation, tracked for
 #      provenance in fixtures/manifest.json and fixtures/LICENSES.md — see docs/fixtures.md. They
 #      are the corpus the rule engine is tested against, not writing this project is responsible
-#      for. Neither directory is in scripts/ci/check-dogfood-lint.mjs's target globs today, but
-#      excluding them here means a broadened glob, or any future ad hoc scan, cannot silently
-#      start treating a licensed excerpt as this repository's own lint debt.
+#      for. `scripts/ci/check-dogfood-lint.mjs` discovers every tracked `*.md` file rather than
+#      reading a target list, so excluding them here is what keeps a licensed excerpt out of this
+#      repository's own lint debt — not an omission from a hand-picked glob.
 #
 # A file belongs on this list only for one of those two reasons. "It currently has a lot of
 # errors" is not one of them — that is what scripts/ci/dogfood-lint-baseline.json is for.

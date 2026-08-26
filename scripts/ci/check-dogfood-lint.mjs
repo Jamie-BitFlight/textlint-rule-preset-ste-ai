@@ -18,7 +18,7 @@
  * What the baseline records, and why it is not a plain per-file count.
  *
  * A first version of this script recorded one integer per file: how many error-severity findings
- * it had. Review found five ways that hid a regression, each fixed in turn:
+ * it had. Review found six ways that hid a regression, each fixed in turn:
  *
  *   - `--update` rewrote the baseline with whatever the working tree currently produced, including
  *     a larger count than before. A contributor who introduced new errors and ran `--update` to
@@ -50,6 +50,13 @@
  *     baseline. `findImprovements` now flags any file whose current findings are a strict subset,
  *     by count, of what its baseline entry allows, and assert mode requires `--update` for it the
  *     same as for a fully-cleaned file.
+ *   - The local-context window itself was not bounded by document structure, so a cleanup edit near
+ *     an untouched finding, but unrelated to it, could still change that finding's context slice and
+ *     make it look new. Review reproduced this with a heading-only edit sitting within
+ *     `CONTEXT_RADIUS` characters of an otherwise untouched violation, demanding
+ *     `--accept-regressions` for ordinary local cleanup. `localContext` now clamps its window to the
+ *     paragraph the finding sits in (see `paragraphBounds`), so an edit in a neighbouring block
+ *     cannot reach into it. The ordinal mechanism above still does its own job inside one paragraph.
  *
  * This file is machine-written and not meant to be hand-edited, the same way
  * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
@@ -112,16 +119,48 @@ function discoverMarkdownFiles() {
 }
 
 /**
- * A short, whitespace-normalized slice of `source` centered on `index`.
+ * The bounds of the blank-line-delimited block of text `index` falls inside: the character offset
+ * just after the nearest blank line before it, and the offset of the nearest blank line at or
+ * after it (or the string bounds, at either end, if there is no such blank line). A blank line is
+ * one that is empty once trailing whitespace is stripped.
+ */
+function paragraphBounds(source, index) {
+  const blankLine = /\n[ \t]*\n/g;
+  let start = 0;
+  for (const match of source.matchAll(blankLine)) {
+    const boundary = match.index + match[0].length - 1; // keep the second '\n' out of the block
+    if (boundary > index) break;
+    start = boundary;
+  }
+  blankLine.lastIndex = index;
+  const next = blankLine.exec(source);
+  const end = next === null ? source.length : next.index + 1; // include the first '\n' of the pair
+  return { start, end };
+}
+
+/**
+ * A short, whitespace-normalized slice of `source` centered on `index`, clamped to the paragraph
+ * `index` sits in.
  *
  * This is the finding's occurrence fingerprint. It survives the file being reflowed elsewhere,
- * because it travels with the finding rather than with the file's line numbers, but it still tells
- * two occurrences of the identical `(ruleId, message)` pair apart when they sit in different
+ * because it travels with the finding rather than with the file's line numbers, and it tells two
+ * occurrences of the identical `(ruleId, message)` pair apart when they sit in different
  * sentences.
+ *
+ * The paragraph clamp exists because an unbounded character radius does not only travel with the
+ * finding: review reproduced a heading edit -- nothing to do with the finding at all -- changing a
+ * completely untouched finding's identity, because the finding sat within `CONTEXT_RADIUS`
+ * characters of that heading. Clamping to the current paragraph keeps the radius from reaching
+ * into a neighbouring block a cleanup edit is actually likely to touch. It does not fully retire
+ * `CONTEXT_RADIUS`: `fixtures/LICENSES.md`'s colliding fixtures sit inside one long paragraph (a
+ * bullet list with no blank line between items), so the radius still bounds the key's size there.
+ * The occurrence ordinal in `findingKey` is what actually disambiguates that case; this clamp only
+ * keeps an edit in one paragraph from perturbing a finding that lives in a different one.
  */
 function localContext(source, index) {
-  const start = Math.max(0, index - CONTEXT_RADIUS);
-  const end = Math.min(source.length, index + CONTEXT_RADIUS);
+  const { start: paraStart, end: paraEnd } = paragraphBounds(source, index);
+  const start = Math.max(paraStart, index - CONTEXT_RADIUS);
+  const end = Math.min(paraEnd, index + CONTEXT_RADIUS);
   return source.slice(start, end).replace(/\s+/g, ' ').trim();
 }
 

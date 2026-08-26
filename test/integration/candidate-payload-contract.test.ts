@@ -98,7 +98,7 @@ const RULES_DIR = resolve(
  * a runtime helper, not a callable parser). Adding one just for this single test file was judged
  * disproportionate to the gap it closes.
  *
- * This instead matches every `evaluatorId:` property assignment's full right-hand side up to its
+ * This matches every `evaluatorId:` property assignment's full right-hand side up to its
  * terminating comma or line end, then resolves that captured text three ways: directly, when it is
  * a single-quoted string literal; through a same-file top-level `const NAME = 'literal';`
  * declaration, when it is a bare identifier; or recognised and skipped, for the one genuine
@@ -108,6 +108,12 @@ const RULES_DIR = resolve(
  * throws immediately, naming the file and the unresolved text, rather than silently resolving to
  * nothing the way the first two fixes both did in their own way -- so a syntax form this function
  * does not yet understand fails the test loudly instead of quietly under-counting the producer set.
+ *
+ * A third fix added a second pass for object-literal shorthand (`{ ...base, evaluatorId, payload }`)
+ * -- review found the colon-anchored pattern above does not merely mis-resolve that form, it never
+ * matches it at all, so a producer written that way stayed silently absent from the derived set
+ * with no throw. The second pass finds every bare `evaluatorId` identifier the first pass's
+ * resolutions do not already account for and resolves or throws the same way.
  */
 function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
   // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
@@ -163,6 +169,25 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
         `${entry}: an "evaluatorId" property has a value this test cannot statically resolve to ` +
           `a string ("${rhs}") -- extend derivedProducerIds() to handle this form.`,
       );
+    }
+
+    // Object-literal shorthand (`{ ...base, evaluatorId, payload }`) never matches the pattern
+    // above at all -- there is no colon for it to match against -- so it would otherwise leave a
+    // real producer silently out of `ids` rather than resolving or throwing. This finds every bare
+    // `evaluatorId` identifier not already accounted for above: not preceded by `.` (a property
+    // access, e.g. `spec.evaluatorId`) and not followed by `:` (a value assignment, already
+    // resolved above, or `CandidateRuleSpec`'s own type-member declaration).
+    for (const _ of text.matchAll(/(?<![.\w])evaluatorId(?!\s*:)(?!\w)/g)) {
+      const alias = topLevelStringConsts.get('evaluatorId');
+      if (alias === undefined) {
+        throw new Error(
+          `${entry}: found a shorthand "evaluatorId" property (no colon) this test cannot ` +
+            'statically resolve unless a top-level "const evaluatorId = \'...\';" exists in the ' +
+            'same file -- extend derivedProducerIds() to handle this form.',
+        );
+      }
+      const known = declared.get(alias);
+      if (known !== undefined) ids.add(known);
     }
   }
 

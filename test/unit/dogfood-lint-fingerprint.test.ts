@@ -5,6 +5,8 @@ import {
   findRegressions,
   localContext,
   nearestHeading,
+  paragraphBounds,
+  sentenceBounds,
 } from '../../scripts/ci/check-dogfood-lint.mjs';
 
 /**
@@ -48,6 +50,42 @@ describe('paragraphBounds / localContext', () => {
     const beforeIndex = before.indexOf('Remove');
     const afterIndex = after.indexOf('remove');
     expect(localContext(after, afterIndex)).not.toBe(localContext(before, beforeIndex));
+  });
+
+  it('does not let an edit to an earlier, different sentence in the same paragraph change an untouched finding’s context', () => {
+    // Review found the paragraph clamp alone insufficient: an earlier sentence in the same
+    // paragraph can still sit within CONTEXT_RADIUS of an untouched violation later in it, so
+    // fixing that earlier sentence changed the violation's key anyway -- reported as both a
+    // regression (new key, count 0 -> 1) and an improvement (old key, count 1 -> 0) for a cleanup
+    // that never touched the violation at all.
+    const violation = 'Remove the bracket; verify it afterward.';
+    const before = `## heading\n\nFix the seal now. ${violation} Then close the panel.\n`;
+    const after = `## heading\n\nRepair the seal soon instead. ${violation} Then close the panel.\n`;
+    const beforeIndex = before.indexOf(violation);
+    const afterIndex = after.indexOf(violation);
+    expect(localContext(after, afterIndex)).toBe(localContext(before, beforeIndex));
+  });
+});
+
+describe('sentenceBounds', () => {
+  it('excludes an earlier sentence in the same paragraph', () => {
+    const source = '## heading\n\nFix the seal now. Remove the bracket; verify it afterward.\n';
+    const index = source.indexOf('Remove');
+    const { start } = sentenceBounds(source, index);
+    expect(source.slice(start, index).trim()).toBe('');
+  });
+
+  it('excludes a later sentence in the same paragraph', () => {
+    const source = '## heading\n\nRemove the bracket; verify it afterward. Then close the panel.\n';
+    const index = source.indexOf('Remove');
+    const { end } = sentenceBounds(source, index);
+    expect(source.slice(index, end)).toBe('Remove the bracket; verify it afterward.');
+  });
+
+  it('falls back to the paragraph bounds when the paragraph has no sentence-ending punctuation', () => {
+    const source = '## heading\n\nRemove the bracket now and verify it afterward too\n';
+    const index = source.indexOf('Remove');
+    expect(sentenceBounds(source, index)).toEqual(paragraphBounds(source, index));
   });
 });
 

@@ -67,6 +67,14 @@
  *     also folds in `nearestHeading`, the finding's enclosing section, which the four LICENSES.md
  *     occurrences turn out to already have one each of, distinct from one another. See
  *     `findingKey`'s own comment for what this closes and what it still, honestly, does not.
+ *   - The paragraph clamp closed the neighbouring-block case, but not the case one level down:
+ *     an earlier, unrelated sentence in the *same* paragraph can still sit within `CONTEXT_RADIUS`
+ *     of an untouched violation later in it. Reproduced directly: fixing a filler sentence ahead of
+ *     an untouched semicolon violation, in the same paragraph, still changed the violation's key --
+ *     reported as both a regression and an improvement for a cleanup that never touched it.
+ *     `localContext` now clamps to the sentence the finding sits in (see `sentenceBounds`), inside
+ *     the existing paragraph clamp, so an edit to a different sentence in the same paragraph no
+ *     longer reaches it.
  *
  * This file is machine-written and not meant to be hand-edited, the same way
  * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
@@ -150,7 +158,32 @@ export function paragraphBounds(source, index) {
 }
 
 /**
- * A short, whitespace-normalized slice of `source` centered on `index`, clamped to the paragraph
+ * The bounds of the sentence `index` sits inside, clamped to the paragraph containing it (see
+ * `paragraphBounds`): the offset just after the nearest `.`, `!`, or `?` before `index` that is
+ * followed by whitespace or the paragraph's end, and the offset of the nearest one at or after
+ * `index`.
+ *
+ * This is a heuristic, not a real sentence segmenter: an abbreviation, a decimal, or a version
+ * number can end in a period this treats as a sentence boundary. That only ever narrows the
+ * window, though, never widens or misplaces it -- the returned range still contains `index`, and
+ * it is still clamped inside the paragraph either way. A real segmenter
+ * (`src/core/segmentation.ts`) needs a masking pass first, to stop exactly those characters from
+ * being misread; this script has no reason to carry that machinery for a fingerprint window.
+ */
+export function sentenceBounds(source, index) {
+  const { start: paraStart, end: paraEnd } = paragraphBounds(source, index);
+  const terminator = /[.!?](?=\s|$)/g;
+  let start = paraStart;
+  for (const match of source.slice(paraStart, index).matchAll(terminator)) {
+    start = paraStart + match.index + 1;
+  }
+  const next = terminator.exec(source.slice(index, paraEnd));
+  const end = next === null ? paraEnd : index + next.index + 1;
+  return { start, end };
+}
+
+/**
+ * A short, whitespace-normalized slice of `source` centered on `index`, clamped to the sentence
  * `index` sits in.
  *
  * This is the finding's occurrence fingerprint. It survives the file being reflowed elsewhere,
@@ -162,16 +195,22 @@ export function paragraphBounds(source, index) {
  * finding: review reproduced a heading edit -- nothing to do with the finding at all -- changing a
  * completely untouched finding's identity, because the finding sat within `CONTEXT_RADIUS`
  * characters of that heading. Clamping to the current paragraph keeps the radius from reaching
- * into a neighbouring block a cleanup edit is actually likely to touch. It does not fully retire
- * `CONTEXT_RADIUS`: `fixtures/LICENSES.md`'s colliding fixtures sit inside one long paragraph (a
- * bullet list with no blank line between items), so the radius still bounds the key's size there.
- * The occurrence ordinal in `findingKey` is what actually disambiguates that case; this clamp only
- * keeps an edit in one paragraph from perturbing a finding that lives in a different one.
+ * into a neighbouring block a cleanup edit is actually likely to touch.
+ *
+ * The paragraph clamp alone was not enough: review reproduced the same false identity change one
+ * level down, from editing an earlier, unrelated sentence in the *same* paragraph -- close enough
+ * to an untouched violation that `CONTEXT_RADIUS` still reached back into the edited text, so
+ * `findRegressions` and `findImprovements` both reported the untouched violation as changed. The
+ * sentence clamp closes that: an edit to a different sentence in the same paragraph no longer
+ * reaches a violation's own window at all. It does not fully retire `CONTEXT_RADIUS`:
+ * `fixtures/LICENSES.md`'s colliding fixtures sit inside one long sentence-free bullet paragraph,
+ * so the radius still bounds the key's size there, and `findingKey`'s ordinal still disambiguates
+ * repeats within one sentence.
  */
 export function localContext(source, index) {
-  const { start: paraStart, end: paraEnd } = paragraphBounds(source, index);
-  const start = Math.max(paraStart, index - CONTEXT_RADIUS);
-  const end = Math.min(paraEnd, index + CONTEXT_RADIUS);
+  const { start: sentStart, end: sentEnd } = sentenceBounds(source, index);
+  const start = Math.max(sentStart, index - CONTEXT_RADIUS);
+  const end = Math.min(sentEnd, index + CONTEXT_RADIUS);
   return source.slice(start, end).replace(/\s+/g, ' ').trim();
 }
 

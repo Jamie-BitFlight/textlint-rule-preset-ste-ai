@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '@babel/parser';
@@ -90,15 +91,15 @@ const RULES_DIR = resolve(
  * in which kind of node encloses them.
  *
  * A real AST closes that class of gap by construction rather than by enumeration, and was tried
- * first, before the first text-pattern fix: this repository pins `typescript` at `^7.0.2`, the
- * native rewrite, which does not ship the classic Compiler API this needs -- confirmed directly,
- * `Object.keys(require('typescript'))` returns only `['version', 'versionMajorMinor']`, no
- * `createSourceFile`, no parser at all. `@babel/parser` was not a project dependency then either,
- * but is resolved in `package-lock.json` regardless, pulled in transitively by `magicast` (used by
- * `vite-plus`'s own config tooling) -- confirmed via `node -e "require.resolve('@babel/parser')"`
- * succeeding before it was ever added to `package.json`. Declared as a direct devDependency now,
- * pinned to the version already resolved, rather than continuing to rely on an undeclared
- * transitive one or patching another text-pattern edge case.
+ * first, before the first text-pattern fix: this repository's pinned `typescript` package does not
+ * ship the classic Compiler API this needs -- no `createSourceFile`, no parser at all. The
+ * `derivedProducerIds()'s AST approach is justified` test below pins that claim executably,
+ * rather than as prose that goes stale the moment the pinned version changes; see it for the exact
+ * check. `@babel/parser` was not a project dependency then either, but was already resolved in
+ * `package-lock.json`, pulled in transitively by `magicast` (used by `vite-plus`'s own config
+ * tooling). Declared as a direct devDependency now, pinned to the version already resolved, rather
+ * than continuing to rely on an undeclared transitive one or patching another text-pattern edge
+ * case.
  *
  * `walk` is a generic, visitor-key-agnostic AST walk: `@babel/traverse` is not available the same
  * way `@babel/parser` is, and a real traversal library is more machinery than this needs. It
@@ -202,12 +203,21 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
     walk(ast.program, (node) => {
       if (!t.isObjectExpression(node)) return;
       for (const prop of node.properties) {
-        if (!t.isObjectProperty(prop) || prop.computed || !t.isIdentifier(prop.key)) continue;
-        if (prop.key.name !== 'evaluatorId') continue;
+        if (!t.isObjectProperty(prop) || prop.computed) continue;
+        // A key can be an Identifier (`evaluatorId: ...`) or, equally validly, a StringLiteral
+        // (`'evaluatorId': ...`) -- review found the prior Identifier-only check silently skipped
+        // the latter, with no throw, letting a quoted-key producer vanish from the derived set
+        // without failing any test. Only an Identifier key can be `shorthand`.
+        const keyName = t.isIdentifier(prop.key)
+          ? prop.key.name
+          : t.isStringLiteral(prop.key)
+            ? prop.key.value
+            : undefined;
+        if (keyName !== 'evaluatorId') continue;
 
         if (prop.shorthand) {
           // `{ ...base, evaluatorId, payload }` -- the property's own name is the value.
-          resolveIdentifierAlias(prop.key.name);
+          resolveIdentifierAlias(keyName);
           continue;
         }
         const value = prop.value;
@@ -263,6 +273,20 @@ function candidatesFor(evaluatorId: SemanticEvaluatorId, trigger: Trigger): Cand
   });
   return result.candidates.filter((c) => c.evaluatorId === evaluatorId);
 }
+
+it(
+  "derivedProducerIds()'s AST approach is justified: this repository's pinned typescript " +
+    'package still exposes no classic Compiler API to parse with instead',
+  () => {
+    const ts: Record<string, unknown> = createRequire(import.meta.url)('typescript');
+    expect(
+      typeof ts['createSourceFile'],
+      'typescript now exports createSourceFile -- the doc comment above derivedProducerIds() ' +
+        'claims this repository cannot use the classic Compiler API for that reason; if this ' +
+        'starts failing, re-read that comment and decide whether the AST approach is still needed',
+    ).not.toBe('function');
+  },
+);
 
 describe('real candidates satisfy their evaluator payload contract', () => {
   const derivedProducers = derivedProducerIds();

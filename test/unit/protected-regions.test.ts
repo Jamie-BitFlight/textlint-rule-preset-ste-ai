@@ -446,7 +446,7 @@ describe('approvedTerms: regex-special characters', () => {
   // approvedTermPass (protected-regions.ts) escapes each configured term before building its
   // matcher (`term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`), so a term that happens to look like
   // regex syntax is still matched as the literal string the operator configured. These tests pin
-  // that behaviour for the three shapes most likely to appear in real STE terminology lists.
+  // that behaviour for representative shapes likely to appear in real STE terminology lists.
   it('matches "C++" literally instead of crashing on a doubled quantifier', () => {
     // Unescaped, `C++` is not a valid regex fragment on its own (`+` needs something to repeat, and
     // a second `+` has nothing left to repeat) -- `new RegExp` throws. Confirms both that

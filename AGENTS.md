@@ -18,6 +18,8 @@ This file lists instructions for AI (artificial intelligence) agents in this rep
    - Replace or remove commands, paths, and claims that the change invalidates.
    - Also replace or remove any manually maintained, derivable data that the change invalidates.
 
+Prose-style rules for this repository live in `.claude/skills/ste-ai-prose-style/SKILL.md`.
+
 ## Notice a problem, log it — never silently skip it
 
 Learned from a real incident. An agent was fixing an unrelated pull request (PR). It ran this

@@ -1,0 +1,4 @@
+{
+  "rulePack": "examples/rule-pack/acme-pack.json",
+  "trustedRulePackIds": ["acme-maintenance-2026"]
+}

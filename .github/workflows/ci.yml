@@ -66,3 +66,6 @@ jobs:
 
       - name: Confirm the pre-commit hook manifest is shaped correctly and still works
         run: scripts/ci/check-pre-commit-hook-manifest.sh
+
+      - name: Confirm the worked rule-pack example still prints what its README quotes
+        run: scripts/ci/check-rule-pack-example.sh

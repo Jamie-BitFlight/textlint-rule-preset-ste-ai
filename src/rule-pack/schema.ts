@@ -4,9 +4,20 @@ import { z } from 'zod';
  * Rule-pack schema — the **only** supported route by which normative controlled-language data
  * enters this package.
  *
- * Nothing in `src/deterministic` hard-codes vocabulary. Every word list, term mapping and numeric
- * limit is read from a pack that satisfies this schema, so an authorised licensee can supply the
- * real dictionary and rule data without changing a line of rule code.
+ * The controlled-language dictionary, the term mappings and the numeric limits are read from a
+ * pack that satisfies this schema, so an authorised licensee can supply the real dictionary and
+ * rule data without changing a line of rule code.
+ *
+ * That is not the same as "no rule hard-codes vocabulary", which this comment used to claim and
+ * which is false: `src/deterministic/rules/candidate-rules.ts` holds `PARTICIPLES`, `PRONOUNS` and
+ * `BARE_DEMONSTRATIVE_FOLLOWERS` in code, and no field here reaches them. A pack can suppress one
+ * of those triggers, because `approvedTechnicalTerms` protects a token before any rule scans it,
+ * but it cannot add a word to the list. The limitation runs one way only.
+ *
+ * Do not restate the control surface in prose here or anywhere else. It is generated from this
+ * schema into `docs/rule-pack-import.md` and enforced by
+ * `test/architecture/doc-pack-control-surface.test.ts`; every hand-maintained version of the list
+ * has gone stale and been caught in review.
  *
  * See `docs/rule-pack-import.md` for the import procedure and the licence obligations.
  */

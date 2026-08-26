@@ -1,0 +1,110 @@
+# A worked rule pack
+
+A rule pack is how you replace the bundled vocabulary with your own. This directory holds a
+complete one. The commands below lint the same document three times to show what changes.
+
+| File             | Purpose                                                          |
+| ---------------- | ---------------------------------------------------------------- |
+| `acme-pack.json` | The pack. A small controlled vocabulary for a fictional company. |
+| `sample.md`      | A document with deliberate violations of that vocabulary.        |
+| `untrusted.json` | Configuration that loads the pack, and does not trust it.        |
+| `trusted.json`   | The same, with the pack named in `trustedRulePackIds`.           |
+
+Run every command from the repository root. Run `vp install` and `vp pack` first, because these
+commands use the built CLI.
+
+## 1. The bundled pack
+
+```bash
+node dist/cli/main.js lint examples/rule-pack/sample.md --deterministic-only
+```
+
+The bundled dictionary flags `Utilise`, because that word is in its unapproved list. It knows
+nothing about the Acme vocabulary, so `De-energise` and `Actuate` pass.
+
+## 2. Your pack, loaded but untrusted
+
+```bash
+node dist/cli/main.js lint examples/rule-pack/sample.md \
+  --config examples/rule-pack/untrusted.json --deterministic-only
+```
+
+Different errors this time.
+
+- `De-energise` and `Actuate` are now reported. Your pack lists them.
+- `torque wrench` is now reported. Your pack prefers `torque tool`.
+- `Utilise` is **no longer** reported.
+- `Acme WidgetPro` is never reported. `approvedTechnicalTerms` protects it.
+
+That third point is the one to remember. **A pack replaces the dictionary. It does not add to it.**
+Anything the bundled pack used to catch is gone unless your pack lists it too. Do you want to keep
+the general-English checks? Copy the entries you want out of `src/rule-pack/provisional-pack.ts`.
+
+## 3. Your pack, trusted
+
+```bash
+node dist/cli/main.js lint examples/rule-pack/sample.md \
+  --config examples/rule-pack/trusted.json --deterministic-only --json
+```
+
+The findings are identical. What changes is the authority reported for them. Compare the
+`conformance` block against the untrusted run:
+
+```jsonc
+// untrusted.json
+"conformance": {
+  "claim": "none",
+  "packAuthority": "supplementary",
+  "disclaimer": "This tool does not certify conformance with any controlled-language standard."
+}
+
+// trusted.json
+"conformance": {
+  "claim": "declared-by-supplier",
+  "packAuthority": "normative",
+  "disclaimer": "This tool does not certify conformance with any controlled-language standard."
+}
+```
+
+A pack cannot elevate itself. It declares `authority: "normative"` in both runs. Any JSON file can
+declare that, so the declaration alone buys nothing. The operator must name the pack's
+`metadata.id` in `trustedRulePackIds` before the linter acts on it. Until then the pack's data is
+used and its authority is capped at `supplementary`.
+
+The human-readable output still ends with `Provisional rules only; no conformance claim.` in every
+run, including the trusted one. That line is unconditional today. See
+[`docs/DISCLAIMER.md`](../../docs/DISCLAIMER.md) and
+`docs/design/64-layered-rule-packs/02-authority-trust.md`, which record why it under-claims on
+purpose. Read the `--json` output when you need the authority the linter actually acted on.
+
+## What to copy
+
+Copy `acme-pack.json`. The generated table in
+[`docs/rule-pack-import.md`](../../docs/rule-pack-import.md#what-a-pack-controls) is the schema's
+complete field inventory. It is not a list of fields this example populated.
+
+This pack sets most fields to a value specific to Acme. A few optional fields are left at their
+default, because nothing about this scenario needs them changed.
+
+Go through the table row by row. For each field, ask one question. Does your pack's real content
+give this a value worth setting? Or does the default already say what you mean? An empty `note` and
+an absent one behave identically. There is no placeholder to fill in either case.
+
+Two are worth calling out because getting them wrong is easy to miss until later.
+
+- `metadata.id` is the exact string `trustedRulePackIds` must match. The pack name and the file
+  path do not count — see the trust gate above.
+- `metadata.authority: "normative"` asserts two things at once. The pack carries a standard's rule
+  data. You are licensed to supply it. This example declares it because Acme wrote its own
+  maintenance standard. See the `notice` field in `acme-pack.json`. See also
+  `docs/DISCLAIMER.md`'s "a licence that permits it". Authorship is that licensed condition, not an
+  exception to it. Declaring `normative` without either fact true makes the pack lie about itself,
+  even while it stays untrusted and capped at `supplementary`.
+
+`docs/rule-pack-import.md` also covers the licence obligations. Do not commit a proprietary pack to
+a public repository.
+
+`scripts/ci/check-rule-pack-example.sh` runs each command above through the real command-line tool.
+It uses these same files. It asserts the counts and the `conformance` values this page quotes. It
+runs in continuous integration. The page therefore cannot drift from what the commands print.
+`test/integration/rule-pack.test.ts` covers the same pack through the programmatic interface.

@@ -301,19 +301,26 @@ See [`docs/fixtures.md`](docs/fixtures.md).
 
 ## Supplying authorised material
 
-`src/rule-pack/` is the single import boundary. No rule hard-codes vocabulary. The active pack
-supplies:
+`src/rule-pack/` is the single import boundary. The active pack supplies:
 
 - limits
 - word lists
 - term mappings
 - contractions
-- per-rule authority
+- protected technical terms
+- per-rule authority, severity, and default options
 
 Supply a licensed pack, and diagnostics report its authority and citations instead of `provisional`.
+The pack must also be named in `trustedRulePackIds` first. Until then its declared authority is
+capped at `supplementary`.
 
-A pack cannot add a rule. A pack cannot bypass the autofix gate. A pack cannot make the linter print a
-conformance claim. See [`docs/rule-pack-import.md`](docs/rule-pack-import.md).
+Some rules hold trigger vocabulary in code, which no pack field can add to. A pack cannot add a
+rule. A pack cannot bypass the autofix gate. A pack cannot make the linter print a conformance
+claim unless it is trusted, normative, and declares one.
+
+Want to see this work? [`examples/rule-pack/`](examples/rule-pack/) is a complete worked pack. The
+full field list and the exact status rules are in
+[`docs/rule-pack-import.md`](docs/rule-pack-import.md).
 
 ## Development
 

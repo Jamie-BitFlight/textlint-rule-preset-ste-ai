@@ -81,6 +81,17 @@ const DESCRIPTIONS: Readonly<Record<string, string>> = {
   'rules[].options': 'Default options, below anything the user configures.',
 };
 
+// Not a legitimate depth for this schema — `rulePackSchema` bottoms out within a handful of
+// levels. It exists only to turn a genuinely cyclic or pathological schema into a loud failure
+// instead of an infinite recursion or a silent truncation. An earlier version used a silent
+// truncation point instead (`if (depth > MAX_DEPTH) return;`): a field nested past it would vanish
+// from the inventory with every test still green, defeating the "exhaustive" claim the same way
+// the name-based special-casing this file replaced did. `unwrapToCore()` had its own separate
+// version of that same bug, found in the same review round: a wrapper nested past its own depth
+// bound returned still-wrapped instead of throwing, with the identical silent-vanishing effect one
+// call site up. Both functions now share this one throwing bound.
+const RUNAWAY_RECURSION_DEPTH = 50;
+
 /**
  * Read one property without asserting a shape onto a Zod internal.
  *
@@ -93,17 +104,27 @@ function readProperty(value: unknown, key: string): unknown {
   return Reflect.get(value, key);
 }
 
-/** Strip `optional`/`default`/`nullable` wrappers to reach the schema they wrap. */
+/**
+ * Strip `optional`/`default`/`nullable` wrappers to reach the schema they wrap.
+ *
+ * Throws past `RUNAWAY_RECURSION_DEPTH` rather than returning the still-wrapped schema, for the
+ * same reason `collectFields()` does below: a silent cutoff here would make `objectShape()` and
+ * `arrayElement()` see a wrapper as a leaf, and a field wrapped that deep would vanish from the
+ * inventory with every test still green.
+ */
 function unwrapToCore(schema: unknown): unknown {
   let current = schema;
 
-  for (let depth = 0; depth < 8; depth += 1) {
+  for (let depth = 0; depth < RUNAWAY_RECURSION_DEPTH; depth += 1) {
     const inner = readProperty(readProperty(current, 'def'), 'innerType');
     if (inner === undefined) return current;
     current = inner;
   }
 
-  return current;
+  throw new Error(
+    `schema wrapper depth exceeded ${RUNAWAY_RECURSION_DEPTH} levels — rulePackSchema is not ` +
+      'expected to wrap a field this deep; check for a cyclic reference.',
+  );
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -122,15 +143,6 @@ function arrayElement(schema: unknown): unknown {
   const def = readProperty(core, 'def');
   return readProperty(def, 'type') === 'array' ? readProperty(def, 'element') : undefined;
 }
-
-// Not a legitimate depth for this schema — `rulePackSchema` bottoms out within a handful of
-// levels. It exists only to turn a genuinely cyclic or pathological schema into a loud failure
-// instead of an infinite recursion. An earlier version used this as a silent truncation point
-// instead (`if (depth > MAX_DEPTH) return;`): a field nested past it would vanish from the
-// inventory with every test still green, defeating the "exhaustive" claim the same way the
-// name-based special-casing this file replaced did. Throwing here keeps that failure mode
-// impossible rather than merely unlikely.
-const RUNAWAY_RECURSION_DEPTH = 50;
 
 /**
  * Recurse into `schema` and append every reachable field path to `out`.

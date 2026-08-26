@@ -124,8 +124,9 @@ falls back to the provisional pack silently.
     "version": "3.1.0",
 
     // 'normative' asserts that this pack carries the rule data of a standard AND that you are
-    // licensed to supply it. The linter never sets this itself. It becomes the `ruleStatus` on
-    // every diagnostic and replaces the `[provisional]` tag in messages.
+    // licensed to supply it. The linter never sets this itself. It is capped at `supplementary`
+    // until the operator trusts this pack. See "The trust gate" and "What status a diagnostic
+    // reports" below for what it becomes on each rule path once trusted.
     "authority": "normative",
 
     "licence": "Proprietary — Acme internal use only, licence AC-2026-004",

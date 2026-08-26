@@ -13,12 +13,8 @@ import {
  * The rule pack is this package's only extension point, and until this file existed it had no test
  * coverage at all: nothing in `test/` referenced `rulePack`, `trustedRulePackIds`,
  * `verifiedAuthority` or `packPermitsConformanceClaim`. Its entire specification lived as prose in
- * `docs/rule-pack-import.md`, `README.md` and a doc comment in `src/rule-pack/schema.ts`.
- *
- * Three of those four artefacts drifted from the code and from each other, and external review
- * found the drift one claim at a time across three rounds of PR #90 — six findings, every one of
- * the form "the prose asserts X, the code does Y". Prose cannot fail a build, so each correction
- * was itself unverified and introduced the next inaccuracy.
+ * `docs/rule-pack-import.md`, `README.md` and a doc comment in `src/rule-pack/schema.ts`, which let
+ * the same behavioural claim drift from the code and from each other, independently, undetected.
  *
  * What is pinned here is therefore not "the pack loader works". It is every behavioural claim the
  * documentation makes, expressed so that a future change to the behaviour fails CI instead of

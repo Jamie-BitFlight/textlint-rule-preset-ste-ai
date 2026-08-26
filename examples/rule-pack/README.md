@@ -19,8 +19,8 @@ commands use the built CLI.
 node dist/cli/main.js lint examples/rule-pack/sample.md --deterministic-only
 ```
 
-One error. The bundled dictionary flags `Utilise`, because that word is in its unapproved list. It
-knows nothing about the Acme vocabulary, so `De-energise` and `Actuate` pass.
+The bundled dictionary flags `Utilise`, because that word is in its unapproved list. It knows
+nothing about the Acme vocabulary, so `De-energise` and `Actuate` pass.
 
 ## 2. Your pack, loaded but untrusted
 
@@ -29,7 +29,7 @@ node dist/cli/main.js lint examples/rule-pack/sample.md \
   --config examples/rule-pack/untrusted.json --deterministic-only
 ```
 
-Three errors, and they are different errors.
+Different errors this time.
 
 - `De-energise` and `Actuate` are now reported. Your pack lists them.
 - `torque wrench` is now reported. Your pack prefers `torque tool`.
@@ -83,9 +83,8 @@ Copy `acme-pack.json`. The generated table in
 [`docs/rule-pack-import.md`](../../docs/rule-pack-import.md#what-a-pack-controls) is the schema's
 complete field inventory. It is not a list of fields this example populated.
 
-This pack sets most fields to a value specific to Acme. It leaves a few optional ones at their
-default: `rules[].options`, and the `note` field on one `dictionary.preferred` entry and the one
-`contractions` entry. None of the three has content worth writing for this scenario.
+This pack sets most fields to a value specific to Acme. A few optional fields are left at their
+default, because nothing about this scenario needs them changed.
 
 Go through the table row by row. For each field, ask one question. Does your pack's real content
 give this a value worth setting? Or does the default already say what you mean? An empty `note` and

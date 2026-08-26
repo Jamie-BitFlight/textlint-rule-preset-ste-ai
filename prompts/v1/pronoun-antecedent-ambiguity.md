@@ -2,7 +2,6 @@
 id: pronoun-antecedent-ambiguity
 version: v1
 task: Decide whether a pronoun has more than one plausible antecedent for a reader.
-variables: ruleId passage invariants pronoun possibleAntecedents previousSentence
 <<<SYSTEM>>>
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.
@@ -23,6 +22,7 @@ Decide `uncertain` when the surrounding text supplied is not enough to tell.
 
 CONSTRAINTS
 
+- Judge the single occurrence at the given offset. Ignore other occurrences.
 - Do not rewrite the document. Judge only the supplied passage.
 - Any suggested replacement must repeat the correct noun exactly as it is written elsewhere in the
   passage. Do not rename a component, and do not change an identifier. Also do not change any
@@ -62,7 +62,9 @@ Invariants that must not change in any suggestion:
 {{invariants}}
 
 Pronoun under review: {{pronoun}}
-Nouns available in the local context: {{possibleAntecedents}}
+Character offset of the occurrence in the passage: {{offsetInPassage}}
+Nouns available in the local context:
+{{possibleAntecedents}}
 Previous sentence: {{previousSentence}}
 
 Passage (offsets are 0-based into this exact string):

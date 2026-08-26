@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { semanticConfigSchema } from '../../src/core/config.js';
-import type { CandidatePassage, SemanticEvaluatorId } from '../../src/core/types.js';
+import type { SemanticEvaluatorId } from '../../src/core/types.js';
 import { buildEvaluatorRequest, evaluatorDefinitions } from '../../src/semantic/evaluators.js';
 import {
   FilePromptProvider,
@@ -8,67 +8,11 @@ import {
   PromptError,
   parsePromptFile,
 } from '../../src/semantic/prompt-loader.js';
+import { candidateFor, EVALUATOR_PAYLOADS } from '../helpers/evaluator-payloads.js';
 
 const provider = new FilePromptProvider();
 const config = semanticConfigSchema.parse({ enabled: true, model: 'test-model' });
-
-function candidateFor(
-  evaluatorId: SemanticEvaluatorId,
-  payload: Record<string, unknown>,
-): CandidatePassage {
-  return {
-    id: `c-${evaluatorId}`,
-    ruleId: 'rule-x',
-    evaluatorId,
-    range: { start: 0, end: 5 },
-    passage: 'The filter must be replaced every 500 hours.',
-    passageOffset: 0,
-    payload,
-    invariants: ['negation', 'modal force'],
-    reason: 'test',
-    mode: 'descriptive',
-    admonition: 'none',
-  };
-}
-
-const PAYLOADS: Record<SemanticEvaluatorId, Record<string, unknown>> = {
-  'approved-word-sense': {
-    word: 'close',
-    permittedSenses: ['to shut'],
-    approvedAlternatives: ['near'],
-    offsetInPassage: 4,
-  },
-  'permitted-part-of-speech': {
-    word: 'test',
-    permittedPartsOfSpeech: ['verb'],
-    offsetInPassage: 4,
-  },
-  'one-instruction-per-sentence': { candidateVerbs: ['Remove', 'install'] },
-  'passive-voice-adjudication': {
-    construction: 'must be replaced',
-    auxiliary: 'be',
-    participle: 'replaced',
-    hasExplicitAgent: false,
-    mode: 'descriptive',
-  },
-  'pronoun-antecedent-ambiguity': {
-    pronoun: 'It',
-    possibleAntecedents: ['sensor', 'controller'],
-    previousSentence: 'Connect the sensor to the controller.',
-    offsetInPassage: 0,
-  },
-  'noun-cluster-comprehension': { cluster: 'engine oil pressure lamp', length: 4, limit: 3 },
-  'technical-term-legitimacy': {
-    term: 'hysteresis',
-    domainHint: 'control systems',
-    knownTerms: ['gain'],
-  },
-  'rewrite-equivalence': {
-    original: 'Prior to installation, remove the bracket.',
-    rewritten: 'Before installation, remove the bracket.',
-    protectedLiterals: [],
-  },
-};
+const PAYLOADS = EVALUATOR_PAYLOADS;
 
 describe('prompt assets', () => {
   it('every evaluator has a v1 prompt asset whose id and version match', () => {
@@ -226,6 +170,10 @@ describe('request construction', () => {
       config,
       provider,
     );
+    // This golden previously pinned `...deterministic pass: - Remove` followed by a bare
+    // `- install`, which froze a defect as the expected value: a golden test proves a rendering is
+    // unchanged, never that it is correct. `prompt-corpus.test.ts` carries the structural check
+    // that decides correctness; this one only guards against silent drift.
     expect(request.messages[1]?.content).toBe(
       [
         'ruleId: rule-x',
@@ -234,7 +182,8 @@ describe('request construction', () => {
         '- negation',
         '- modal force',
         '',
-        'Candidate action verbs detected by the deterministic pass: - Remove',
+        'Candidate action verbs detected by the deterministic pass:',
+        '- Remove',
         '- install',
         '',
         'Sentence (offsets are 0-based into this exact string):',

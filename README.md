@@ -43,8 +43,11 @@ for the history.
 ## Install
 
 ```bash
-vp install --save-dev textlint textlint-rule-preset-ste-ai
+npm install --save-dev textlint textlint-rule-preset-ste-ai
 ```
+
+`pnpm add -D`, `yarn add -D` and `vp install --save-dev` all work the same way. Nothing here needs
+this repository's own toolchain.
 
 `.textlintrc.json`:
 
@@ -337,6 +340,12 @@ vp run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # nee
 The repository lints its own docs with its own preset. `.textlintrc.json` and `.ste-ai.json` at the
 repository root carry the `additionalWellKnown` exceptions this project's own writing needs.
 
+Most of that prose does not pass yet. `scripts/ci/check-dogfood-lint.mjs` ratchets it.
+`scripts/ci/dogfood-lint-baseline.json` records what each file reports today. Three rules follow
+from it. A file with no entry must be clean. No file may get worse. An entry that is clean again
+must be deleted. So the baseline only ever shrinks. Clean a file up, run the script with `--update`,
+then commit the smaller baseline.
+
 `textlint` resolves `preset-ste-ai` as an installed package here, the same way it does for any
 consumer. The package name is `textlint-rule-preset-ste-ai`. `package.json` lists this package as
 its own `devDependency`, using `"file:."`. `vp install` then links it into `node_modules`.
@@ -353,6 +362,7 @@ either one yourself.
 | [`docs/architecture.md`](docs/architecture.md)                   | modules, the offset contract, the rule contract                |
 | [`docs/provisional-rules.md`](docs/provisional-rules.md)         | every rule, with its observed failure modes                    |
 | [`docs/rule-authoring.md`](docs/rule-authoring.md)               | writing a rule                                                 |
+| [`docs/prompt-authoring.md`](docs/prompt-authoring.md)           | writing or editing a prompt asset                              |
 | [`docs/publishing.md`](docs/publishing.md)                       | publishing releases to npm, with trusted OpenID Connect (OIDC) |
 | [`docs/semantic-evaluators.md`](docs/semantic-evaluators.md)     | evaluators, prompt contract, measurement                       |
 | [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md)         | categories, outage policy, autofix policy                      |

@@ -2,7 +2,6 @@
 id: one-instruction-per-sentence
 version: v1
 task: Decide whether one sentence tells the reader to perform more than one action.
-variables: ruleId, passage, invariants, candidateVerbs
 <<<SYSTEM>>>
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.
@@ -60,7 +59,8 @@ ruleId: {{ruleId}}
 Invariants that must not change in any suggestion:
 {{invariants}}
 
-Candidate action verbs detected by the deterministic pass: {{candidateVerbs}}
+Candidate action verbs detected by the deterministic pass:
+{{candidateVerbs}}
 
 Sentence (offsets are 0-based into this exact string):
 {{passage}}

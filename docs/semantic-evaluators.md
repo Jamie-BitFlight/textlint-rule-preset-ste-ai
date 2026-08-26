@@ -66,17 +66,26 @@ but are not:
 id: passive-voice-adjudication
 version: v1
 task: <one line>
-variables: ruleId, passage, invariants, construction, …
 <<<SYSTEM>>>
 …the system message…
 <<<USER>>>
 …the user template with {{placeholder}} substitutions…
 ```
 
+`parsePromptFile` (`src/semantic/prompt-loader.ts`) derives the variable list from the `{{…}}`
+placeholders in the user template. `<<<META>>>` does not carry its own `variables` field, because
+that would duplicate data the loader already computes.
+
 Rendering throws when a placeholder has no value **and** when a value has no placeholder. Both are
 prompt-construction bugs that would otherwise reach a model silently. A golden test pins the exact
 rendered user message for one evaluator. This makes a prompt edit that changes request content
 visible in review.
+
+A golden test proves that a rendering is unchanged. It never proves that the rendering is correct.
+This one pinned a malformed array substitution as its expected value for as long as it existed.
+`test/unit/prompt-corpus.test.ts` carries the structural checks that decide correctness. They run
+over the whole corpus, not one evaluator. [`prompt-authoring.md`](prompt-authoring.md) is the
+contract for writing one of these files.
 
 Prompts are versioned by directory. `semantic.promptVersion` selects the version. The version is
 recorded in every trace and in the content hash. Changing a prompt therefore invalidates the cache

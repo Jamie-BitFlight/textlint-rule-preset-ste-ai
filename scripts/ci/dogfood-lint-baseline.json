@@ -1,0 +1,22 @@
+{
+  "CLAUDE.md": 62,
+  "docs/architecture.md": 189,
+  "docs/configuration.md": 2,
+  "docs/design/64-layered-rule-packs/01-merge-core.md": 170,
+  "docs/design/64-layered-rule-packs/02-authority-trust.md": 160,
+  "docs/design/64-layered-rule-packs/03-migration-verification.md": 244,
+  "docs/DISCLAIMER.md": 2,
+  "docs/extension-roadmap.md": 50,
+  "docs/implementation-report.md": 128,
+  "docs/provisional-rules.md": 193,
+  "docs/rule-pack-import.md": 10,
+  "docs/suppression.md": 2,
+  "examples/sample.md": 5,
+  "prompts/v1/approved-word-sense.md": 14,
+  "prompts/v1/one-instruction-per-sentence.md": 22,
+  "prompts/v1/passive-voice-adjudication.md": 23,
+  "prompts/v1/permitted-part-of-speech.md": 12,
+  "prompts/v1/pronoun-antecedent-ambiguity.md": 1,
+  "prompts/v1/rewrite-equivalence.md": 29,
+  "prompts/v1/technical-term-legitimacy.md": 14
+}

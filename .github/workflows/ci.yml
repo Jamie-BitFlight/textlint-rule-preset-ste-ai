@@ -69,3 +69,27 @@ jobs:
 
       - name: Confirm the worked rule-pack example still prints what its README quotes
         run: scripts/ci/check-rule-pack-example.sh
+
+  # Separate job, deliberately outside the `verify` matrix. This lints every markdown file the
+  # repository authors with the preset the repository ships, which takes minutes; running it once
+  # per Node version would triple that cost to prove the same thing three times. It does not depend
+  # on the Node version under test, only on the preset behaving as built.
+  dogfood:
+    name: Lint this repository's own prose with its own preset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: voidzero-dev/setup-vp@313600b80b104eadebb9111787d37a2e83e014ca # v1.17.0
+        with:
+          node-version: 24
+          cache: true
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Build from a clean state
+        run: vp pack
+
+      - name: Ratchet the dogfood lint baseline
+        run: node scripts/ci/check-dogfood-lint.mjs

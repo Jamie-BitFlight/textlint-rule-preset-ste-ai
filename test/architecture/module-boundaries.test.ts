@@ -30,7 +30,13 @@ const ALLOWED: Record<string, readonly string[]> = {
   // Measurement tooling composes every layer by design: it must run the real rule set and the real
   // broker to produce numbers that mean anything. It is a leaf — nothing imports it.
   evaluation: ['core', 'rule-pack', 'deterministic', 'semantic', 'model-client', 'fixture-tools'],
-  cli: ['core', 'rule-pack', 'deterministic', 'semantic', 'analysis', 'model-client'],
+  // `cli` reuses `textlint`'s shared-config-file discovery (`findSharedConfigPath`,
+  // `loadSharedConfig`) so `ste-ai lint` run without `--config` applies the same
+  // `.ste-ai.json`/`STE_AI_CONFIG` resolution `textlint --config .textlintrc.json` already does in
+  // the same project -- see src/cli/main.ts's `buildConfig`. docs/architecture.md's "Shape" table
+  // already documents `cli → all of the above`; this brings the enforced allow-list in line with
+  // that, rather than widening what the module was already declared to permit.
+  cli: ['core', 'rule-pack', 'deterministic', 'semantic', 'analysis', 'model-client', 'textlint'],
 };
 
 interface ImportEdge {

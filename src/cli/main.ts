@@ -9,6 +9,7 @@ import type { AnalysedDocument, Diagnostic, RunNotice, SuppressionRecord } from 
 import { deterministicRules } from '../deterministic/index.js';
 import { evaluatorDefinitions } from '../semantic/evaluators.js';
 import { packPermitsConformanceClaim, verifiedAuthority } from '../rule-pack/loader.js';
+import { loadSharedConfig } from '../textlint/shared-config.js';
 
 /**
  * `ste-ai` — a thin CLI over the programmatic API.
@@ -116,7 +117,15 @@ function buildConfig(args: Args): SteAiConfigInput {
         // this boundary, so a malformed `--config` file fails loudly with the same named-key
         // message as everywhere else, instead of a raw `ZodError`'s JSON issue dump.
         resolveConfig(JSON.parse(readFileSync(configPath, 'utf8')))
-      : {};
+      : // No `--config` given: fall back to the same shared-config discovery the textlint adapter
+        // uses (`STE_AI_CONFIG`, then `.ste-ai.json`/`.ste-ai.jsonc`/`ste-ai.config.json` in
+        // `process.cwd()`), documented in docs/configuration.md's "Shared configuration file"
+        // resolution order. Without this, `ste-ai lint` run bare — as a pre-commit or Husky hook
+        // does — silently applied only built-in defaults, ignoring a project's own approved terms
+        // or rule pack even though `textlint --config .textlintrc.json` in the same project
+        // respected them. `loadSharedConfig(undefined)` searches `process.cwd()` only, which is
+        // right here: the CLI has no "textlint config base directory" of its own to search first.
+        loadSharedConfig(undefined).config;
   const semanticEnabled = args.flags.get('semantic') === true;
   const endpoint = args.flags.get('endpoint');
   const model = args.flags.get('model');

@@ -82,13 +82,21 @@ shell script. It runs on every commit, unfiltered, unless the script filters it 
 # .husky/pre-commit
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.txt')
 [ -z "$files" ] && exit 0
-npx --yes textlint-rule-preset-ste-ai lint --fail-on-review $files
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' '*.txt' \
+  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review
 ```
 
 `git diff --cached --name-only` lists staged files. `--diff-filter=ACMR` keeps only files that
 were added, copied, modified, or renamed. A staged deletion is never passed to a tool that expects
-the file to exist. `[ -z "$files" ]` skips the run entirely when nothing staged matches. A commit
-that touches only code is not slowed down.
+the file to exist. `[ -z "$files" ]` skips the run entirely when nothing staged matches, so a
+commit that touches only code is not slowed down.
+
+The `git diff` runs twice on purpose. The first, ordinary run only feeds that emptiness check. The
+second uses `-z`. Its output is separated by the null byte, not a newline, piped straight into
+`xargs -0`. A staged filename holding a space or a glob character then still reaches the linter as
+one argument. Storing that null-byte-separated output in a shell variable is not safe across `sh`
+implementations. `$(...)` can truncate at the first null byte. The file list is piped directly
+instead, rather than stored in `$files` a second time.
 
 Do not write `npx --yes textlint-rule-preset-ste-ai lint docs/**/*.md` instead.
 `.husky/pre-commit` runs under `sh`, not an interactive `bash` with `shopt -s globstar` set. Under

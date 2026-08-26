@@ -174,10 +174,13 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
     // Object-literal shorthand (`{ ...base, evaluatorId, payload }`) never matches the pattern
     // above at all -- there is no colon for it to match against -- so it would otherwise leave a
     // real producer silently out of `ids` rather than resolving or throwing. This finds every bare
-    // `evaluatorId` identifier not already accounted for above: not preceded by `.` (a property
-    // access, e.g. `spec.evaluatorId`) and not followed by `:` (a value assignment, already
-    // resolved above, or `CandidateRuleSpec`'s own type-member declaration).
-    for (const _ of text.matchAll(/(?<![.\w])evaluatorId(?!\s*:)(?!\w)/g)) {
+    // `evaluatorId` identifier sitting in shorthand-property position: immediately preceded by `{`
+    // or `,` and immediately followed by `,` or `}` (each allowing surrounding whitespace, so a
+    // multi-line object literal still matches). That position requirement is deliberately narrow --
+    // review found an earlier version matched *any* bare "evaluatorId" token, including a comment,
+    // a function parameter's name, or an unrelated top-level declaration, none of which declare a
+    // producer -- so this only matches genuine object-literal shorthand syntax.
+    for (const _ of text.matchAll(/(?<=[{,]\s*)evaluatorId(?=\s*[,}])/g)) {
       const alias = topLevelStringConsts.get('evaluatorId');
       if (alias === undefined) {
         throw new Error(

@@ -13,18 +13,12 @@ import {
 /**
  * Boundary coverage for the semantic → `TextlintMessage` path.
  *
- * `test/integration/semantic-service.test.ts` and `test/integration/suppression.test.ts` both drive
- * `analyseText` directly and assert only on `result.diagnostics`/`result.notices` — the internal
- * `Diagnostic` shape. `src/textlint/adapter.ts` (`getAnalysis`, `formatMessage`,
- * `toTextlintSeverity`, the `Document` handler's report loop) is not imported by either file, so
- * nothing proved a *semantic* verdict — as opposed to a deterministic one, which
- * `test/e2e/textlint-run.test.ts` already exercises — survives the adapter and reaches the
- * `TextlintMessage[]` array a real textlint consumer receives.
- *
- * These tests run the real kernel, the real markdown plugin and the real preset rule module against
- * a real HTTP fake of the semantic service (`startFakeSemanticService`, the same double
- * `test/integration/semantic-service.test.ts` uses), and assert on `result.messages` — never on
- * `Diagnostic`.
+ * `src/textlint/adapter.ts` (`getAnalysis`, `formatMessage`, `toTextlintSeverity`, the `Document`
+ * handler's report loop) is what turns an internal `Diagnostic` into the `TextlintMessage` a real
+ * textlint consumer receives. These tests prove a *semantic* verdict specifically — as opposed to a
+ * deterministic one — survives that adapter, by running the real kernel, the real markdown plugin
+ * and the real preset rule module against a real HTTP fake of the semantic service
+ * (`startFakeSemanticService`), and asserting on `result.messages` — never on `Diagnostic`.
  */
 
 function isTextlintPluginCreator(value: unknown): value is TextlintPluginCreator {

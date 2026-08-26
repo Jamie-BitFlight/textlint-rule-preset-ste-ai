@@ -111,13 +111,7 @@ vp run eval:semantic -- --split heldout --out eval-heldout.json
 ```
 
 The report lists metrics per evaluator and overall. `EvaluatorMetrics`
-(`src/evaluation/evaluate.ts`) defines every field. Read that interface for the full list. It
-includes:
-
-- confusion-matrix counts
-- precision, recall, and F1
-- uncertain and failure rates
-- latency percentiles
+(`src/evaluation/evaluate.ts`) defines every field — read that interface for the full list.
 
 Ground truth comes from the fixture adjudication records. Unadjudicated candidates are excluded and
 counted separately, rather than guessed at. See
@@ -141,8 +135,8 @@ deterministic finding set byte-identical to an offline run.
 
 - Bind to `127.0.0.1`. The client sends document text to the endpoint. Do not expose it.
 - Protected content is masked out of the passages sent to evaluators. The masking passes
-  (`src/core/protected-regions.ts`) are the source of truth for what that covers. It includes code
-  and credentials, plus URLs, paths, and identifiers. None of it reaches the request.
+  (`src/core/protected-regions.ts`) are the source of truth for what that covers. None of it
+  reaches the request.
 
   Some evaluators still need to know that a protected token is present — the candidate-antecedent
   list, for instance. In that case, the evaluator gets a placeholder naming the kind (`«file-path»`)

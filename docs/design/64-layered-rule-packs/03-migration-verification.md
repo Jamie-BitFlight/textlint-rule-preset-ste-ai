@@ -285,8 +285,8 @@ Conventions observed in `test/`: vitest with `globals: true` (`vitest.config.ts:
 (`shared-config-merge.test.ts:7-24`), and cache-clearing seams called in `beforeEach`
 (`clearSharedConfigCache`, `clearAnalysisCache`).
 
-Coverage thresholds are enforced only under `--coverage` (`vitest.config.ts:15-35`: statements 91,
-branches 81, functions 91, lines 94) and CI runs `test:coverage` (`ci.yml:45`). New unreached
+Coverage thresholds are enforced only under `--coverage` (see the `coverage.thresholds` block in
+`vite.config.ts` for current values) and CI runs `test:coverage` (`ci.yml:45`). New unreached
 branches in `src/rule-pack/` will pull these down, so tests are not optional for the thresholds
 either.
 

@@ -135,22 +135,33 @@ describe('prompt corpus', () => {
 });
 
 describe('rendered request structure', () => {
-  const config = semanticConfigSchema.parse({ enabled: true, model: 'test-model' });
   const provider = new FilePromptProvider();
 
-  it('keeps every supplied value attributable when a rule pack supplies several', () => {
-    for (const definition of evaluatorDefinitions) {
+  it('keeps every supplied value attributable when a rule pack supplies several, in every discovered version', () => {
+    // Review found this looping over `evaluatorDefinitions` with a single `config` fixed to `v1`,
+    // so a new version's own inline-substitution defect -- the exact shape this check exists to
+    // catch -- was never rendered or checked at all. Now builds one `config` per discovered
+    // `(version, evaluatorId)` pair, with `promptVersion` set to that file's own version.
+    for (const file of promptFiles) {
+      const definition = evaluatorDefinitions.find((entry) => entry.id === file.evaluatorId);
+      if (definition === undefined) continue;
+      const config = semanticConfigSchema.parse({
+        enabled: true,
+        model: 'test-model',
+        promptVersion: file.version,
+      });
       const request = buildEvaluatorRequest(
         candidateFor(definition.id, MULTI_VALUE_PAYLOADS[definition.id]),
         config,
         provider,
       );
       const user = request.messages[1]?.content ?? '';
-      expect(findUnattributableListLines(user), definition.id).toEqual([]);
+      expect(findUnattributableListLines(user), `${file.version}/${definition.id}`).toEqual([]);
     }
   });
 
   it('renders every entry of a multi-entry array, not just the first', () => {
+    const config = semanticConfigSchema.parse({ enabled: true, model: 'test-model' });
     const request = buildEvaluatorRequest(
       candidateFor('approved-word-sense', MULTI_VALUE_PAYLOADS['approved-word-sense']),
       config,

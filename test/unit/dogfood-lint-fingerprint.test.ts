@@ -130,3 +130,16 @@ describe('cross-heading swap detection (the defect review found in the ordinal-o
     expect(findImprovements(byFile, baseline)).not.toEqual([]);
   });
 });
+
+describe('findImprovements', () => {
+  it('flags a file whose findings shrank but did not reach zero, not only a fully-cleaned one', () => {
+    // README.md claimed only two shrink cases required `--update`: a file with no baseline entry,
+    // and one that became fully clean again. Review found a third, already implemented here and
+    // documented in this file's own module comment, missing from the README: a file that still has
+    // findings, but fewer than the baseline allows, must be recorded too -- otherwise the baseline
+    // carries slack a later change could spend back by reintroducing exactly what was fixed.
+    const baseline = { 'dirty.md': { total: 3, findings: { 'rule\nmessage\nctx\n#h\n1': 3 } } };
+    const byFile = new Map([['dirty.md', new Map([['rule\nmessage\nctx\n#h\n1', 1]])]]);
+    expect(findImprovements(byFile, baseline)).toEqual(['dirty.md']);
+  });
+});

@@ -126,8 +126,9 @@ layer's limit replaces an earlier one. There is no organisation-set floor that l
 loosen.
 
 This follows `01`'s recommendation. Its argument stands: `limits` is required in `rulePackSchema`. A
-most-restrictive-wins rule would therefore pin the bundled pack's values (procedural grade level 7) as
-a ceiling. No organisation could raise that ceiling.
+most-restrictive-wins rule would therefore pin the bundled pack's values (see
+`provisionalRulePack.limits` in `src/rule-pack/provisional-pack.ts`) as a ceiling. No organisation
+could raise that ceiling.
 
 This is an accepted cost, recorded here so it is not rediscovered as a surprise. A product or locale
 layer can loosen an organisation's limit. The conventional-tooling behaviour was preferred over

@@ -78,30 +78,94 @@ const RULES_DIR = resolve(
  * `src/deterministic/rules/*.ts` source text rather than hand-maintained.
  *
  * A first fix here added `NO_DETERMINISTIC_PRODUCER`, a hand-maintained set of evaluators
- * confirmed (by the same grep this function now runs) to have no producer. Review found that only
- * caught a brand-new evaluator missing from both lists: an *existing* exemption, such as
+ * confirmed (by the same grep this function's predecessor ran) to have no producer. Review found
+ * that only caught a brand-new evaluator missing from both lists: an *existing* exemption, such as
  * `technical-term-legitimacy`, stayed silently exempt even after a producer was added for it,
- * because the exemption itself was never re-checked against source -- the covering test's stubbed
- * candidate count kept it passing. Deriving the set from source on every run, and requiring it to
- * equal `TRIGGER_DOCUMENTS`'s keys exactly (see the covering test below), closes that: an
- * exemption source no longer supports now fails immediately, in either direction.
+ * because the exemption itself was never re-checked against source.
+ *
+ * A second fix derived the set from source with a regex matching only a literal-valued
+ * `evaluatorId: '...'`. Review found that misses an aliased assignment: `CandidateRuleSpec
+ * .evaluatorId` is typed as `SemanticEvaluatorId`, not required to be a literal, so `const
+ * evaluator: SemanticEvaluatorId = 'technical-term-legitimacy'` followed by `evaluatorId:
+ * evaluator` type-checks today and that regex silently missed it -- the same class of gap the
+ * first fix left open, one indirection deeper.
+ *
+ * A real AST would resolve this cleanly, and was tried first: this repository pins `typescript`
+ * at `^7.0.2`, the native rewrite, which does not ship the classic Compiler API this needs --
+ * confirmed directly, `Object.keys(require('typescript'))` returns only `['version',
+ * 'versionMajorMinor']`, no `createSourceFile`, no parser at all. No other AST-capable package is
+ * a project dependency (`@oxc-project/types` and `@oxc-project/runtime` ship type declarations and
+ * a runtime helper, not a callable parser). Adding one just for this single test file was judged
+ * disproportionate to the gap it closes.
+ *
+ * This instead matches every `evaluatorId:` property assignment's full right-hand side up to its
+ * terminating comma or line end, then resolves that captured text three ways: directly, when it is
+ * a single-quoted string literal; through a same-file top-level `const NAME = 'literal';`
+ * declaration, when it is a bare identifier; or recognised and skipped, for the one genuine
+ * pass-through this codebase has -- `pushCandidate` in `candidate-rules.ts` forwards
+ * `spec.evaluatorId` into the `CandidatePassage` it returns, which is not a second producer
+ * declaration, only the first one's value reaching a different object literal. Anything else
+ * throws immediately, naming the file and the unresolved text, rather than silently resolving to
+ * nothing the way the first two fixes both did in their own way -- so a syntax form this function
+ * does not yet understand fails the test loudly instead of quietly under-counting the producer set.
  */
 function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
-  // Maps each declared id to itself so a source-text match can be typed as SemanticEvaluatorId
+  // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
   // without an unsafe assertion: the value returned by a successful lookup is already that type.
   const declared = new Map<string, SemanticEvaluatorId>(
     evaluatorDefinitions.map((d) => [d.id, d.id]),
   );
   const ids = new Set<SemanticEvaluatorId>();
+
   for (const entry of readdirSync(RULES_DIR)) {
     if (!entry.endsWith('.ts')) continue;
     const text = readFileSync(join(RULES_DIR, entry), 'utf8');
-    for (const match of text.matchAll(/evaluatorId:\s*'([^']+)'/g)) {
-      const id = match[1];
-      const known = id === undefined ? undefined : declared.get(id);
-      if (known !== undefined) ids.add(known);
+
+    // Every top-level `const NAME = 'literal';` in this file, for resolving a same-file identifier
+    // alias back to the string it names. Anchored to column 0 so a nested `const` inside a
+    // function body -- a genuinely different binding -- is not treated as this file's alias table.
+    const topLevelStringConsts = new Map<string, string>();
+    for (const match of text.matchAll(/^const (\w+)(?::\s*\w+)?\s*=\s*'([^']*)'/gm)) {
+      const [, name, value] = match;
+      if (name !== undefined && value !== undefined) topLevelStringConsts.set(name, value);
+    }
+
+    for (const match of text.matchAll(/evaluatorId:\s*([^,;\n]+?)\s*(,|;)?\s*$/gm)) {
+      const rhs = match[1];
+      const terminator = match[2];
+      if (rhs === undefined) continue;
+      // A semicolon terminator means this is a type-member declaration (like
+      // `CandidateRuleSpec`'s own `readonly evaluatorId: SemanticEvaluatorId;`), not a value
+      // assignment -- nothing to resolve, since no producer is declared here.
+      if (terminator === ';') continue;
+      const literalMatch = /^'([^']*)'$/.exec(rhs);
+      if (literalMatch?.[1] !== undefined) {
+        const known = declared.get(literalMatch[1]);
+        if (known !== undefined) ids.add(known);
+        continue;
+      }
+      const identifierMatch = /^(\w+)$/.exec(rhs);
+      if (identifierMatch?.[1] !== undefined) {
+        const alias = topLevelStringConsts.get(identifierMatch[1]);
+        if (alias === undefined) {
+          throw new Error(
+            `${entry}: an "evaluatorId" property is assigned from identifier "${identifierMatch[1]}", ` +
+              'which is not a same-file top-level string const this test can resolve -- extend ' +
+              'derivedProducerIds() to handle this form, or use a literal or a top-level const.',
+          );
+        }
+        const known = declared.get(alias);
+        if (known !== undefined) ids.add(known);
+        continue;
+      }
+      if (/^\w+\.evaluatorId$/.test(rhs)) continue; // the known `spec.evaluatorId` pass-through
+      throw new Error(
+        `${entry}: an "evaluatorId" property has a value this test cannot statically resolve to ` +
+          `a string ("${rhs}") -- extend derivedProducerIds() to handle this form.`,
+      );
     }
   }
+
   return ids;
 }
 

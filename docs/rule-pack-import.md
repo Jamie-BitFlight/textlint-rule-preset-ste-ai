@@ -1,17 +1,16 @@
 # Importing an authorised rule pack
 
-This is the **only** supported route by which normative controlled-language data enters the package.
-No rule hard-codes vocabulary: every word list, term mapping and numeric limit is read from the
-active pack, so supplying licensed data changes behaviour without changing a line of rule code.
+This page describes the only supported route by which normative controlled-language data enters the package.
+No rule hard-codes vocabulary. The active pack supplies every word list, term mapping, and numeric limit.
+Supplying licensed data therefore changes behaviour without changing a line of rule code.
 
 ## Before you start
 
-Supplying a pack is a licensing decision. This project makes no determination about what you are
-permitted to include, and adds no conformance wording of its own. See
-[`DISCLAIMER.md`](./DISCLAIMER.md).
+Supplying a pack is a licensing decision. This project makes no determination about what you may
+include. It adds no conformance wording of its own. See [`DISCLAIMER.md`](./DISCLAIMER.md).
 
-Do not commit a proprietary pack to a public repository. Keep it outside the tree and point at it,
-or hold it in a private artefact store.
+Do not commit a proprietary pack to a public repository. Keep it outside the tree. Point the
+configuration at it. Alternatively, store it in a private artefact repository.
 
 ## The schema
 
@@ -135,22 +134,29 @@ programmatic API.
 | `packPermitsConformanceClaim()`  | `false`                                   | `true` if `conformanceClaim !== 'none'` |
 | Vocabulary, limits, contractions | small authored set                        | yours                                   |
 
-Rule _code_ does not change. Rules whose trigger cannot be expressed in the pack schema stay
-provisional regardless of what the pack declares — a pack cannot promote a heuristic by asserting
-authority over it.
+Rule _code_ does not change. Some rules have triggers the pack schema cannot express. Those rules
+stay provisional, regardless of what the pack declares. A pack cannot promote a heuristic by
+asserting authority over it.
 
 ## What the pack cannot do
 
-- It cannot add a new rule. A new rule needs code; see [`rule-authoring.md`](./rule-authoring.md).
-- It cannot grant a fix that the autofix gate refuses. `safeSubstitution: true` is necessary but not
-  sufficient: `checkFixSafety()` and `gateFix()` still run, and still refuse anything that changes a
-  digit, a negation, a modal, an ordering word, or that sits in an admonition.
+- It cannot add a new rule. A new rule needs code. See [`rule-authoring.md`](./rule-authoring.md).
+- It cannot grant a fix that the autofix gate refuses. `safeSubstitution: true` is necessary, but it
+  is not enough. `checkFixSafety()` and `gateFix()` still run. They still refuse a fix that changes
+  any of the following.
+  - a digit.
+  - a negation.
+  - a modal.
+  - an ordering word.
+
+  They also refuse a fix that sits in an admonition.
+
 - It cannot make the linter print conformance wording. Nothing in the codebase emits a conformance
-  claim; `conformanceClaim` only records what the supplier asserts, for the audit trail.
+  claim. `conformanceClaim` only records what the supplier asserts, for the audit trail.
 
 ## Extending the schema
 
-If your pack carries data the schema cannot express — a part-of-speech table, per-rule exception
-lists, a sense inventory — extend `src/rule-pack/schema.ts` and the consuming rule together, and add
-a test that the new field actually changes behaviour. Do not smuggle data through
-`rules[].options`: that path is unvalidated beyond the rule's own options schema.
+Your pack might carry data the schema cannot express: a part-of-speech table, per-rule exception
+lists, or a sense inventory. In that case, extend `src/rule-pack/schema.ts` and the consuming rule
+together. Add a test that confirms the new field actually changes behaviour. Do not smuggle data
+through `rules[].options`: that path is unvalidated beyond the rule's own options schema.

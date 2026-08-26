@@ -3,9 +3,10 @@ import { analyseDocument } from '../../src/core/document.js';
 import {
   defaultProtectedRegionOptions,
   extractProtectedRegions,
+  opaqueRangesOf,
 } from '../../src/core/protected-regions.js';
-import { MASK_CHAR } from '../../src/core/text.js';
-import type { ProtectedRegionKind } from '../../src/core/types.js';
+import { MASK_CHAR, mergeRanges } from '../../src/core/text.js';
+import type { ProtectedRegion, ProtectedRegionKind } from '../../src/core/types.js';
 
 /**
  * Kinds of every region that fully encloses the needle, not merely overlaps it. Containment, not
@@ -365,6 +366,129 @@ describe('configFragmentPass mid-sentence alternative, identifierPass citations,
       .filter((r) => r.range.start < end && start < r.range.end)
       .map((r) => r.kind);
     expect(kinds).toContain('config-fragment');
+  });
+});
+
+describe('mergeRanges: overlapping-span determinism', () => {
+  // extractProtectedRegions runs each pass against progressively-masked text (every found range
+  // is masked before the next pass runs), and several passes additionally skip a match that
+  // already contains MASK_CHAR (see `containsMask` call sites in protected-regions.ts). Together
+  // those two things mean a real document essentially never gets two *different* passes to claim
+  // a genuinely partial (crossing) overlap of the same text -- a wide, unguarded pattern (e.g.
+  // `configFragmentPass`'s `\S+` value, or `shellCommandPass`'s `\S.*$`) can still match across an
+  // already-masked span, but only ever as a strict *containment* (the later, wider region swallows
+  // the earlier, narrower one whole), never a crossing overlap where each range has territory the
+  // other lacks. So the scenario this section covers -- two independent regions whose spans
+  // partially overlap, as in the task's `https://example.com/path` (url) vs. an overlapping
+  // `example.com`-shaped span (an identifier-like pass) -- is exercised directly against
+  // `mergeRanges` (and, one level up, `opaqueRangesOf`, its real production caller from
+  // `protected-regions.ts` and `document.ts`) with synthetic ranges, rather than manufactured from
+  // real input text that the current pass set cannot actually produce.
+  it('merges two partially-overlapping ranges into their union, not the larger or the first', () => {
+    // Neither range contains the other: [0,10) ends before [8,30) does, and [8,30) starts after
+    // [0,10) does. A "keep the larger" or "keep the first" merge would drop the [0,8) prefix that
+    // only the first range covers; a correct union keeps it.
+    expect(
+      mergeRanges([
+        { start: 0, end: 10 },
+        { start: 8, end: 30 },
+      ]),
+    ).toEqual([{ start: 0, end: 30 }]);
+    // Order in the input must not matter.
+    expect(
+      mergeRanges([
+        { start: 8, end: 30 },
+        { start: 0, end: 10 },
+      ]),
+    ).toEqual([{ start: 0, end: 30 }]);
+  });
+
+  it('merges ranges that only touch at a shared boundary point', () => {
+    // Catches a `<=` -> `<` mutation on the adjacency test in mergeRanges: with `<`, two ranges
+    // that share exactly one boundary point (`end === start`) would stay separate spans instead of
+    // collapsing into one, which would leave a zero-width masking gap at the seam.
+    expect(
+      mergeRanges([
+        { start: 0, end: 5 },
+        { start: 5, end: 10 },
+      ]),
+    ).toEqual([{ start: 0, end: 10 }]);
+  });
+
+  it('leaves genuinely disjoint ranges as separate spans', () => {
+    expect(
+      mergeRanges([
+        { start: 0, end: 5 },
+        { start: 10, end: 15 },
+      ]),
+    ).toEqual([
+      { start: 0, end: 5 },
+      { start: 10, end: 15 },
+    ]);
+  });
+
+  it('opaqueRangesOf unions overlapping regions from two independently-kinded passes for masking, without dropping either region', () => {
+    // The production call site: protected-regions.ts's opaqueRangesOf (and document.ts's
+    // buildStructuralMask) both feed every region's range from every pass into mergeRanges. Two
+    // regions of different kinds -- standing in for a `url` pass and a domain-shaped pass that
+    // independently claimed an overlapping span -- must still both appear as distinct
+    // ProtectedRegion entries (so the trace keeps both kinds), while the masked span they jointly
+    // cover is their union.
+    const regions: readonly ProtectedRegion[] = [
+      { kind: 'url', range: { start: 0, end: 20 }, opaque: true },
+      { kind: 'identifier', range: { start: 12, end: 28 }, opaque: true },
+    ];
+    expect(opaqueRangesOf(regions)).toEqual([{ start: 0, end: 28 }]);
+  });
+});
+
+describe('approvedTerms: regex-special characters', () => {
+  // approvedTermPass (protected-regions.ts) escapes each configured term before building its
+  // matcher (`term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`), so a term that happens to look like
+  // regex syntax is still matched as the literal string the operator configured. These tests pin
+  // that behaviour for representative shapes likely to appear in real STE terminology lists.
+  it('matches "C++" literally instead of crashing on a doubled quantifier', () => {
+    // Unescaped, `C++` is not a valid regex fragment on its own (`+` needs something to repeat, and
+    // a second `+` has nothing left to repeat) -- `new RegExp` throws. Confirms both that
+    // extraction does not crash and that it protects exactly the literal term.
+    const text = 'The driver is written in C++ for this platform.\n';
+    const regions = extractProtectedRegions(text, {
+      ...defaultProtectedRegionOptions,
+      approvedTerms: ['C++'],
+    });
+    const approved = regions.filter((r) => r.kind === 'approved-term');
+    expect(approved).toHaveLength(1);
+    expect(text.slice(approved[0]?.range.start, approved[0]?.range.end)).toBe('C++');
+  });
+
+  it('matches ".NET" literally, not "any-character then NET"', () => {
+    // Unescaped, the leading `.` in `.NET` is the regex wildcard, so it would also match
+    // "xNET" (any single character in place of the dot). `xNET` here must stay unprotected while
+    // the real ".NET" occurrence is protected, which only holds if the `.` is escaped.
+    const text = 'Do not confuse xNET with the .NET runtime.\n';
+    const regions = extractProtectedRegions(text, {
+      ...defaultProtectedRegionOptions,
+      approvedTerms: ['.NET'],
+    });
+    const approved = regions.filter((r) => r.kind === 'approved-term');
+    expect(approved).toHaveLength(1);
+    expect(text.slice(approved[0]?.range.start, approved[0]?.range.end)).toBe('.NET');
+    const bogus = text.indexOf('xNET');
+    expect(approved.some((r) => r.range.start <= bogus && bogus + 4 <= r.range.end)).toBe(false);
+  });
+
+  it('matches "A|B" literally, not as alternation between bare "A" and "B"', () => {
+    // Unescaped, `|` is regex alternation: an unescaped `A|B` matcher would protect every bare "A"
+    // and every bare "B" in the document, not just the combined token. Only the three-character
+    // "A|B" span may come back as an approved-term region.
+    const text = 'The A rating and the B rating combine into an A|B composite rating.\n';
+    const regions = extractProtectedRegions(text, {
+      ...defaultProtectedRegionOptions,
+      approvedTerms: ['A|B'],
+    });
+    const approved = regions.filter((r) => r.kind === 'approved-term');
+    expect(approved).toHaveLength(1);
+    expect(text.slice(approved[0]?.range.start, approved[0]?.range.end)).toBe('A|B');
   });
 });
 

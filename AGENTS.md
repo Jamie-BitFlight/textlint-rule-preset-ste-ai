@@ -18,6 +18,44 @@ This file lists instructions for AI (artificial intelligence) agents in this rep
    - Replace or remove commands, paths, and claims that the change invalidates.
    - Also replace or remove any manually maintained, derivable data that the change invalidates.
 
+## Notice a problem, log it — never silently skip it
+
+Learned from a real incident. An agent was fixing an unrelated pull request (PR). It ran this
+project's own preset against `docs/configuration.md`. It found two genuine hard lint errors: a
+52-word sentence, graded far above the configured limit. Also an abbreviation used before it was
+introduced. The agent confirmed both predated the change in progress. It judged them out of
+scope. It moved on without recording them anywhere.
+
+The finding was real. It was verified. Then it simply vanished. It existed only inside a
+conversation nobody would read again. A defect an agent noticed, and chose not to log, is worse
+than one nobody noticed. It looks like the codebase was checked and passed.
+
+**Out of scope for the current change is never a reason to leave a verified problem unrecorded.**
+
+Work on one task can surface a confirmed problem outside that task's scope. A pre-existing test
+failure. A stale doc. A lint error unrelated to the current diff. A design gap. A security
+concern. File it before moving on:
+
+1. Confirm the problem is real and pre-existing.
+   - Check it against `git show HEAD:<path>` before attributing it elsewhere.
+   - A `git stash` also works, for a change not yet committed.
+2. Open a GitHub issue.
+   - Name the file and line.
+   - Quote the exact error or symptom.
+   - State how it was found.
+   - Give a reproduction command.
+   - Use the `bug` label, or the closest fit.
+3. Reference the new issue number from wherever the discovery happened.
+   - A PR comment works. A commit message works too.
+   - This leaves a trail back to the finding.
+4. Do not fix it inline as part of the unrelated change.
+   - An exception applies only when the fix is small and safe.
+   - The fix must also sit directly next to work already touching that exact file.
+   - This matches this project's own scope discipline against widening a change on a whim. See
+     `CLAUDE.md`.
+
+Silence is never acceptable here. "Not my task" is not a reason to leave a real finding unlogged.
+
 ## Delegation gotchas
 
 Learned from repeated multi-agent dispatch failures in this session. Read this before dispatching `isolation: "worktree"` agents in bulk.

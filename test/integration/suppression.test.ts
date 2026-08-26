@@ -58,20 +58,21 @@ const admonitionDoc = (kind: 'WARNING' | 'NOTE'): string =>
 const CANDIDATE_RULE = 'passive-voice-candidate';
 
 /**
- * The message a withheld `passive-voice-candidate` diagnostic actually carries, obtained by running
- * the same suppression path (`candidateRecord` in `src/analysis/analyse.ts`) the tests below
- * exercise, rather than hardcoded — a suppression record whose `message` construction silently
- * swapped in an unrelated (but still non-empty) string would satisfy a bare `toBeTruthy()` check
- * without this comparison. Not the rule's literal wording either, so an unrelated tweak to it
- * doesn't break this file: this value is derived from a live suppressed run at test time.
+ * The message a withheld `passive-voice-candidate` diagnostic actually carries, read directly off
+ * an *unsuppressed* candidate's own `reason` field — not through `candidateRecord`
+ * (`src/analysis/analyse.ts`), the function under test below. Deriving it from a suppressed run
+ * instead (as an earlier revision of this file did) makes the comparison a false oracle: both the
+ * expected and actual values would then flow through `candidateRecord`, so a bug that replaces
+ * `candidate.reason` with any unrelated constant changes both sides together and the assertion
+ * keeps passing. Reading `candidates[].reason` directly from an unsuppressed run, before
+ * `candidateRecord` ever sees it, is independent of that function and so actually verifies its
+ * mapping. Not the rule's literal wording either, so an unrelated wording tweak in
+ * `candidate-rules.ts` doesn't break this file: this value is derived from its current output at
+ * test time.
  */
 const LIVE_PASSIVE_VOICE_MESSAGE = analyseTextDeterministic(
-  [
-    '<!-- ste-ai-ignore-next-line passive-voice-candidate -- probe. -->',
-    'The bracket is removed by the technician.',
-    '',
-  ].join('\n'),
-).suppressions.find((s) => s.ruleId === CANDIDATE_RULE)?.message;
+  'The bracket is removed by the technician.\n',
+).candidates.find((c) => c.ruleId === CANDIDATE_RULE)?.reason;
 
 /** Only the vocabulary findings: the fixtures also raise candidates the assertions do not concern. */
 function vocabulary(findings: readonly { readonly ruleId: string }[]): string[] {

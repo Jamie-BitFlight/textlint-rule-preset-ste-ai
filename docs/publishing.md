@@ -15,8 +15,11 @@ The npm publish uses trusted publishing (OIDC). Trusted publishing does not need
 
 ## One-time npm setup
 
-The package does not exist on npm yet. A maintainer must bootstrap the package once before npm can
-attach a trusted publisher:
+Check `npm view textlint-rule-preset-ste-ai` first. An existing package means this section is
+already done.
+
+If the package has not been published to npm yet, a maintainer must bootstrap it once. This lets
+npm attach a trusted publisher:
 
 1. Sign in to npm with an account that owns the package name and has two-factor authentication
    enabled.

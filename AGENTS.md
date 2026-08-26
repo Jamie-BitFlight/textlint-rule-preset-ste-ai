@@ -17,7 +17,6 @@ This file lists instructions for AI (artificial intelligence) agents in this rep
    - Update stale behavior descriptions.
    - Replace or remove commands, paths, and claims that the change invalidates.
    - Also replace or remove any manually maintained, derivable data that the change invalidates.
-4. Before writing or editing prose in this repository, load the `ste-ai-prose-style` skill.
 
 ## Notice a problem, log it — never silently skip it
 

@@ -18,7 +18,7 @@
  * What the baseline records, and why it is not a plain per-file count.
  *
  * A first version of this script recorded one integer per file: how many error-severity findings
- * it had. Review found three ways that hid a regression, each fixed in turn:
+ * it had. Review found five ways that hid a regression, each fixed in turn:
  *
  *   - `--update` rewrote the baseline with whatever the working tree currently produced, including
  *     a larger count than before. A contributor who introduced new errors and ran `--update` to
@@ -28,16 +28,21 @@
  *   - A file's total can stay unchanged while its content of errors changes: fix one finding,
  *     introduce a different one in the same edit, and the count before and after is identical. The
  *     baseline moved from one total per file to one count per distinct (ruleId, message) pair.
- *   - Even that was not enough: the same (ruleId, message) pair can occur many times in one file
- *     with no distinguishing detail in the message itself -- `docs/architecture.md` carries 31
- *     separate semicolons, every one reported as the identical string. Fixing five of those and
- *     introducing five different ones left the per-message count unchanged, so the swap was
- *     invisible. Each finding's key now also folds in a normalized slice of the source text
- *     surrounding it (see `findingKey` and `localContext`), not merely its rule and message. Line
- *     and column stay out of the key on purpose: prose gets reflowed and restructured, and a
- *     line-anchored identity would flag every finding in a file as "new" the moment an unrelated
- *     paragraph shifted them down. Nearby source text does not have that problem, because it moves
- *     with the finding rather than the file's other content.
+ *   - The same (ruleId, message) pair can occur many times in one file with no distinguishing
+ *     detail in the message itself -- `docs/architecture.md` carries 31 separate semicolons, every
+ *     one reported as the identical string. Fixing five of those and introducing five different
+ *     ones left the per-message count unchanged, so the swap was invisible. Each finding's key
+ *     folded in a normalized slice of the source text surrounding it (see `localContext`), not
+ *     merely its rule and message. Line and column stay out of the key on purpose: prose gets
+ *     reflowed and restructured, and a line-anchored identity would flag every finding in a file
+ *     as "new" the moment an unrelated paragraph shifted them down. Nearby source text does not
+ *     have that problem, because it moves with the finding rather than the file's other content.
+ *   - Even the local-context fingerprint is not always unique: `fixtures/LICENSES.md` quotes the
+ *     identical SQLite public-domain licence statement, verbatim, for four separate fixtures. No
+ *     context radius distinguishes those -- the surrounding text really is byte-identical, not
+ *     merely similarly shaped. `findingKey` now also folds in each finding's 1-based ordinal
+ *     position among findings sharing its `(ruleId, message, context)` triple, assigned in
+ *     document order. See `findingKey`'s own comment for the tradeoff this makes.
  *   - A related gap: a file that improves without reaching zero was never required to record that
  *     improvement, since only a fully clean file counted as `stale`. The unrecorded slack could
  *     then be spent back later -- reintroducing exactly the findings that were removed -- without
@@ -121,12 +126,31 @@ function localContext(source, index) {
 }
 
 /**
- * `ruleId`, `message`, and a local-context fingerprint joined into one baseline key, with a
- * separator that cannot appear in any of the three fields: `message` is a single-line string, and
- * `localContext` collapses all whitespace, including newlines, to single spaces.
+ * `ruleId`, `message`, a local-context fingerprint, and an occurrence ordinal joined into one
+ * baseline key, with a separator that cannot appear in the first three fields: `message` is a
+ * single-line string, `localContext` collapses all whitespace, including newlines, to single
+ * spaces, and `ordinal` is a decimal integer.
+ *
+ * The ordinal exists because `localContext` alone is not always unique within a file. Review
+ * found `fixtures/LICENSES.md` quoting the identical SQLite public-domain licence statement
+ * verbatim for four separate fixtures -- same rule, same message, same surrounding text, because
+ * the surrounding text really is byte-identical, not merely similarly shaped. No context radius
+ * fixes that; the four occurrences are indistinguishable by content. `ordinal` is each finding's
+ * 1-based position among findings sharing the same `(ruleId, message, context)` triple, assigned
+ * in document order (see `lint`'s `groupOrdinal`).
+ *
+ * This trades a rare, safe failure mode for a real one it closes. Inserting or removing an earlier
+ * same-triple occurrence shifts every later occurrence's ordinal, so an edit far from a finding
+ * that never itself changed can still make `--update` see it as new-here/missing-there. That shows
+ * up as demanding a baseline update for content that did not really regress -- a false positive,
+ * caught by `--update` and fixed by running it. The alternative, ordinal-free scheme signals
+ * nothing when a real occurrence is quietly swapped for a different one inside a repeated block --
+ * a false negative, which is silent and is exactly what this ratchet exists to rule out. Between a
+ * ratchet that is occasionally too strict and one that can be silently fooled, only the first one
+ * is doing its job.
  */
-function findingKey(ruleId, message, context) {
-  return [ruleId, message, context].join(FINDING_KEY_SEPARATOR);
+function findingKey(ruleId, message, context, ordinal) {
+  return [ruleId, message, context, String(ordinal)].join(FINDING_KEY_SEPARATOR);
 }
 
 function splitFindingKey(key) {
@@ -175,10 +199,20 @@ function lint() {
     if (errorMessages.length === 0) continue;
     // Read once per file with at least one error, not once per message.
     const source = readFileSync(file.filePath, 'utf8');
+    // textlint reports messages in document order already; sorting by index makes that explicit
+    // and correct even if that ever changes, since ordinal assignment depends on it.
+    const ordered = [...errorMessages].toSorted((a, b) => a.index - b.index);
+    const groupOrdinal = new Map();
     const findings = new Map();
-    for (const message of errorMessages) {
+    for (const message of ordered) {
       const context = localContext(source, message.index);
-      const key = findingKey(message.ruleId, message.message, context);
+      const groupKey = [message.ruleId, message.message, context].join(FINDING_KEY_SEPARATOR);
+      const ordinal = (groupOrdinal.get(groupKey) ?? 0) + 1;
+      groupOrdinal.set(groupKey, ordinal);
+      const key = findingKey(message.ruleId, message.message, context, ordinal);
+      // Each key is now unique per file by construction (ordinal strictly increases within a
+      // group), so this is always 1 -- kept as an accumulation, not a hardcoded 1, only so a
+      // future change to key construction fails loudly here instead of silently overwriting.
       findings.set(key, (findings.get(key) ?? 0) + 1);
     }
     byFile.set(path, findings);

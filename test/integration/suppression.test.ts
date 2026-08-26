@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 import { analyseText, analyseTextDeterministic } from '../../src/analysis/analyse.js';
+import { resolveEvidenceRange } from '../../src/semantic/analyse.js';
 import {
   ScriptedTransport,
   startFakeSemanticService,
@@ -55,6 +56,23 @@ const admonitionDoc = (kind: 'WARNING' | 'NOTE'): string =>
   ].join('\n');
 
 const CANDIDATE_RULE = 'passive-voice-candidate';
+
+/**
+ * The message a withheld `passive-voice-candidate` diagnostic actually carries, read directly off
+ * an *unsuppressed* candidate's own `reason` field — not through `candidateRecord`
+ * (`src/analysis/analyse.ts`), the function under test below. Deriving it from a suppressed run
+ * instead (as an earlier revision of this file did) makes the comparison a false oracle: both the
+ * expected and actual values would then flow through `candidateRecord`, so a bug that replaces
+ * `candidate.reason` with any unrelated constant changes both sides together and the assertion
+ * keeps passing. Reading `candidates[].reason` directly from an unsuppressed run, before
+ * `candidateRecord` ever sees it, is independent of that function and so actually verifies its
+ * mapping. Not the rule's literal wording either, so an unrelated wording tweak in
+ * `candidate-rules.ts` doesn't break this file: this value is derived from its current output at
+ * test time.
+ */
+const LIVE_PASSIVE_VOICE_MESSAGE = analyseTextDeterministic(
+  'The bracket is removed by the technician.\n',
+).candidates.find((c) => c.ruleId === CANDIDATE_RULE)?.reason;
 
 /** Only the vocabulary findings: the fixtures also raise candidates the assertions do not concern. */
 function vocabulary(findings: readonly { readonly ruleId: string }[]): string[] {
@@ -338,8 +356,24 @@ describe('a refused candidate reports its refusal exactly once', () => {
     });
 
     const diagnostic = result.diagnostics.find((d) => d.ruleId === CANDIDATE_RULE);
+    const candidate = result.candidates.find((c) => c.ruleId === CANDIDATE_RULE);
+    if (candidate === undefined) throw new Error('expected a passive-voice-candidate candidate');
+    // Call the production remap directly rather than recomputing its formula by hand here: this
+    // proves the diagnostic's range is whatever `resolveEvidenceRange` actually produces, not
+    // whatever offset arithmetic this test happens to reimplement — the two would silently drift
+    // apart the moment either one changed.
+    const expectedRange = resolveEvidenceRange(
+      result.document,
+      candidate,
+      evidenceStart,
+      evidenceEnd,
+    );
     // Positive control: the remapped range really did diverge from the candidate's own span, which
     // is the exact condition this test is for.
+    expect(expectedRange).not.toEqual(candidate.range);
+    expect(diagnostic?.range).toEqual(expectedRange);
+    // Without this, a bug inside resolveEvidenceRange itself (as opposed to the diagnostic
+    // pipeline failing to use its output) would pass both assertions above.
     expect(diagnostic?.range.start).toBe(text.indexOf(SENTENCE) + evidenceStart);
     expect(diagnostic?.range.start).not.toBe(text.indexOf('is opened by'));
 
@@ -389,7 +423,11 @@ describe('a suppressed candidate is never sent to the model', () => {
     ]);
     const record = result.suppressions.find((s) => s.ruleId === 'passive-voice-candidate');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
+    // Compared against a live run, not a bare truthy check: a record-construction bug that
+    // stored some unrelated non-empty string would satisfy `toBeTruthy()`. Not the rule's literal
+    // wording hardcoded here either, so an unrelated wording tweak in candidate-rules.ts doesn't
+    // break this file.
+    expect(record?.message).toBe(LIVE_PASSIVE_VOICE_MESSAGE);
     expect(record?.reason).toBe('Quoted verbatim from the supplier.');
     expect(result.notices.map((n) => n.code)).not.toContain('suppression-unused');
   });
@@ -445,7 +483,11 @@ describe('a suppressed candidate is never sent to the model', () => {
     const record = result.suppressions.find((s) => s.ruleId === CANDIDATE_RULE);
     expect(record?.reason).toBe('directive text is not prose');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
+    // Compared against a live run, not a bare truthy check: a record-construction bug that
+    // stored some unrelated non-empty string would satisfy `toBeTruthy()`. Not the rule's literal
+    // wording hardcoded here either, so an unrelated wording tweak in candidate-rules.ts doesn't
+    // break this file.
+    expect(record?.message).toBe(LIVE_PASSIVE_VOICE_MESSAGE);
   });
 
   it('redacts a directive comment from a surviving candidate that merely shares its sentence', async () => {

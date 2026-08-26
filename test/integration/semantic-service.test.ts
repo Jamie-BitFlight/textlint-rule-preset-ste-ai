@@ -10,8 +10,9 @@ import {
 } from '../helpers/fake-semantic-service.js';
 
 /**
- * The schema's own default, not a copy of it — `src/core/config.ts:118` is the single source of
- * truth for this number and this constant tracks it even if that default ever changes.
+ * The schema's own default, not a copy of it — `semanticConfigSchema`'s `defaultConfidenceThreshold`
+ * field is the single source of truth for this number and this constant tracks it even if that
+ * default ever changes.
  */
 const DEFAULT_CONFIDENCE_THRESHOLD = semanticConfigSchema.parse({}).defaultConfidenceThreshold;
 
@@ -429,12 +430,15 @@ describe('semantic autofix gate', () => {
     // second, later call. Keying off the literal word "REWRITTEN" instead would coincidentally work
     // today (it happens to appear in the real prompt template) but would break the moment that
     // prompt's wording changed, for reasons unrelated to the gating behaviour under test.
+    const REPLACEMENT = 'Remove the cover';
     let callCount = 0;
+    let secondCallUser = '';
     service = await startFakeSemanticService({
       handler: (body) => {
         callCount += 1;
         const isGate = callCount > 1;
         const user = body.messages?.find((m) => m.role === 'user')?.content ?? '';
+        if (isGate) secondCallUser = user;
         const ruleId = /ruleId:\s*(\S+)/.exec(user)?.[1] ?? 'unknown';
         return {
           content: verdictJson({
@@ -444,7 +448,7 @@ describe('semantic autofix gate', () => {
             evidenceStart: 0,
             evidenceEnd: isGate ? 0 : 6,
             explanation: isGate ? 'no difference found' : 'Two actions.',
-            suggestedReplacements: isGate ? [] : ['Remove the cover'],
+            suggestedReplacements: isGate ? [] : [REPLACEMENT],
             meaningPreserved: true,
           }),
         };
@@ -460,6 +464,14 @@ describe('semantic autofix gate', () => {
     // `requestCount()` is the fake server's own ground truth, not a count this test's handler
     // maintains by hand.
     expect(service.requestCount()).toBe(2);
+    // Order alone proves *a* second call happened, not that it carried the gate's actual payload —
+    // a regression that fired a second, *wrong* request (e.g. a duplicate of the primary
+    // evaluation) would satisfy every assertion above. `rewrite-equivalence.md`'s own template
+    // interpolates the real `rewritten` value verbatim into the user message
+    // (`REWRITTEN (offsets...): {{rewritten}}`), so requiring the primary evaluation's own
+    // suggested replacement to appear in the second call's content ties this assertion to the data
+    // actually flowing through `verifyRewriteEquivalence`, not to the template's prose.
+    expect(secondCallUser).toContain(REPLACEMENT);
     const fixed = result.diagnostics.find(
       (d) => d.producedBy === 'semantic' && d.fix !== undefined,
     );

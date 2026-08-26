@@ -164,9 +164,9 @@ is emitted at `warning`. `note` is not a safety register, so it never triggers t
 
 ### Why this differs from autofix
 
-`autofix.allowInAdmonitions` is typed `z.literal(false)` (`src/core/config.ts:62`). It can never
-be set to true. `suppressions.allowInAdmonitions` is an ordinary boolean, and its default is also
-false. The asymmetry between them is deliberate.
+`autofix.allowInAdmonitions` is typed `z.literal(false)` in `autofixPolicySchema`
+(`src/core/config.ts`). It can never be set to true. `suppressions.allowInAdmonitions` is an
+ordinary boolean, and its default is also false. The asymmetry between them is deliberate.
 
 Rewriting the source of a safety notice and withholding a report about one are different acts. The
 first changes what a reader in front of the equipment is told. No model verdict, and no rule
@@ -228,8 +228,9 @@ Nobody finds out, unless the tool says so.
 
 ## Known limitation: suppressions are not visible in a textlint report
 
-The textlint adapter surfaces run notices only at `warning` and `error`
-(`src/textlint/adapter.ts:336`). As a result, the `info`-level `suppressions-applied` and
+The textlint adapter's run-notice reporting loop skips every `info`-level notice
+(`src/textlint/adapter.ts`), surfacing only `warning` and `error`. As a result, the `info`-level
+`suppressions-applied` and
 `suppression-unused` notices never reach a textlint report. Suppressed diagnostics themselves
 never reach the adapter at all. That omission is by design: suppressing a finding is the core's
 decision, expressed by not producing the diagnostic.

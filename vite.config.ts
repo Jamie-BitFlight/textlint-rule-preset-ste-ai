@@ -80,7 +80,6 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     environment: 'node',
     globals: true,
-    maxWorkers: 1,
     testTimeout: 20_000,
     coverage: {
       provider: 'v8',

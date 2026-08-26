@@ -110,7 +110,7 @@ repos:
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.txt')
 [ -z "$files" ] && exit 0
 git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' '*.txt' \
-  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review
+  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review --
 ```
 
 See [`docs/pre-commit-hooks.md`](docs/pre-commit-hooks.md) for both, including why the manifest

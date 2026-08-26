@@ -83,7 +83,7 @@ shell script. It runs on every commit, unfiltered, unless the script filters it 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.txt')
 [ -z "$files" ] && exit 0
 git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' '*.txt' \
-  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review
+  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review --
 ```
 
 `git diff --cached --name-only` lists staged files. `--diff-filter=ACMR` keeps only files that
@@ -98,11 +98,37 @@ one argument. Storing that null-byte-separated output in a shell variable is not
 implementations. `$(...)` can truncate at the first null byte. The file list is piped directly
 instead, rather than stored in `$files` a second time.
 
+The trailing `--` matters too, right before `xargs` hands `npx` its filenames. A tracked file can
+have a name that starts with a hyphen — `--notes.md`, unusual but legal. Without `--`, that name
+reaches the CLI's argument parser looking like an unknown flag. The CLI then exits `2`, and never
+lints it. `--` tells the parser that everything after it is a filename, never an option.
+`.pre-commit-hooks.yaml`'s own `entry` carries the same `--`, for the same reason.
+
 Do not write `npx --yes textlint-rule-preset-ste-ai lint docs/**/*.md` instead.
-`.husky/pre-commit` runs under `sh`, not an interactive `bash` with `shopt -s globstar` set. Under
-`sh`, `**` is not a recursive glob. It matches at most one directory level. `docs/**/*.md` then
-silently misses a file directly in `docs/`, while still catching one in `docs/sub/`. The
-staged-files form above never builds a glob at all, so this problem never comes up.
+`.husky/pre-commit` runs under `sh`. It is not an interactive `bash` with `shopt -s globstar` set.
+Under `sh`, `**` is not a recursive glob. It matches at most one directory level. `docs/**/*.md`
+then silently misses a file directly in `docs/`, while still catching one in `docs/sub/`. The
+staged-files form above never builds a glob at all. This problem never comes up there.
+
+### Partial staging (Husky only)
+
+The snippet above lints whatever is on disk at each staged path. It does not lint the staged
+content itself. Stage a clean fix to a file, then edit that same file further, without staging
+the new edit. The hook then lints your unstaged edit — not the clean version that would actually
+be committed. The reverse also happens. A real violation you staged can pass, if an unstaged edit
+on top of it happens to look clean on disk. Either way, what got checked is not what `git commit`
+would record.
+
+The Python `pre-commit` framework and `prek` do not have this problem. Verified directly: both
+stash unstaged changes to a patch file before running any hook. Both restore the patch afterwards.
+Every hook, including this one, then only ever sees staged content. Husky has no equivalent built
+in. This CLI has no way to read a file's staged content either. It only reads real paths off disk
+(`readFileSync`). Tracked as
+[issue #109](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/109).
+
+A Husky user who needs this guarantee today has two options. Route through
+`.pre-commit-hooks.yaml` instead — `pre-commit` and `prek` both run fine under Husky, not only
+standalone. Or avoid partially staging a file this hook covers.
 
 ## Both: the exit code contract
 

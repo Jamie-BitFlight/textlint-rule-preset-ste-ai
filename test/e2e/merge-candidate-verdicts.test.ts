@@ -340,6 +340,14 @@ describe('merge-candidate-verdicts', () => {
   });
 
   describe('what --check catches in a committed annotation', () => {
+    // This first `run` looks like a redundant re-assertion of "a clean corpus exits 0" — the
+    // `what it writes` tests above already prove that independently on this same corpus shape.
+    // It is not removable, though: `makeCorpus` commits an annotation with no `candidateAdjudications`
+    // field at all, so this call is the write pass that puts one there. `mutate` below (via
+    // `firstAdjudication`) expects that field to already exist; dropping this call makes every
+    // case that edits an existing adjudication fail with "candidateAdjudications is not an array"
+    // before it ever reaches the behaviour under test. Confirmed by deleting it and watching every
+    // case below that edits an existing adjudication fail that way.
     const checked = (mutate: (annotation: MutableAnnotation) => void) => {
       const layout = makeCorpus(withRow(agentVerdicts));
       expect(run(layout).status).toBe(0);

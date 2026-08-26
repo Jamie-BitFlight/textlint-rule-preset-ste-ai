@@ -203,15 +203,19 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
     walk(ast.program, (node) => {
       if (!t.isObjectExpression(node)) return;
       for (const prop of node.properties) {
-        if (!t.isObjectProperty(prop) || prop.computed) continue;
-        // A key can be an Identifier (`evaluatorId: ...`) or, equally validly, a StringLiteral
-        // (`'evaluatorId': ...`) -- review found the prior Identifier-only check silently skipped
-        // the latter, with no throw, letting a quoted-key producer vanish from the derived set
-        // without failing any test. Only an Identifier key can be `shorthand`.
-        const keyName = t.isIdentifier(prop.key)
-          ? prop.key.name
-          : t.isStringLiteral(prop.key)
-            ? prop.key.value
+        if (!t.isObjectProperty(prop)) continue;
+        // A key can be an Identifier (`evaluatorId: ...`), a StringLiteral (`'evaluatorId': ...`),
+        // or a computed literal (`['evaluatorId']: ...`) -- review found this test skipping first
+        // the StringLiteral form, then this one, with no throw either time, letting such a
+        // producer vanish from the derived set without failing any test. A computed Identifier key
+        // (`[someVariable]: ...`) names a genuinely dynamic property and is deliberately excluded
+        // here: unlike a computed StringLiteral, it does not statically read "evaluatorId" and
+        // could just as easily be an unrelated computed property this test has no business
+        // resolving. Only a non-computed Identifier key can be `shorthand`.
+        const keyName = t.isStringLiteral(prop.key)
+          ? prop.key.value
+          : !prop.computed && t.isIdentifier(prop.key)
+            ? prop.key.name
             : undefined;
         if (keyName !== 'evaluatorId') continue;
 

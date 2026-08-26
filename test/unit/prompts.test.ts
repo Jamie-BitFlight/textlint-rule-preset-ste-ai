@@ -9,73 +9,92 @@ import {
   parsePromptFile,
 } from '../../src/semantic/prompt-loader.js';
 import { candidateFor, EVALUATOR_PAYLOADS } from '../helpers/evaluator-payloads.js';
+import { discoverPromptFiles } from '../helpers/prompt-corpus.js';
 
 const provider = new FilePromptProvider();
 const config = semanticConfigSchema.parse({ enabled: true, model: 'test-model' });
 const PAYLOADS = EVALUATOR_PAYLOADS;
 
+// Every prompt asset in every version directory, not only `v1` -- review found these safety
+// checks hard-coded to `provider.get('v1', ...)` while `prompt-corpus.test.ts` already discovered
+// every version. `docs/prompt-authoring.md` directs a behavioral prompt change into a new version
+// directory, so a check pinned to `v1` alone would let a `v2` prompt skip every safety assertion
+// below while CI stayed green.
+const promptFiles = discoverPromptFiles();
+
 describe('prompt assets', () => {
-  it('every evaluator has a v1 prompt asset whose id and version match', () => {
-    for (const definition of evaluatorDefinitions) {
-      const template = provider.get('v1', definition.id);
-      expect(template.id).toBe(definition.id);
-      expect(template.version).toBe('v1');
+  it('every evaluator has a prompt asset, in every discovered version, whose id and version match', () => {
+    expect(promptFiles.length).toBeGreaterThan(0);
+    for (const file of promptFiles) {
+      const template = provider.get(file.version, file.evaluatorId);
+      expect(template.id).toBe(file.evaluatorId);
+      expect(template.version).toBe(file.version);
     }
   });
 
   it('every prompt permits an uncertain answer and forbids prose output', () => {
-    for (const definition of evaluatorDefinitions) {
-      const { system } = provider.get('v1', definition.id);
-      expect(system, definition.id).toContain('uncertain');
-      expect(system.toLowerCase().replace(/\s+/g, ' '), definition.id).toContain(
+    for (const file of promptFiles) {
+      const { system } = provider.get(file.version, file.evaluatorId);
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(system, label).toContain('uncertain');
+      expect(system.toLowerCase().replace(/\s+/g, ' '), label).toContain(
         'return only the json object',
       );
     }
   });
 
   it('every prompt forbids changing literals, negation, order, quantities and modal force', () => {
-    for (const definition of evaluatorDefinitions) {
-      const { system } = provider.get('v1', definition.id);
+    for (const file of promptFiles) {
+      const { system } = provider.get(file.version, file.evaluatorId);
+      const label = `${file.version}/${file.evaluatorId}`;
       // Prompts are hard-wrapped, so a phrase may span a line break.
       const lower = system.toLowerCase().replace(/\s+/g, ' ');
-      expect(lower, `${definition.id}: negation`).toContain('negation');
-      expect(lower, `${definition.id}: modal`).toContain('modal force');
-      expect(lower, `${definition.id}: quantities`).toMatch(/quantit|tolerance/);
-      expect(lower, `${definition.id}: identifiers`).toMatch(/identifier|component|literal/);
+      expect(lower, `${label}: negation`).toContain('negation');
+      expect(lower, `${label}: modal`).toContain('modal force');
+      expect(lower, `${label}: quantities`).toMatch(/quantit|tolerance/);
+      expect(lower, `${label}: identifiers`).toMatch(/identifier|component|literal/);
     }
   });
 
   it('every prompt asks for an evidence span', () => {
-    for (const definition of evaluatorDefinitions) {
-      const { system } = provider.get('v1', definition.id);
-      expect(system, definition.id).toContain('evidenceStart');
-      expect(system, definition.id).toContain('evidenceEnd');
+    for (const file of promptFiles) {
+      const { system } = provider.get(file.version, file.evaluatorId);
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(system, label).toContain('evidenceStart');
+      expect(system, label).toContain('evidenceEnd');
     }
   });
 
   it('no prompt asks the model to reveal its reasoning', () => {
-    for (const definition of evaluatorDefinitions) {
-      const flat = provider.get('v1', definition.id).system.toLowerCase().replace(/\s+/g, ' ');
-      expect(flat, definition.id).toContain('do not explain your reasoning');
-      expect(flat, definition.id).not.toMatch(/think step by step|chain of thought/);
+    for (const file of promptFiles) {
+      const flat = provider
+        .get(file.version, file.evaluatorId)
+        .system.toLowerCase()
+        .replace(/\s+/g, ' ');
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(flat, label).toContain('do not explain your reasoning');
+      expect(flat, label).not.toMatch(/think step by step|chain of thought/);
     }
   });
 
   it('every prompt carries compliant, violating and hard-negative examples', () => {
-    for (const definition of evaluatorDefinitions) {
-      const { system } = provider.get('v1', definition.id);
-      expect(system, `${definition.id}: compliant example`).toMatch(/Compliant:/);
-      expect(system, `${definition.id}: violating example`).toMatch(/Violation:/);
-      expect(system, `${definition.id}: hard negative`).toMatch(/Hard negative/);
+    for (const file of promptFiles) {
+      const { system } = provider.get(file.version, file.evaluatorId);
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(system, `${label}: compliant example`).toMatch(/Compliant:/);
+      expect(system, `${label}: violating example`).toMatch(/Violation:/);
+      expect(system, `${label}: hard negative`).toMatch(/Hard negative/);
     }
   });
 
   it('every prompt forbids rewriting the whole document', () => {
-    for (const definition of evaluatorDefinitions) {
-      const flat = provider.get('v1', definition.id).system.toLowerCase().replace(/\s+/g, ' ');
-      expect(flat, definition.id).toMatch(
-        /do not rewrite the document|you are a gate, not an editor/,
-      );
+    for (const file of promptFiles) {
+      const flat = provider
+        .get(file.version, file.evaluatorId)
+        .system.toLowerCase()
+        .replace(/\s+/g, ' ');
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(flat, label).toMatch(/do not rewrite the document|you are a gate, not an editor/);
     }
   });
 });

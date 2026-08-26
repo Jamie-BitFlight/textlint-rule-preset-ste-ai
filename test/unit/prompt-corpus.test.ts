@@ -1,11 +1,9 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vite-plus/test';
 import { semanticConfigSchema } from '../../src/core/config.js';
 import { buildEvaluatorRequest, evaluatorDefinitions } from '../../src/semantic/evaluators.js';
 import { FilePromptProvider, parsePromptFile } from '../../src/semantic/prompt-loader.js';
 import { candidateFor, MULTI_VALUE_PAYLOADS } from '../helpers/evaluator-payloads.js';
+import { discoverPromptFiles } from '../helpers/prompt-corpus.js';
 
 /**
  * Corpus-wide invariants over `prompts/<version>/*.md`.
@@ -21,8 +19,6 @@ import { candidateFor, MULTI_VALUE_PAYLOADS } from '../helpers/evaluator-payload
  * at a time, and each fix was applied only to the file the reviewer had named. Discovery is what
  * converts "fix the two files that were pointed at" into "the corpus holds or the build fails".
  */
-
-const PROMPTS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 
 /**
  * The only keys `<<<META>>>` may carry.
@@ -46,33 +42,6 @@ const ALLOWED_META_KEYS = new Set(['id', 'version', 'task']);
  * the pipeline rather than a hand-built fixture and would have caught this.
  */
 const SHARED_VARIABLES = new Set(['ruleId', 'passage', 'invariants', 'mode']);
-
-interface PromptFile {
-  readonly version: string;
-  readonly evaluatorId: string;
-  readonly path: string;
-  readonly text: string;
-}
-
-/** Discover every prompt asset in the repository, for every version directory present. */
-function discoverPromptFiles(): readonly PromptFile[] {
-  const found: PromptFile[] = [];
-  for (const version of readdirSync(PROMPTS_ROOT)) {
-    const versionDir = join(PROMPTS_ROOT, version);
-    if (!statSync(versionDir).isDirectory()) continue;
-    for (const entry of readdirSync(versionDir)) {
-      if (!entry.endsWith('.md')) continue;
-      const path = join(versionDir, entry);
-      found.push({
-        version,
-        evaluatorId: entry.slice(0, -'.md'.length),
-        path,
-        text: readFileSync(path, 'utf8'),
-      });
-    }
-  }
-  return found;
-}
 
 const promptFiles = discoverPromptFiles();
 
@@ -114,11 +83,16 @@ describe('prompt corpus', () => {
     expect(promptFiles.length).toBeGreaterThan(0);
   });
 
-  it('carries no metadata key outside the allowlist', () => {
+  it('carries exactly the allowed metadata keys, no fewer and no more', () => {
+    // `docs/prompt-authoring.md` claims `<<<META>>>` "carries exactly three keys" -- `id` and
+    // `version` are load-bearing and `parsePromptFile` already throws if either is missing, but
+    // `task` had no such check, so a prompt that omitted it silently passed this test, which only
+    // ever rejected an unexpected fourth key, never a missing one.
     for (const file of promptFiles) {
       const { meta } = parsePromptFile(file.text, file.path);
-      const unexpected = Object.keys(meta).filter((key) => !ALLOWED_META_KEYS.has(key));
-      expect(unexpected, `${file.version}/${file.evaluatorId}`).toEqual([]);
+      expect(new Set(Object.keys(meta)), `${file.version}/${file.evaluatorId}`).toEqual(
+        ALLOWED_META_KEYS,
+      );
     }
   });
 

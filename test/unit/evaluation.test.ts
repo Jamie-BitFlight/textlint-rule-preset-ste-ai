@@ -350,6 +350,10 @@ describe('recall/F1 withholding below the gold-positive floor', () => {
     // The withheld cell reports the count, not the computed ratio -- `recall` above is a real
     // number (0.75), so its formatted form appearing here would mean the withholding never applied.
     expect(text).not.toContain('0.750');
+    // f1Cell is withheld by the same condition as recallCell, but independently -- a regression
+    // that withholds recall correctly while still printing F1's own number (0.774) would satisfy
+    // every assertion above.
+    expect(text).not.toContain('0.774');
   });
 
   it('reports recall and F1 as numbers exactly at the threshold', () => {

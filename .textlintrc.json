@@ -6,7 +6,7 @@
   "rules": {
     "preset-ste-ai": {
       "abbreviation-introduction": {
-        "additionalWellKnown": ["ASD", "MIT", "SHA", "CRLF"]
+        "additionalWellKnown": ["ASD", "MIT", "SHA", "CRLF", "CI", "README"]
       }
     }
   }

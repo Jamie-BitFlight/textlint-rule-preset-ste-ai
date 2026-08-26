@@ -9,11 +9,11 @@
 # "preset-ste-ai", which textlint resolves as a package called `textlint-rule-preset-ste-ai` via
 # Node module resolution. Nothing installs that package into this repo's own node_modules by
 # default -- the root package *is* that package -- so `textlint` printed "No rules found" and the
-# config silently never ran anything. Two configs ship that name: the root one this repo lints its
-# own docs with, and examples/.textlintrc.json, which docs/configuration.md calls "a complete
-# working file". Both are checked here, against a fixture with known, rule-specific violations, so
-# a future edit that breaks resolution (or silently loads zero rules) fails the build instead of
-# shipping unnoticed again.
+# config silently never ran anything. Every `.textlintrc.json` under this repo (excluding
+# node_modules/ and dist/) is discovered and checked here, against a fixture with known,
+# rule-specific violations, so a future edit -- or a new config nobody remembers to add here --
+# that breaks resolution (or silently loads zero rules) fails the build instead of shipping
+# unnoticed again.
 #
 # Usage: scripts/ci/check-textlint-configs-resolve.sh
 set -euo pipefail
@@ -45,8 +45,7 @@ fixture="${RUNNER_TEMP:-/tmp}/ste-ai-config-resolution-fixture.md"
 printf 'Prior to installation, utilise the the bracket.\n' > "$fixture"
 
 check_config() {
-  local label="$1"
-  local config="$2"
+  local config="$1"
   local output status
 
   set +e
@@ -55,33 +54,47 @@ check_config() {
   set -e
 
   if echo "$output" | grep -q "No rules found"; then
-    echo "$label ($config): preset-ste-ai did not resolve -- textlint reported no rules." >&2
+    echo "$config: preset-ste-ai did not resolve -- textlint reported no rules." >&2
     echo "$output" >&2
     exit 1
   fi
 
   if [ "$status" -ne 1 ]; then
-    echo "$label ($config): expected exit 1 (known violations present), got $status." >&2
+    echo "$config: expected exit 1 (known violations present), got $status." >&2
     echo "$output" >&2
     exit 1
   fi
 
   if ! echo "$output" | grep -q "ste-ai/unapproved-vocabulary"; then
-    echo "$label ($config): expected an unapproved-vocabulary finding and did not see one." >&2
+    echo "$config: expected an unapproved-vocabulary finding and did not see one." >&2
     echo "$output" >&2
     exit 1
   fi
 
   if ! echo "$output" | grep -q "ste-ai/no-repeated-words"; then
-    echo "$label ($config): expected a no-repeated-words finding and did not see one." >&2
+    echo "$config: expected a no-repeated-words finding and did not see one." >&2
     echo "$output" >&2
     exit 1
   fi
 
-  echo "$label ($config): preset-ste-ai resolved and ran both expected rules."
+  echo "$config: preset-ste-ai resolved and ran both expected rules."
 }
 
-check_config "root config" ".textlintrc.json"
-check_config "examples config" "examples/.textlintrc.json"
+# Discovered, not hard-coded: a config added later (or moved) must be picked up automatically, or
+# this check stops guarding the thing it exists to guard.
+mapfile -d '' configs < <(
+  find . \
+    \( -path ./node_modules -o -path ./dist -o -path ./.git \) -prune -o \
+    -name '.textlintrc.json' -print0
+)
+
+if [ "${#configs[@]}" -eq 0 ]; then
+  echo "found no .textlintrc.json files to check -- expected at least the root config." >&2
+  exit 2
+fi
+
+for config in "${configs[@]}"; do
+  check_config "${config#./}"
+done
 
 rm -f "$fixture"

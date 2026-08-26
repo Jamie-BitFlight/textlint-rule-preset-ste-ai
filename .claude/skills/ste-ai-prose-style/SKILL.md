@@ -5,13 +5,7 @@ description: Write or edit prose in this repository so it passes this project's 
 
 # Writing prose that already passes this repo's own linter
 
-This repository lints its own documentation with its own preset, `ste-ai`. Every existing doc
-holds to zero hard errors. Reaching that after a full draft costs avoidable rewrite passes.
-Reaching it while drafting does not.
-
-## Before writing a sentence
-
-Hold four numeric limits in mind, not just at review time.
+Hold four numeric limits in mind while drafting, not just at review time.
 
 1. Grade level.
    - The configured Flesch-Kincaid limit is 8 for descriptive prose.
@@ -28,10 +22,6 @@ Hold four numeric limits in mind, not just at review time.
    - Never join two independent clauses with one.
    - Write two sentences instead.
 
-The abbreviation introduction itself belongs in flowing prose, never inside a list item. A pull
-request (PR) is the working example this skill itself uses. Every later mention in this document
-can then write "PR" alone.
-
 ## Lists
 
 Give every item in a list the same trailing punctuation. Either every item ends with a full stop,
@@ -46,7 +36,7 @@ node_modules/.bin/textlint <path>
 ```
 
 A hard `error`-level finding at that point means the draft still needs a rewrite to the limits
-above. It does not mean the finding is safe to leave for later.
+above.
 
 ## What this does not cover
 

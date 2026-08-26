@@ -113,20 +113,11 @@ Rewrapping a paragraph does not change what a directive claims. This linter read
 whitespace. A soft wrap is not a boundary that any part of the analysis recognises. The same
 prose, wrapped or unwrapped, is treated as the same prose.
 
-Measured over the same three sentences written as one long line and as six soft-wrapped ones:
-
-| Property           | Unwrapped | Wrapped   |
-| ------------------ | --------- | --------- |
-| lines              | 1         | 6         |
-| blocks             | 1         | 1         |
-| sentences          | 3         | 3         |
-| words per sentence | 12, 24, 8 | 12, 24, 8 |
-| diagnostics        | —         | identical |
-| candidates         | —         | identical |
-
-Suppressions inherit that property from the block unit. A test asserts this directly: the same
-paragraph, wrapped or unwrapped, withholds the same findings. Neither version emits a
-`suppression-unused` notice.
+Suppressions inherit that property from the block unit.
+`test/unit/suppressions.test.ts`'s "claims the same findings whether the paragraph is soft-wrapped
+or not" asserts this directly, over the same prose written as one line and rewrapped across
+several: the same paragraph, wrapped or unwrapped, withholds the same findings, and neither shape
+emits a `suppression-unused` notice.
 
 An earlier revision of this feature claimed a physical line instead of a block. When a paragraph
 was rewrapped, the offending word could move to a later line. That line was no longer covered, so

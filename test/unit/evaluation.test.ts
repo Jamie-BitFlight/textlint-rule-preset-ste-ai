@@ -6,6 +6,9 @@ import {
   evaluateSemanticEvaluators,
   formatEvaluationReport,
   goldLabelFor,
+  MIN_POSITIVES_FOR_RECALL,
+  type EvaluationReport,
+  type EvaluatorMetrics,
 } from '../../src/evaluation/evaluate.js';
 import type { Annotation } from '../../src/fixture-tools/annotation-schema.js';
 import { fixtureManifestSchema } from '../../src/fixture-tools/manifest-schema.js';
@@ -239,7 +242,11 @@ describe('evaluation run', () => {
       config: { semantic: { enabled: true, cache: false, maxRepairAttempts: 0 } },
       transport,
     });
-    if (report.cases.length === 0) return;
+    // Positive control: the heldout fixtures really do produce candidates for this scripted
+    // transport to fail on. Without this, an early return on an empty result (the shape this test
+    // used to have) would let the fixture corpus shrink to zero heldout candidates and this test
+    // would keep passing while asserting nothing.
+    expect(report.cases.length).toBeGreaterThan(0);
     expect(report.overall.failureRate).toBeGreaterThan(0);
     expect(report.cases.every((c) => c.prediction === 'failed')).toBe(true);
   });
@@ -264,6 +271,9 @@ describe('evaluation run', () => {
     });
     const m = report.overall;
     const decided = m.truePositives + m.falsePositives + m.trueNegatives + m.falseNegatives;
+    // Positive control: at least one case really was decided, so the inequality below is not
+    // vacuously satisfied by every count being zero.
+    expect(decided).toBeGreaterThan(0);
     expect(decided).toBeLessThanOrEqual(m.labelled);
     expect(m.labelled + m.unlabelled).toBe(report.cases.length);
   });
@@ -290,6 +300,64 @@ describe('evaluation run', () => {
       transport,
     });
     expect(transport.requests).toHaveLength(0);
+  });
+});
+
+function metrics(overrides: Partial<EvaluatorMetrics> = {}): EvaluatorMetrics {
+  return {
+    evaluatorId: 'passive-voice-adjudication',
+    truePositives: 0,
+    falsePositives: 0,
+    trueNegatives: 0,
+    falseNegatives: 0,
+    precision: 0.8,
+    recall: 0.75,
+    f1: 0.774,
+    uncertainRate: 0,
+    failureRate: 0,
+    unlabelled: 0,
+    labelled: 20,
+    goldPositives: 20,
+    goldNegatives: 0,
+    latencyMs: { p50: 0, p90: 0, p99: 0, mean: 0 },
+    ...overrides,
+  };
+}
+
+function buildReport(perEvaluator: readonly EvaluatorMetrics[]): EvaluationReport {
+  const overall = perEvaluator[0];
+  if (overall === undefined) throw new Error('at least one evaluator required');
+  return {
+    split: 'heldout',
+    model: 'm',
+    promptVersion: 'v1',
+    endpoint: 'http://x',
+    generatedAt: new Date(0).toISOString(),
+    fixtures: ['f'],
+    overall,
+    perEvaluator,
+    cases: [],
+  };
+}
+
+describe('recall/F1 withholding below the gold-positive floor', () => {
+  it('withholds recall and F1 just below the threshold', () => {
+    const m = metrics({ goldPositives: MIN_POSITIVES_FOR_RECALL - 1 });
+    const text = formatEvaluationReport(buildReport([m]));
+    expect(text).toContain(
+      `recall withheld for ${m.evaluatorId}: ${MIN_POSITIVES_FOR_RECALL - 1} gold positive(s)`,
+    );
+    // The withheld cell reports the count, not the computed ratio -- `recall` above is a real
+    // number (0.75), so its formatted form appearing here would mean the withholding never applied.
+    expect(text).not.toContain('0.750');
+  });
+
+  it('reports recall and F1 as numbers exactly at the threshold', () => {
+    const m = metrics({ goldPositives: MIN_POSITIVES_FOR_RECALL, recall: 0.75, f1: 0.774 });
+    const text = formatEvaluationReport(buildReport([m]));
+    expect(text).not.toContain(`recall withheld for ${m.evaluatorId}`);
+    expect(text).toContain('0.750');
+    expect(text).toContain('0.774');
   });
 });
 

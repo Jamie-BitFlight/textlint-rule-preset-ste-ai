@@ -62,6 +62,25 @@ const TRIGGER_DOCUMENTS: Partial<Record<SemanticEvaluatorId, Trigger>> = {
 };
 
 /**
+ * Evaluators confirmed to have no deterministic rule producing a candidate for them --
+ * `grep -n "evaluatorId:" src/deterministic/rules/*.ts` names exactly the five evaluators listed
+ * in `TRIGGER_DOCUMENTS` above and no others, so this is every evaluator definition that leaves.
+ *
+ * Review found that `TRIGGER_DOCUMENTS` alone could not distinguish "no producer exists" from
+ * "someone forgot to add the trigger document": both looked identical, a missing key, to the loop
+ * in `'covers every evaluator...'` below, so a new candidate-producing rule added without a
+ * matching trigger document stayed silently unchecked despite that test's own comment claiming
+ * otherwise. Declaring the no-producer set explicitly, and requiring every other evaluator to
+ * appear in `TRIGGER_DOCUMENTS`, closes that: an evaluator in neither place now fails the test
+ * that reads as "covers every evaluator" instead of quietly passing.
+ */
+const NO_DETERMINISTIC_PRODUCER: ReadonlySet<SemanticEvaluatorId> = new Set([
+  'permitted-part-of-speech',
+  'technical-term-legitimacy',
+  'rewrite-equivalence',
+]);
+
+/**
  * Evaluator variables allowed to resolve from missing data today, each tracked by an open issue
  * rather than silently permitted. A gap landing here without a citation is a regression this test
  * must still catch -- only a cited, already-known gap belongs on this list.
@@ -90,14 +109,26 @@ describe('real candidates satisfy their evaluator payload contract', () => {
     .filter((id) => TRIGGER_DOCUMENTS[id] !== undefined);
 
   it('covers every evaluator that has a deterministic producer', () => {
-    // Fails loudly if a new candidate-producing rule is added without a trigger document here,
-    // rather than the new evaluator silently going unchecked.
+    // Fails loudly if a new candidate-producing rule is added without a trigger document here: a
+    // missing TRIGGER_DOCUMENTS entry is only allowed for an evaluator NO_DETERMINISTIC_PRODUCER
+    // also declares has no producer, never merely because both maps happen to omit it.
     for (const definition of evaluatorDefinitions) {
       const trigger = TRIGGER_DOCUMENTS[definition.id];
-      if (trigger === undefined) continue;
-      const candidates = candidatesFor(definition.id, trigger);
+      const isDeclaredNoProducer = NO_DETERMINISTIC_PRODUCER.has(definition.id);
       expect(
-        candidates.length,
+        trigger !== undefined || isDeclaredNoProducer,
+        `${definition.id}: no TRIGGER_DOCUMENTS entry, and not declared in ` +
+          `NO_DETERMINISTIC_PRODUCER -- add a trigger document if it has a deterministic ` +
+          `producer, or add it to NO_DETERMINISTIC_PRODUCER if it genuinely has none`,
+      ).toBe(true);
+
+      // 1 stands in for "not applicable" when there is no trigger to run -- the assertion above
+      // already failed the test in that case unless the evaluator is declared to have no producer,
+      // and this expect must stay unconditional regardless.
+      const candidateCount =
+        trigger === undefined ? 1 : candidatesFor(definition.id, trigger).length;
+      expect(
+        candidateCount,
         `${definition.id}: trigger document produced no candidate`,
       ).toBeGreaterThan(0);
     }

@@ -50,8 +50,8 @@ When semantic analysis is simply **disabled**, candidates become `review-require
 `semantic-disabled` notice records the count. Again: not compliance.
 
 All of the above is testable, and it is tested. The outage-policy block in the integration suite
-covers three policy values: `notice`, `error`, and `silent`. It also covers malformed replies and
-the deterministic-set invariant.
+covers the `notice`, `error`, and `silent` policy values. It also covers malformed replies and the
+deterministic-set invariant.
 
 ## A suppression is an authored claim
 

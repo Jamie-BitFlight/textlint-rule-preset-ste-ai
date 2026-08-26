@@ -60,3 +60,6 @@ jobs:
 
       - name: Confirm the corpus provenance totals are unchanged
         run: scripts/ci/check-annotation-provenance.sh
+
+      - name: Confirm shipped textlint configs actually resolve preset-ste-ai
+        run: scripts/ci/check-textlint-configs-resolve.sh

@@ -322,6 +322,8 @@ installed package named `textlint-rule-preset-ste-ai` — `package.json` lists t
 `devDependency` via `"file:."`, and `vp install` links it into `node_modules`. Run `vp pack` first so
 `node_modules/textlint-rule-preset-ste-ai` (the self-link) has a built `dist/` to resolve into, then
 `node_modules/.bin/textlint README.md` runs the real preset against the real docs.
+`scripts/ci/check-textlint-configs-resolve.sh` asserts this, and `examples/.textlintrc.json`
+alongside it, in CI — see [`examples/README.md`](examples/README.md) to try either one yourself.
 
 | Document                                                         | Contents                                                       |
 | ---------------------------------------------------------------- | -------------------------------------------------------------- |

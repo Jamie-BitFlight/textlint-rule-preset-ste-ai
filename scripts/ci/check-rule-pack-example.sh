@@ -18,9 +18,17 @@
 # present) in addition to the output, so a masked infrastructure failure fails loudly instead of
 # passing on a coincidental string match.
 #
+# A third round dropped the page's hard-coded error counts ("One error." / "Three errors.") after
+# review established they carried no information the surrounding text and bullets didn't already
+# state -- deleting them changed nothing a reader could learn. This script's own count assertions
+# came out with them: they existed only to pin a claim the page no longer makes, and keeping them
+# would have reintroduced the same problem in shell instead of prose -- a number with no live source
+# that someone has to remember to update by hand.
+#
 # What is checked here is therefore the documented entry point, end to end, with the shipped files:
-# the finding counts the page quotes, the fact that a custom pack *replaces* the bundled dictionary
-# rather than adding to it, and the trust gate's effect on the JSON `conformance` block.
+# the specific terms each run reports or stops reporting, the fact that a custom pack *replaces* the
+# bundled dictionary rather than adding to it, and the trust gate's effect on the JSON `conformance`
+# block.
 #
 # Usage: scripts/ci/check-rule-pack-example.sh
 set -euo pipefail
@@ -69,26 +77,18 @@ require_exit_1() {
     fail "\`$*\` exited $LAST_STATUS, not the documented 1 (errors present). Output:\n$LAST_OUTPUT"
 }
 
-error_count() {
-  printf '%s' "$1" | grep -oE '^[0-9]+ error' | grep -oE '[0-9]+' || echo "unknown"
-}
-
-# 1. The bundled pack. The page says one error, on "Utilise".
+# 1. The bundled pack. It flags "Utilise" and nothing about the Acme vocabulary.
 run_lint --deterministic-only
 require_exit_1 lint "$sample" --deterministic-only
 bundled="$LAST_OUTPUT"
-[ "$(error_count "$bundled")" = "1" ] ||
-  fail "the bundled pack reported $(error_count "$bundled") error(s), not the documented 1"
 printf '%s' "$bundled" | grep -q 'Utilise' ||
   fail 'the bundled pack no longer reports "Utilise"'
 
-# 2. The custom pack, untrusted. The page says three errors, and that "Utilise" is gone because a
-#    pack replaces the dictionary rather than adding to it. That claim is the point of the example.
+# 2. The custom pack, untrusted. "Utilise" is gone because a pack replaces the dictionary rather
+#    than adding to it -- that claim is the point of the example.
 run_lint --config examples/rule-pack/untrusted.json --deterministic-only
 require_exit_1 lint "$sample" --config examples/rule-pack/untrusted.json --deterministic-only
 untrusted="$LAST_OUTPUT"
-[ "$(error_count "$untrusted")" = "3" ] ||
-  fail "the custom pack reported $(error_count "$untrusted") error(s), not the documented 3"
 
 for term in 'De-energise' 'Actuate' 'torque tool'; do
   printf '%s' "$untrusted" | grep -q "$term" ||

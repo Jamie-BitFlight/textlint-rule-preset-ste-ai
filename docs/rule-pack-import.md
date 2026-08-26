@@ -1,8 +1,15 @@
 # Importing an authorised rule pack
 
 This page describes the only supported route by which normative controlled-language data enters the package.
-No rule hard-codes vocabulary. The active pack supplies every word list, term mapping, and numeric limit.
-Supplying licensed data therefore changes behaviour without changing a line of rule code.
+The active pack supplies the controlled-language dictionary — approved, unapproved, and preferred
+terms, and contractions — and the numeric limits. Supplying licensed data therefore changes that
+behaviour without changing a line of rule code.
+
+Some candidate rules also hard-code the trigger vocabulary they scan for — for example the
+`PARTICIPLES`, `PRONOUNS`, and `BARE_DEMONSTRATIVE_FOLLOWERS` lists in
+[`src/deterministic/rules/candidate-rules.ts`](../src/deterministic/rules/candidate-rules.ts).
+A pack cannot change those lists. It can only change what the pack schema exposes: the dictionary,
+the limits, and per-rule options and authority.
 
 ## Before you start
 
@@ -134,9 +141,14 @@ programmatic API.
 | `packPermitsConformanceClaim()`  | `false`                                   | `true` if `conformanceClaim !== 'none'` |
 | Vocabulary, limits, contractions | small authored set                        | yours                                   |
 
-Rule _code_ does not change. Some rules have triggers the pack schema cannot express. Those rules
-stay provisional, regardless of what the pack declares. A pack cannot promote a heuristic by
-asserting authority over it.
+Rule _code_ does not change. `runDeterministicRules()` (`src/core/runner.ts`) applies a pack's
+declared status to any rule the pack lists in `rules[]`. This includes a heuristic candidate rule
+whose trigger the pack schema cannot express. There is no separate check that gates status
+promotion on whether a rule's trigger is pack-expressible. The only gate is `trustedRulePackIds`: a
+pack not named there is capped at `supplementary` even when it declares `normative`, per
+`verifiedRuleStatus()` in `src/core/runner.ts`. A pack you have named as trusted can therefore make
+a heuristic rule's diagnostics report `normative`. The rule's own trigger logic stays unchanged and
+still heuristic.
 
 ## What the pack cannot do
 
@@ -151,8 +163,12 @@ asserting authority over it.
 
   They also refuse a fix that sits in an admonition.
 
-- It cannot make the linter print conformance wording. Nothing in the codebase emits a conformance
-  claim. `conformanceClaim` only records what the supplier asserts, for the audit trail.
+- It cannot make the linter print conformance wording on its own. `--json` output does include a
+  `conformance.claim` field, but only when `packPermitsConformanceClaim()` (`src/rule-pack/loader.ts`)
+  returns `true`: the pack declares `authority: "normative"`, its `conformanceClaim` is not `"none"`,
+  and its `metadata.id` is in `trustedRulePackIds`. An untrusted or non-normative pack's
+  `conformanceClaim` is never surfaced there — the JSON output reports `"none"` instead. It stays
+  recorded only in `metadata.conformanceClaim`, for the audit trail.
 
 ## Extending the schema
 

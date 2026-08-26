@@ -53,8 +53,8 @@ function mustGetRule(id: string): TextlintRuleModule {
 }
 
 /**
- * A passage `one-instruction-per-sentence` (deterministic/rules/candidate-rules.ts) flags as a
- * comma-joined clause with a second candidate imperative verb — a real candidate for semantic
+ * A passage `one-instruction-per-sentence` (`src/deterministic/rules/structure-rules.ts`) flags as
+ * a comma-joined clause with a second candidate imperative verb — a real candidate for semantic
  * adjudication, confirmed directly (`analyseTextDeterministic` on this text, semantic disabled,
  * reports a `review-required` diagnostic for `one-instruction-per-sentence` spanning the whole
  * sentence). Never asserted as a compliance failure on its own; the semantic verdict decides it.

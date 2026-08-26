@@ -50,6 +50,7 @@ describe('prompt assets', () => {
       // Prompts are hard-wrapped, so a phrase may span a line break.
       const lower = system.toLowerCase().replace(/\s+/g, ' ');
       expect(lower, `${label}: negation`).toContain('negation');
+      expect(lower, `${label}: order`).toContain('order');
       expect(lower, `${label}: modal`).toContain('modal force');
       expect(lower, `${label}: quantities`).toMatch(/quantit|tolerance/);
       expect(lower, `${label}: identifiers`).toMatch(/identifier|component|literal/);

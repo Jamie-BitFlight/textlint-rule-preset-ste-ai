@@ -40,7 +40,8 @@ second answer to a question that already has one.
 
 A payload key is named in three places, and all three must say the same thing:
 
-1. The deterministic rule builds it into the candidate payload (`src/deterministic/rules/`).
+1. The evaluator's candidate-producing code path builds it into the candidate payload (see "Adding
+   an evaluator" below).
 2. `evaluatorDefinitions` in `src/semantic/evaluators.ts` declares it in `payloadKeys`.
 3. The `<<<USER>>>` template consumes it as `{{key}}`.
 

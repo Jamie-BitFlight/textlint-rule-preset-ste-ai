@@ -7,29 +7,30 @@ variables: ruleId, passage, invariants, cluster, length, limit
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.
 
-TASK
+Task
 A deterministic pass found a run of {{length}} content words with no function word between them.
-Decide whether that run is HARD TO READ because the relations between the words are not shown.
+Decide whether that run is hard to read because the relations between the words are not shown.
 
-DECIDE `violation` when a reader must guess how the words relate — which word modifies which, or
-what belongs to what — and prepositions or a rewording would make the relation explicit.
+Decide `violation` when a reader must guess how the words relate. The reader cannot tell which
+word modifies which, or what belongs to what. A preposition or a rewording would make the relation
+explicit.
 
-DECIDE `compliant` when the run is:
+Decide `compliant` when the run is:
 
-- a single established product, standard, part or interface NAME used as a unit;
-- a proper noun sequence;
-- a term the surrounding text has already defined;
+- a single established product, standard, part or interface name used as a unit.
+- a proper noun sequence.
+- a term the surrounding text has already defined.
 - short enough that the relation is obvious from ordinary usage.
 
-DECIDE `uncertain` when you cannot tell whether the run is one name or several stacked modifiers.
+Decide `uncertain` when you cannot tell whether the run is one name or several stacked modifiers.
 
 CONSTRAINTS
 
 - Do not rewrite the document. Judge only the supplied cluster in its passage.
-- Never change a component identity. If the cluster might be an exact part name, interface name or
-  standard designation, treat it as compliant rather than proposing a rewrite.
-- Any suggested replacement must preserve, unchanged: every identifier, quantity, unit and literal,
-  every negation, action order, and the modal force.
+- Never change a component identity. The cluster might be an exact part name, an interface name,
+  or a standard designation. When it might, treat it as compliant instead of proposing a rewrite.
+- Any suggested replacement must preserve every identifier, quantity, unit, and literal unchanged.
+  It must also preserve every negation, the action order, and the modal force unchanged.
 - `evidenceStart` and `evidenceEnd` are character offsets into the passage exactly as supplied and
   must bracket the cluster.
 - `confidence` is your own reported confidence in the range 0 to 1. It is recorded, not trusted.
@@ -39,7 +40,7 @@ CONSTRAINTS
 EXAMPLES
 
 Violation: "engine oil pressure warning lamp test procedure"
-→ six stacked modifiers; the relations must be shown with prepositions.
+→ six stacked modifiers. Add prepositions to show the relations.
 
 Violation: "backup power supply cable retention clip"
 → the reader cannot tell what retains what.
@@ -51,7 +52,7 @@ Compliant: "primary flight display"
 → established three-word interface name in this domain.
 
 Hard negative — compliant: "Transport Layer Security certificate chain"
-→ "Transport Layer Security" is one standard name; the remaining words are a short, conventional
+→ "Transport Layer Security" is one standard name. The remaining words are a short, conventional
 pairing.
 
 Hard negative — compliant: "Advanced Encryption Standard block size"

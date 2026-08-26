@@ -91,5 +91,7 @@ Leave `metadata.authority` as `provisional` until you are actually supplying lic
 [`docs/rule-pack-import.md`](../../docs/rule-pack-import.md) covers the full field list and the
 licence obligations. Do not commit a proprietary pack to a public repository.
 
-The output of every command above is pinned by `test/integration/rule-pack.test.ts`, so this page
-cannot drift from what the commands print.
+`scripts/ci/check-rule-pack-example.sh` runs each command above through the real command-line tool.
+It uses these same files. It asserts the counts and the `conformance` values this page quotes. It
+runs in continuous integration. The page therefore cannot drift from what the commands print.
+`test/integration/rule-pack.test.ts` covers the same pack through the programmatic interface.

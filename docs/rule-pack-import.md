@@ -14,9 +14,10 @@ you need the exact answer rather than the summary.
 
 ## What a pack controls
 
-A pack changes only what the schema exposes. This table is generated from `rulePackSchema` and
-checked against the schema on every run of the test suite. See
-`test/architecture/doc-pack-control-surface.test.ts`.
+A pack changes only what the schema exposes. Do not edit the table below by hand.
+`scripts/lib/pack-control-surface.ts` renders it from `rulePackSchema`. Regenerate it with
+`npx tsx scripts/write-pack-control-surface.ts`.
+`test/architecture/doc-pack-control-surface.test.ts` compares the two and fails when they differ.
 
 <!-- pack-control-surface:begin -->
 

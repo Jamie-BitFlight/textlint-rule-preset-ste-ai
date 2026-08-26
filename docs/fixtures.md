@@ -35,19 +35,12 @@ Accepted licences:
 `MIT (this repository)`. `CC-BY` sources get `CC-BY-4.0`, where attribution propagates. The validator
 enforces this and rejects any share-alike or copyleft licence outright.
 
-Composition:
+Composition changes as fixtures are added or relicensed. Get the current counts from the manifest
+itself, not from a copied table:
 
-| Licence                            | Fixtures |
-| ---------------------------------- | -------- |
-| Public Domain (SQLite)             | 4        |
-| Public Domain (US Government work) | 2        |
-| `Apache-2.0`                       | 4        |
-| `Apache-2.0 WITH LLVM-exception`   | 2        |
-| `CC-BY-4.0`                        | 2        |
-| PostgreSQL Licence                 | 1        |
-| `BSD-3-Clause`                     | 1        |
-| curl licence                       | 1        |
-| `MIT`                              | 1        |
+```bash
+jq -r '.fixtures | group_by(.licence) | map("\(length)\t\(.[0].licence)") | .[]' fixtures/manifest.json
+```
 
 ## Provenance is auditable, not asserted
 
@@ -204,9 +197,11 @@ whatever rearrangement preserves that aggregate. The totals are preserved by mov
 two fixtures in opposite directions. Those totals are: 105 adjudications, 70 rewrites, the per-run
 split, and every record saying `agent`. The per-fixture reviewer sets closed _that_ hole. But those
 sets are preserved too, by shuffling record counts between fixtures that credit the same run. This
-was measured directly. Splicing a real `disputed` record out of `curl-url-option-reference` passed
-every gate in the project. So did dropping in a second copy of that file's own `accepted` record.
-That swap also moved the split reported above from 32 / 36 to 33 / 35.
+was measured directly. Two mutations passed every gate, but only together. One mutation spliced a
+real `disputed` record out of `curl-url-option-reference`. The other dropped in a second copy of
+that file's own `accepted` record. Neither mutation passes alone. Removing the disputed record
+alone lowers the expected change total. Adding the duplicate alone raises it. That paired swap also
+moved the split reported above from 32 / 36 to 33 / 35.
 
 So the script also declares a digest of each fixture's annotation. Object keys are sorted, so
 reformatting is not a change. Array order is preserved, so reordering is a change. That pins content
@@ -218,10 +213,12 @@ recording, because the narrower version seemed like enough. An adjudication bind
 passage, so it seemed anchored. But the binding constrains _where a record sits_, not _what it says_.
 `verdict`, `reason`, and `reviewerConfidence` are copied from the reviewer row and checked against
 nothing. The only things constraining them were two aggregates in `corpus.test.ts`, since replaced by
-a record-by-record comparison against `fixtures/verdicts/`. Measured: demoting the corpus's two
-confirmed `passive-voice-candidate` defects preserved both aggregates. So did promoting two other
-passages of the same rule instead. It passed every gate. It also quietly changed which passages the
-semantic evaluators are scored against.
+a record-by-record comparison against `fixtures/verdicts/`. Measured: two moves preserved both
+aggregates, but only together. One move demoted the corpus's two confirmed
+`passive-voice-candidate` defects. The other promoted two other passages of the same rule. Neither
+move alone does. Demoting alone shifts the class balance one way. Promoting alone shifts it back the
+other way. The combined move passed every gate, and it quietly changed which passages the semantic
+evaluators are scored against.
 
 Two smaller things follow from hashing parsed values rather than bytes. Duplicate JSON keys make the
 file on disk and the value every check sees disagree. `JSON.parse` keeps the last key and says

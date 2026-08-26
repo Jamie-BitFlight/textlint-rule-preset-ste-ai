@@ -215,22 +215,43 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
       addIfDeclared(alias);
     }
 
+    // A computed key naming a same-file top-level string const (`{ [EVALUATOR_ID_KEY]: ... }`)
+    // resolves the same way a value identifier alias does. Review found this test treating a
+    // computed Identifier key as categorically dynamic and skipping it unconditionally, which let
+    // a valid producer using that form vanish from the derived set the same way an unresolved
+    // value used to, with no test noticing. Unlike `resolveIdentifierAlias`, an unresolvable key
+    // here does not necessarily name `evaluatorId` at all, so this only throws when the key *is*
+    // computed -- a computed key this test cannot statically read is not safe to silently skip,
+    // because it might be exactly the property this test exists to find.
+    function resolveKeyAlias(name: string): string {
+      const alias = topLevelStringConsts.get(name);
+      if (alias === undefined) {
+        throw new Error(
+          `${entry}: an object property's computed key is the identifier "${name}", which is ` +
+            'not a same-file top-level string const this test can resolve -- extend ' +
+            'derivedProducerIds() to handle this form, or use a literal, a top-level const, or ' +
+            'a non-computed key.',
+        );
+      }
+      return alias;
+    }
+
     walk(ast.program, (node) => {
       if (!t.isObjectExpression(node)) return;
       for (const prop of node.properties) {
         if (!t.isObjectProperty(prop)) continue;
         // A key can be an Identifier (`evaluatorId: ...`), a StringLiteral (`'evaluatorId': ...`),
-        // or a computed literal (`['evaluatorId']: ...`) -- review found this test skipping first
-        // the StringLiteral form, then this one, with no throw either time, letting such a
-        // producer vanish from the derived set without failing any test. A computed Identifier key
-        // (`[someVariable]: ...`) names a genuinely dynamic property and is deliberately excluded
-        // here: unlike a computed StringLiteral, it does not statically read "evaluatorId" and
-        // could just as easily be an unrelated computed property this test has no business
-        // resolving. Only a non-computed Identifier key can be `shorthand`.
+        // a computed literal (`['evaluatorId']: ...`), or a computed identifier naming a same-file
+        // top-level string const (`[EVALUATOR_ID_KEY]: ...`) -- review found this test skipping
+        // the StringLiteral form, then the computed-literal form, then this last one, with no
+        // throw any time, letting such a producer vanish from the derived set without failing any
+        // test. Only a non-computed Identifier key can be `shorthand`.
         const keyName = t.isStringLiteral(prop.key)
           ? prop.key.value
-          : !prop.computed && t.isIdentifier(prop.key)
-            ? prop.key.name
+          : t.isIdentifier(prop.key)
+            ? prop.computed
+              ? resolveKeyAlias(prop.key.name)
+              : prop.key.name
             : undefined;
         if (keyName !== 'evaluatorId') continue;
 

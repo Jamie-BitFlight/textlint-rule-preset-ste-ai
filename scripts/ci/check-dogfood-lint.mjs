@@ -18,7 +18,7 @@
  * What the baseline records, and why it is not a plain per-file count.
  *
  * A first version of this script recorded one integer per file: how many error-severity findings
- * it had. Review found seven ways that hid a regression, each fixed in turn:
+ * it had. Review found ways that hid a regression, each fixed in turn:
  *
  *   - `--update` rewrote the baseline with whatever the working tree currently produced, including
  *     a larger count than before. A contributor who introduced new errors and ran `--update` to

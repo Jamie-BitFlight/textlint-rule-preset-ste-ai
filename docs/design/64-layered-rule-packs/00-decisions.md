@@ -114,8 +114,8 @@ for having produced `03` at all.
   organisation layer banned. `01` specifies a `retract` block and records why `options.allow` is not
   the mechanism.
 - **Characterisation tests come first.** Both `02` and `03` found independently that no test imports
-  `src/rule-pack/loader.ts`. Running `grep -rln "authority\|conformance\|rulePack" test/` returns zero
-  files. Nothing else should merge before that gap is closed.
+  `src/rule-pack/loader.ts`. Run `grep -rln "authority\|conformance\|rulePack" test/` to check whether
+  that gap is still open. Nothing else should merge before it closes.
 
 ## Decided by the maintainer
 
@@ -149,31 +149,23 @@ larger change than the decision it settles.
 
 The authority machinery exists to guard one path. A supplied pack can declare `normative` authority.
 That claim is honoured only after an operator names the pack in `trustedRulePackIds`. With conformance out
-of scope, that path has no destination. The surface is 35 references across 8 files. This exact command counts them, so the number can be
-re-derived rather than trusted:
+of scope, that path has no destination. This command finds every file touching the removal
+candidates. It counts occurrences in each file, so the surface can be re-derived rather than trusted
+to a stated total:
 
 ```bash
-grep -vE '^\s*(//|\*|/\*)' <file> \
-  | grep -oE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority' \
-  | wc -l
+for f in $(grep -rlE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority' src/); do
+  n=$(grep -vE '^\s*(//|\*|/\*)' "$f" \
+    | grep -oE 'packPermitsConformanceClaim|verifiedAuthority|verifiedRuleStatus|trustedRulePackIds|conformanceClaim|metadata\.authority' \
+    | wc -l)
+  echo "$n $f"
+done
 ```
 
-That count is occurrences of the removal candidates, with comment-only lines excluded. This
-distinction is worth stating: counting matching _lines_ instead, or leaving comments in, gives a
-materially different total. The scope of the proposed removal is argued from this table. The `| wc -l`
-is the load-bearing part: `grep -c` counts matching **lines** and ignores `-o`, which yields 28 rather
-than 35 on the same files.
-
-| File                                | References |
-| ----------------------------------- | ---------: |
-| `src/cli/main.ts`                   |         11 |
-| `src/rule-pack/loader.ts`           |         10 |
-| `src/core/runner.ts`                |          5 |
-| `src/analysis/analyse.ts`           |          5 |
-| `src/rule-pack/provisional-pack.ts` |          1 |
-| `src/rule-pack/schema.ts`           |          1 |
-| `src/core/types.ts`                 |          1 |
-| `src/core/config.ts`                |          1 |
+Counts are occurrences of the removal candidates, with comment-only lines excluded. This distinction
+is worth stating: counting matching _lines_ instead, or leaving comments in, gives a materially
+different total. The `| wc -l` is the load-bearing part: `grep -c` counts matching **lines** and
+ignores `-o`, which undercounts files with more than one match per line.
 
 Candidates for removal, each serving only the conformance path:
 
@@ -245,5 +237,7 @@ authority wins", since `ruleStatusSchema` declares no ordering. That label is pr
 
 `03` recorded that it could not run the test suite (no `node_modules` in its worktree) and flagged
 "main is green at `9d78a8b`" as unconfirmed. Confirmed since, and the answer needs its commit
-naming: at `9d78a8b` the suite is green (545 tests). At `ebcc623` — the commit this branch was cut from, and a different tree — one corpus assertion was
-failing. That assertion was pre-existing from #56, and it was fixed by #58. `03`'s Stage 0 precondition is therefore discharged only against a tree that has #58 in it.
+naming: at `9d78a8b` the suite is green under `vp test`. At `ebcc623` — the commit this branch was
+cut from, and a different tree — one corpus assertion was failing. That assertion was pre-existing
+from #56, and it was fixed by #58. `03`'s Stage 0 precondition is therefore discharged only against
+a tree that has #58 in it.

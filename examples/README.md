@@ -1,7 +1,7 @@
 # Examples
 
-Two config files and one document. Run them together. You see real findings before you wire this
-preset into your own project.
+Config files and a document to run them against. Run them together. You see real findings before
+you wire this preset into your own project.
 
 | File               | Purpose                                                                        |
 | ------------------ | ------------------------------------------------------------------------------ |
@@ -10,8 +10,8 @@ preset into your own project.
 | `sample.md`        | A short document with deliberate violations, for the commands below.           |
 
 Do you want the minimal config for a real project instead? See the root
-[`README.md`](../README.md#install) `Install` section. These two files are the full reference. They
-are not the quickest path.
+[`README.md`](../README.md#install) `Install` section. The files here are the full reference, not
+the quickest path.
 
 ## Try it
 
@@ -27,8 +27,9 @@ This resolves `preset-ste-ai` the same way it resolves for a real consumer. `tex
 module resolution here, not a shortcut. `package.json` links this package into its own
 `node_modules`. See the root README's `Development` section for that mechanism.
 
-`vp pack` has to run first. That resolution needs a built `dist/` directory. `scripts/ci/check-textlint-configs-resolve.sh`
-runs this same check automatically, so both config files stay provably resolvable.
+`vp pack` has to run first. That resolution needs a built `dist/` directory.
+`scripts/ci/check-textlint-configs-resolve.sh` runs this same check automatically, so the shipped
+config files stay provably resolvable.
 
 The command above prints the current findings. Expect two categories. A few are deterministic
 errors: unapproved vocabulary, a repeated word, a contraction, an overlong sentence. The rest are

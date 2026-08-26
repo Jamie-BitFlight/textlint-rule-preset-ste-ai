@@ -13,6 +13,10 @@ Do you want the minimal config for a real project instead? See the root
 [`README.md`](../README.md#install) `Install` section. The files here are the full reference, not
 the quickest path.
 
+Do you want to replace the bundled vocabulary with your own? That is a rule pack, and
+[`rule-pack/`](./rule-pack/) is a complete worked one. It lints one document under the bundled
+pack, then under a custom pack. You see exactly what changes.
+
 ## Try it
 
 Run these commands from the repository root.

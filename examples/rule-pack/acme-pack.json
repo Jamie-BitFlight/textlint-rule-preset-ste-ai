@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "id": "acme-maintenance-2026",
+    "name": "Acme maintenance controlled-English pack",
+    "version": "1.0.0",
+    "authority": "normative",
+    "licence": "Example only. Authored for this repository, not derived from any standard.",
+    "source": "Authored as a worked example for docs/rule-pack-import.md.",
+    "retrievedAt": "2026-08-26",
+    "conformanceClaim": "declared-by-supplier",
+    "notice": "Example pack. It carries no real controlled-language standard and confers no conformance."
+  },
+
+  "limits": {
+    "proceduralMaxGradeLevel": 7,
+    "descriptiveMaxGradeLevel": 8,
+    "sentenceReadabilityFloorWords": 20,
+    "maxNounClusterLength": 3,
+    "maxSentencesPerProceduralStep": 1
+  },
+
+  "dictionary": {
+    "approved": [
+      { "term": "open", "partsOfSpeech": ["verb"], "senses": ["to move to the open position"] }
+    ],
+
+    "unapproved": [
+      {
+        "term": "actuate",
+        "alternatives": ["open"],
+        "safeSubstitution": false,
+        "partOfSpeech": "verb",
+        "note": "Ambiguous on this equipment: 'actuate' is used for both open and close."
+      },
+      {
+        "term": "de-energise",
+        "alternatives": ["switch off"],
+        "safeSubstitution": false,
+        "partOfSpeech": "verb"
+      }
+    ],
+
+    "preferred": [{ "from": "torque wrench", "to": "torque tool", "safeSubstitution": true }]
+  },
+
+  "contractions": [{ "from": "don't", "to": "do not", "safeSubstitution": true }],
+
+  "approvedTechnicalTerms": ["Acme WidgetPro", "PRAGMA"],
+
+  "rules": [
+    {
+      "ruleId": "unapproved-vocabulary",
+      "status": "normative",
+      "sourceRef": "ACME-MAINT-STD-2026 clause 4.2",
+      "enabled": true,
+      "severity": "error"
+    },
+    {
+      "ruleId": "preferred-terminology",
+      "status": "normative",
+      "sourceRef": "ACME-MAINT-STD-2026 clause 4.3",
+      "enabled": true
+    }
+  ]
+}

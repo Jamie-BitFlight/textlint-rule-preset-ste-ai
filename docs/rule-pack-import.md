@@ -1,17 +1,59 @@
 # Importing an authorised rule pack
 
-This is the **only** supported route by which normative controlled-language data enters the package.
-No rule hard-codes vocabulary: every word list, term mapping and numeric limit is read from the
-active pack, so supplying licensed data changes behaviour without changing a line of rule code.
+This page describes the only supported route by which normative controlled-language data enters the
+package. The active pack supplies the controlled-language dictionary and the numeric limits.
+Supplying licensed data therefore changes that behaviour without changing a line of rule code.
+
+Do you want to see a pack work before you write one? [`examples/rule-pack/`](../examples/rule-pack/)
+is a complete worked pack with commands that show the same document linted twice. It is linted once
+under the bundled pack, then once under the custom pack.
+
+Every behaviour this page describes is pinned by
+[`test/integration/rule-pack.test.ts`](../test/integration/rule-pack.test.ts). Read that file when
+you need the exact answer rather than the summary.
+
+## What a pack controls
+
+A pack changes only what the schema exposes. This table is generated from `rulePackSchema` and
+checked against the schema on every run of the test suite. See
+`test/architecture/doc-pack-control-surface.test.ts`.
+
+<!-- pack-control-surface:begin -->
+
+| Field                    | What it controls                                                      |
+| ------------------------ | --------------------------------------------------------------------- |
+| `approvedTechnicalTerms` | Literal names protected from matching, rewriting, and the heuristics. |
+| `contractions`           | The contraction expansions `no-contractions` offers.                  |
+| `dictionary`             | The controlled-language word lists.                                   |
+| `dictionary.approved`    | Terms whose permitted sense the semantic evaluators may check.        |
+| `dictionary.preferred`   | Term mappings `preferred-terminology` reports.                        |
+| `dictionary.unapproved`  | Terms `unapproved-vocabulary` reports, with their alternatives.       |
+| `limits`                 | The numeric thresholds. Grade levels, cluster length, step count.     |
+| `metadata`               | Identity, declared authority, licence, and the conformance claim.     |
+| `rules`                  | Per-rule authority and defaults.                                      |
+| `rules[].enabled`        | Whether the rule runs at all.                                         |
+| `rules[].options`        | Default options, below anything the user configures.                  |
+| `rules[].ruleId`         | Which registered rule the entry applies to.                           |
+| `rules[].severity`       | Default severity, below anything the user configures.                 |
+| `rules[].sourceRef`      | The citation a deterministic diagnostic reports.                      |
+| `rules[].status`         | The authority a deterministic diagnostic reports.                     |
+
+<!-- pack-control-surface:end -->
+
+Some rules also hold trigger vocabulary in code. The `PARTICIPLES`, `PRONOUNS`, and
+`BARE_DEMONSTRATIVE_FOLLOWERS` lists in
+[`src/deterministic/rules/candidate-rules.ts`](../src/deterministic/rules/candidate-rules.ts) are
+examples. A pack cannot add a word to those lists. A pack can still stop one from firing, because
+`approvedTechnicalTerms` protects a token before any rule scans it. The limitation runs one way
+only.
 
 ## Before you start
 
-Supplying a pack is a licensing decision. This project makes no determination about what you are
-permitted to include, and adds no conformance wording of its own. See
-[`DISCLAIMER.md`](./DISCLAIMER.md).
+Supplying a pack is a licensing decision. This project makes no determination about what you may
+include. It adds no conformance wording of its own. See [`DISCLAIMER.md`](./DISCLAIMER.md).
 
-Do not commit a proprietary pack to a public repository. Keep it outside the tree and point at it,
-or hold it in a private artefact store.
+Do not commit a proprietary pack to a public repository. Keep it outside the tree. Point the
+configuration at it. Alternatively, store it in a private artefact repository.
 
 ## The schema
 
@@ -125,32 +167,71 @@ await analyseText(source, { config: { rulePack: myPackObject } });
 Relative paths resolve against the textlint config base directory, or against `baseDir` for the
 programmatic API.
 
-## What changes when you supply a normative pack
+## The trust gate
 
-|                                  | Bundled provisional pack                  | Normative pack                          |
-| -------------------------------- | ----------------------------------------- | --------------------------------------- |
-| `meta.status` reported per rule  | `provisional`                             | the pack's `rules[].status`             |
-| Message tag                      | `[provisional]`                           | `[normative]`                           |
-| `sourceRef`                      | `provisional:docs/provisional-rules.md#…` | the pack's citation                     |
-| `packPermitsConformanceClaim()`  | `false`                                   | `true` if `conformanceClaim !== 'none'` |
-| Vocabulary, limits, contractions | small authored set                        | yours                                   |
+A pack cannot elevate itself. Schema validation proves the shape of a pack, never where it came
+from. Any JSON file can declare `authority: "normative"`.
 
-Rule _code_ does not change. Rules whose trigger cannot be expressed in the pack schema stay
-provisional regardless of what the pack declares — a pack cannot promote a heuristic by asserting
-authority over it.
+An imported pack is therefore untrusted until the operator names its `metadata.id` in
+`trustedRulePackIds`. An untrusted pack still supplies its dictionary and its limits. Its claim to
+normative standing is capped at `supplementary`. The match is on `metadata.id` alone. The pack name
+and the file path do not count.
+
+## What status a diagnostic reports
+
+Two rule paths report status differently. This surprises pack authors, so read the table before you
+write `rules[]`.
+
+A deterministic rule reports a violation directly. A candidate rule instead hands the passage to a
+semantic evaluator. The passage is reported as `review-required` when no evaluator ran.
+
+| Rule entry            | Deterministic diagnostic           | Candidate (`review-required`) |
+| --------------------- | ---------------------------------- | ----------------------------- |
+| listed in `rules[]`   | the entry's `status`, trust-capped | ignored. Pack-wide authority  |
+| absent from `rules[]` | `provisional`, the rule default    | pack-wide authority           |
+| `sourceRef` reported  | the entry's `sourceRef`            | never reported                |
+
+Read the second column downwards. Omitting a rule from `rules[]` leaves it `provisional` even under
+a trusted normative pack. Read the third column downwards. Omitting a rule changes nothing there,
+because `rules[].status` never applied in the first place.
+
+`runDeterministicRules()` in `src/core/runner.ts` applies the per-rule status to diagnostics only.
+Candidates bypass it. `src/analysis/analyse.ts` stamps them later with the pack-wide authority from
+`verifiedAuthority()`.
+
+Two consequences follow. A trusted pack promotes a heuristic candidate rule to `normative` even
+when the pack lists that rule as `provisional`. The rule's trigger logic is unchanged and stays
+heuristic. Nothing gates promotion on whether a trigger is expressible in the schema.
+
+Rule _code_ does not change in either case.
 
 ## What the pack cannot do
 
-- It cannot add a new rule. A new rule needs code; see [`rule-authoring.md`](./rule-authoring.md).
-- It cannot grant a fix that the autofix gate refuses. `safeSubstitution: true` is necessary but not
-  sufficient: `checkFixSafety()` and `gateFix()` still run, and still refuse anything that changes a
-  digit, a negation, a modal, an ordering word, or that sits in an admonition.
-- It cannot make the linter print conformance wording. Nothing in the codebase emits a conformance
-  claim; `conformanceClaim` only records what the supplier asserts, for the audit trail.
+- It cannot add a new rule. A new rule needs code. See [`rule-authoring.md`](./rule-authoring.md).
+- It cannot add a word to a trigger list held in rule code. See `What a pack controls` above.
+- It cannot grant a fix that the autofix gate refuses. `safeSubstitution: true` is necessary, but it
+  is not enough. `checkFixSafety()` and `gateFix()` still run. They still refuse a fix that changes
+  any of the following.
+  - a digit.
+  - a negation.
+  - a modal.
+  - an ordering word.
+
+  They also refuse a fix that sits in an admonition.
+
+- It cannot make the linter print conformance wording on its own. The `--json` output does carry a
+  `conformance.claim` field. That field is gated by `packPermitsConformanceClaim()` in
+  `src/rule-pack/loader.ts`, which needs all three of the following.
+  - The pack declares `authority: "normative"`.
+  - Its `conformanceClaim` is not `"none"`.
+  - Its `metadata.id` is in `trustedRulePackIds`.
+
+  The JSON output reports `"none"` for any pack that fails one of them. The declared value stays in
+  `metadata.conformanceClaim` for the audit trail.
 
 ## Extending the schema
 
-If your pack carries data the schema cannot express — a part-of-speech table, per-rule exception
-lists, a sense inventory — extend `src/rule-pack/schema.ts` and the consuming rule together, and add
-a test that the new field actually changes behaviour. Do not smuggle data through
-`rules[].options`: that path is unvalidated beyond the rule's own options schema.
+Your pack might carry data the schema cannot express. A part-of-speech table, per-rule exception
+lists, or a sense inventory are examples. In that case, extend `src/rule-pack/schema.ts` and the
+consuming rule together. Add a test that confirms the new field changes behaviour. Do not smuggle
+data through `rules[].options`. That path is unvalidated beyond the rule's own options schema.

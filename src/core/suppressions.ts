@@ -557,7 +557,11 @@ function admonitionOpenerRanges(
   while (cursor < to) {
     const newline = text.indexOf('\n', cursor);
     const lineEnd = newline === -1 || newline >= to ? to : newline + 1;
-    const raw = text.slice(cursor, lineEnd).replace(/\n$/, '');
+    // `\r?` alongside the `\n`: `raw` feeds `$`-anchored patterns in `detectAdmonition` et al., and
+    // under CRLF a lone trailing `\r` that survived a `\n`-only strip would defeat them one
+    // character short of the line's real end (see `stripTrailingCR` in `structure.ts`, the sibling
+    // fix for the same defeat inside block scanning).
+    const raw = text.slice(cursor, lineEnd).replace(/\r?\n$/, '');
     if (
       detectAdmonition(raw) === blockAdmonition &&
       (isBareAdmonitionOpener(raw) || isAdmonitionLabelLine(raw))

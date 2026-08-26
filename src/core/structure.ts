@@ -1,5 +1,5 @@
 import { sentenceOpensImperative } from './pos-tags.js';
-import { trimRange } from './text.js';
+import { normalizeLineEndings, trimRange } from './text.js';
 import type {
   AdmonitionKind,
   BlockKind,
@@ -85,6 +85,22 @@ const BARE_LABEL_RE = /^\s*(?:\*{1,2}|_{1,2})?([A-Z][A-Z]{2,11})(?:\*{1,2}|_{1,2
  * which meant the autofix gate, whose entire job is to never rewrite inside a safety admonition,
  * would have rewritten inside one.
  */
+/**
+ * Strip a CRLF carriage return before handing a line to a `$`-anchored admonition pattern.
+ *
+ * `Line.raw` (see {@link splitLines}) is sliced by splitting the untouched source on `\n` alone,
+ * so under CRLF every line it produces (bar a final one with no trailing newline) still carries a
+ * trailing `\r`. None of the admonition patterns' `[ \t]*$` or `(.*)$` tails consume it — `\t`/` `
+ * exclude it, and `.` excludes it as a line terminator — so the whole match fails one character
+ * short of the line's real end and a CRLF-authored admonition opener silently goes undetected.
+ * `normalizeLineEndings` cannot be reused as-is: its lookahead requires a *following* `\n`, which
+ * a line already split on `\n` never has. Removing rather than space-substituting is safe here
+ * because the result only feeds a boolean/enum classification, never a sliced offset.
+ */
+function stripTrailingCR(line: string): string {
+  return normalizeLineEndings(line).replace(/\r$/, '');
+}
+
 export function detectAdmonition(line: string): AdmonitionKind {
   const gfm = /^\s*>?\s*\[!([A-Za-z]+)\]/.exec(line);
   const mkdocs = /^\s*(?:!!!|\?\?\?)\+?\s+([A-Za-z]+)/.exec(line);
@@ -224,7 +240,7 @@ export function scanBlocks(
     if (maskedSlice.replace(/[\s�#>*_~|+-]/g, '').length === 0) return;
     const pending = pendingAdmonition;
     pendingAdmonition = 'none';
-    const own = detectAdmonition(rawSlice);
+    const own = detectAdmonition(stripTrailingCR(rawSlice));
     const admonition = own !== 'none' ? own : pending !== 'none' ? pending : admonitionHint;
     const block: TextBlock = {
       id: nextId(),
@@ -275,15 +291,16 @@ export function scanBlocks(
 
     // Container-only admonition openers: the line names a register and carries no prose of its
     // own, so the register belongs to what follows.
-    const opener = detectAdmonition(line.raw);
-    if (opener !== 'none' && isBareAdmonitionOpener(line.raw)) {
+    const rawLine = stripTrailingCR(line.raw);
+    const opener = detectAdmonition(rawLine);
+    if (opener !== 'none' && isBareAdmonitionOpener(rawLine)) {
       containerAdmonition = opener;
       containerIndent = /^\s*/.exec(line.raw)?.[0].length ?? 0;
       i += 1;
       continue;
     }
     // AsciiDoc: `[WARNING]` labels the block that follows it at the same indent.
-    if (opener !== 'none' && isAdmonitionLabelLine(line.raw)) {
+    if (opener !== 'none' && isAdmonitionLabelLine(rawLine)) {
       pendingAdmonition = opener;
       i += 1;
       continue;
@@ -367,14 +384,14 @@ export function scanBlocks(
     if (quote !== null) {
       const depth = (quote[1]?.match(/>/g) ?? []).length;
       let end = line.end;
-      let admonition = detectAdmonition(line.raw);
+      let admonition = detectAdmonition(stripTrailingCR(line.raw));
       let j = i + 1;
       while (j < lines.length) {
         const cont = lines[j];
         if (cont === undefined) break;
         if (cont.masked.trim().length === 0) break;
         if (!BLOCKQUOTE_RE.test(cont.masked)) break;
-        if (admonition === 'none') admonition = detectAdmonition(cont.raw);
+        if (admonition === 'none') admonition = detectAdmonition(stripTrailingCR(cont.raw));
         end = cont.end;
         j += 1;
       }

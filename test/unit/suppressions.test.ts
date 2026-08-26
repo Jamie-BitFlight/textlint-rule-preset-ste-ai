@@ -11,6 +11,14 @@ import type {
 
 const KNOWN_RULE_IDS = ['unapproved-vocabulary', 'sentence-length-procedural'];
 
+/**
+ * Builds CRLF text from an LF original rather than hand-writing `\r\n` literals, so each CRLF
+ * test's fixture stays visibly identical to its LF sibling.
+ */
+function crlf(text: string): string {
+  return text.replace(/\n/g, '\r\n');
+}
+
 function diagnosticFor(
   text: string,
   quote: string,
@@ -113,6 +121,25 @@ const RANGE = [
   '',
 ].join('\n');
 
+/**
+ * A `range` directive and two `next-line` directives whose *push* order differs from their
+ * *source* order: the range directive is only appended once its `ignore-end` is seen, which is
+ * after the next-line directive nested inside it, so `directives` before `scanSuppressions`
+ * sorts it reads `[nested next-line, range, trailing next-line]` — not source order on either
+ * axis, and not its own reverse either.
+ */
+const NESTED_ORDER = [
+  '<!-- ste-ai-ignore-start -- Legacy chapter frozen for the 2026 revision. -->',
+  'Utilise the bracket.',
+  '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Nested, pushed before the range. -->',
+  'Utilise the filter.',
+  '<!-- ste-ai-ignore-end -->',
+  'Utilise the cover.',
+  '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Trailing, pushed last either way. -->',
+  'Utilise the switch.',
+  '',
+].join('\n');
+
 const WARNING_DOC = [
   'WARNING: Do not touch the live conductor.',
   '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling fixed by contract. -->',
@@ -174,13 +201,21 @@ describe('scanSuppressions', () => {
     });
   });
 
-  it('returns directives in source order', () => {
-    const doc = analyseDocument({ id: 't', format: 'markdown', text: RANGE });
+  it('returns directives in source order, not the order they were pushed', () => {
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: NESTED_ORDER });
     const { directives } = scanSuppressions(doc);
-    expect(directives.map((d) => d.kind)).toEqual(['range']);
+    // Push order is [nested next-line, range, trailing next-line] — a plain array-reverse of that
+    // is [trailing next-line, range, nested next-line], which is *also* wrong. Only a real sort by
+    // `directiveRange.start` lands on true source order: [range, nested next-line, trailing
+    // next-line]. Kind alone already distinguishes source order from both push order and its
+    // reverse; the reason strings additionally pin down *which* next-line is which, so a
+    // comparator that gets the two next-line directives' relative order wrong is caught too.
+    expect(directives.map((d) => d.kind)).toEqual(['range', 'next-line', 'next-line']);
+    expect(directives[1]?.reason).toBe('Nested, pushed before the range.');
+    expect(directives[2]?.reason).toBe('Trailing, pushed last either way.');
     expect(directives[0]?.range).toEqual({
-      start: RANGE.indexOf('-->') + 3,
-      end: RANGE.indexOf('<!-- ste-ai-ignore-end'),
+      start: NESTED_ORDER.indexOf('-->') + 3,
+      end: NESTED_ORDER.indexOf('<!-- ste-ai-ignore-end'),
     });
   });
 
@@ -321,15 +356,26 @@ describe('applySuppressions', () => {
     expect(result.diagnostics).toHaveLength(1);
   });
 
-  it('still claims the heading beneath it', () => {
+  it('still claims the heading beneath it, and not the paragraph after it', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
       '',
       '# Utilise the bracket',
       '',
+      'Utilise the cover.',
+      '',
     ].join('\n');
-    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
-    expect(result.diagnostics).toEqual([]);
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the cover'),
+    ]);
+    // Without the second diagnostic and this assertion, a directive that claimed the whole
+    // document (not just the heading) would pass just as well: `result.diagnostics` would still
+    // be `[]` and `result.suppressions` would still have length 1, because there would be nothing
+    // else in the document for an over-wide claim to wrongly swallow.
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      '"Utilise the cover" is not an approved term.',
+    ]);
     expect(result.suppressions).toHaveLength(1);
   });
 
@@ -714,16 +760,25 @@ describe('applySuppressions', () => {
     expect(result.suppressions).toHaveLength(2);
   });
 
-  it('claims a note admonition introduced by a GFM alert marker on its own line', () => {
+  it('claims a note admonition introduced by a GFM alert marker on its own line, and not the block after it', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
       '',
       '> [!NOTE]',
       '> Utilise the bracket.',
       '',
+      'Utilise the cover.',
+      '',
     ].join('\n');
-    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
-    expect(result.diagnostics).toEqual([]);
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the cover'),
+    ]);
+    // Same gap as the heading case above: with only one diagnostic in the whole document, a
+    // directive that claimed the entire document instead of just the admonition would pass too.
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      '"Utilise the cover" is not an approved term.',
+    ]);
     expect(result.suppressions).toHaveLength(1);
   });
 
@@ -740,7 +795,7 @@ describe('applySuppressions', () => {
     expect(result.codes.filter((c) => c === 'suppression-refused-in-admonition')).toHaveLength(1);
   });
 
-  it('claims a note admonition introduced by an RST/MyST directive line', () => {
+  it('claims a note admonition introduced by an RST/MyST directive line, and not the block after it', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
       '',
@@ -748,13 +803,22 @@ describe('applySuppressions', () => {
       '',
       '   Utilise the bracket.',
       '',
+      'Utilise the cover.',
+      '',
     ].join('\n');
-    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
-    expect(result.diagnostics).toEqual([]);
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the cover'),
+    ]);
+    // Same gap as the heading case above: with only one diagnostic in the whole document, a
+    // directive that claimed the entire document instead of just the admonition would pass too.
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      '"Utilise the cover" is not an approved term.',
+    ]);
     expect(result.suppressions).toHaveLength(1);
   });
 
-  it('claims a note admonition introduced by an mkdocs container line', () => {
+  it('claims a note admonition introduced by an mkdocs container line, and not the block after it', () => {
     const text = [
       '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
       '',
@@ -762,9 +826,18 @@ describe('applySuppressions', () => {
       '',
       '   Utilise the bracket.',
       '',
+      'Utilise the cover.',
+      '',
     ].join('\n');
-    const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
-    expect(result.diagnostics).toEqual([]);
+    const result = run(text, [
+      diagnosticFor(text, 'Utilise the bracket'),
+      diagnosticFor(text, 'Utilise the cover'),
+    ]);
+    // Same gap as the heading case above: with only one diagnostic in the whole document, a
+    // directive that claimed the entire document instead of just the admonition would pass too.
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      '"Utilise the cover" is not an approved term.',
+    ]);
     expect(result.suppressions).toHaveLength(1);
   });
 
@@ -796,5 +869,65 @@ describe('applySuppressions', () => {
     expect(result.diagnostics).toHaveLength(1);
     expect(result.suppressions).toEqual([]);
     expect(result.codes).toContain('suppression-unused');
+  });
+
+  describe('CRLF documents', () => {
+    it('claims the block below the directive and not the one after it', () => {
+      const text = crlf(
+        [
+          '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+          'Utilise the bracket.',
+          '',
+          'Utilise the filter.',
+          '',
+        ].join('\n'),
+      );
+      const result = run(text, [
+        diagnosticFor(text, 'Utilise the bracket'),
+        diagnosticFor(text, 'Utilise the filter'),
+      ]);
+      expect(result.diagnostics.map((d) => d.message)).toEqual([
+        '"Utilise the filter" is not an approved term.',
+      ]);
+      expect(result.suppressions.map((s) => s.message)).toEqual([
+        '"Utilise the bracket" is not an approved term.',
+      ]);
+    });
+
+    it('reports the correct 1-based line number for a directive notice', () => {
+      const text = crlf(['Utilise it.', '<!-- ste-ai-ignore-end -->', ''].join('\n'));
+      const result = run(text, [diagnosticFor(text, 'Utilise it')]);
+      expect(result.codes).toContain('suppression-end-without-start');
+      // A CR carried inside line 1's own text must not be counted as an extra line break: this
+      // stays 2, not 3.
+      expect(noticeWith(result, 'suppression-end-without-start')?.detail?.['line']).toBe(2);
+    });
+
+    it('still refuses a claim inside a warning admonition introduced by an AsciiDoc label', () => {
+      // A regression guard for the CRLF handling in `structure.ts`'s admonition detection and
+      // `suppressions.ts`'s `admonitionOpenerRanges`: both slice a single line out of the document
+      // and test it against a `$`-anchored pattern. Under LF that line ends right at the match; under
+      // CRLF a trailing `\r` survives unless it is stripped first, and `[ \t]*$`/`(.*)$` do not
+      // consume it, so the whole pattern fails one character short of the line's real end.
+      const text = crlf(
+        [
+          '<!-- ste-ai-ignore-next-line unapproved-vocabulary -- Vendor spelling by contract. -->',
+          '',
+          '[WARNING]',
+          'Utilise the bracket.',
+          '',
+        ].join('\n'),
+      );
+      const result = run(text, [diagnosticFor(text, 'Utilise the bracket')]);
+      // Before the fix this failed two different ways depending on which call site's `$` anchor
+      // was defeated: `structure.ts` would classify the block's own admonition as 'none' (so the
+      // guard never triggers), or `suppressions.ts`'s gap check would see the `[WARNING]\r` line as
+      // unclaimable content in the directive's way (so it claims nothing and the diagnostic is
+      // merely unmatched, not refused). Either way `result.diagnostics` would still have length 1,
+      // so the notice's presence — not just the diagnostic count — is what catches both.
+      expect(result.diagnostics).toHaveLength(1);
+      const notice = noticeWith(result, 'suppression-refused-in-admonition');
+      expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary', admonition: 'warning' });
+    });
   });
 });

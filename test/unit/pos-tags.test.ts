@@ -107,7 +107,8 @@ function simulateHostAddWords(word: string, tag: string): void {
 // An `afterEach`, not a trailing statement inside the tests that call `simulateHostAddWords`: the
 // restore has to run even when the test that mutated the singleton failed part-way through, or one
 // red test turns into a cascade of unrelated red tests in everything that runs after it. A no-op,
-// O(1) check for the other ~28 tests in this file that never call `simulateHostAddWords`.
+// O(1) check (`pendingDirectWrites` is empty) for every test in this file that never calls
+// `simulateHostAddWords`.
 afterEach(() => {
   const lexicon = sharedLexicon();
   for (const { key, hadKey, prevValue } of pendingDirectWrites) {
@@ -462,7 +463,11 @@ describe('shared compromise singleton isolation', () => {
   });
 
   it('leaves no trace of the words this file taught the singleton directly', () => {
-    expect(sharedLexicon()['gizmo']).toBeUndefined();
-    expect(sharedLexicon()['sprocket']).toBeUndefined();
+    // Compared against PRISTINE, not hardcoded to `toBeUndefined()`: if a future `compromise`
+    // upgrade ships either word in its own base lexicon, `simulateHostAddWords`'s afterEach
+    // correctly restores THAT prior value, and a bare `toBeUndefined()` would then fail even
+    // though nothing leaked.
+    expect(sharedLexicon()['gizmo']).toBe(PRISTINE.lexicon['gizmo']);
+    expect(sharedLexicon()['sprocket']).toBe(PRISTINE.lexicon['sprocket']);
   });
 });

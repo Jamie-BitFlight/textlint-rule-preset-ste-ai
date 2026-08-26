@@ -17,28 +17,30 @@ fixtures/
 
 ## Licence rules
 
-Only sources whose licence permits redistribution **and is not share-alike or copyleft** are included:
-public domain (US federal government works, SQLite), MIT, BSD, Apache-2.0, the curl and PostgreSQL
-licences, and CC-BY-4.0. Share-alike and copyleft licences are excluded on purpose — they would
-propagate their obligations onto the rewritten counterparts, which are adaptations.
+Only sources whose licence permits redistribution are included. A share-alike or copyleft licence
+excludes a source. It would propagate its obligations onto the rewritten counterpart, which is an
+adaptation.
 
-`derivativeLicence` records the licence of the counterpart: `MIT (this repository)` for permissive and
-public-domain sources, and `CC-BY-4.0` for CC-BY sources, where attribution propagates. The validator
-enforces this, and rejects any share-alike or copyleft licence outright.
+Accepted licences:
 
-Composition:
+- public domain (US federal government works, SQLite)
+- `MIT`
+- `BSD`
+- `Apache-2.0` (including the `Apache-2.0 WITH LLVM-exception` variant)
+- the curl licence
+- the PostgreSQL licence
+- `CC-BY-4.0`
 
-| Licence                            | Fixtures |
-| ---------------------------------- | -------- |
-| Public Domain (SQLite)             | 4        |
-| Public Domain (US Government work) | 2        |
-| Apache-2.0                         | 4        |
-| Apache-2.0 WITH LLVM-exception     | 2        |
-| CC-BY-4.0                          | 2        |
-| PostgreSQL Licence                 | 1        |
-| BSD-3-Clause                       | 1        |
-| curl licence                       | 1        |
-| MIT                                | 1        |
+`derivativeLicence` records the licence of the counterpart. Permissive and public-domain sources get
+`MIT (this repository)`. `CC-BY` sources get `CC-BY-4.0`, where attribution propagates. The validator
+enforces this and rejects any share-alike or copyleft licence outright.
+
+Composition changes as fixtures are added or relicensed. Get the current counts from the manifest
+itself, not from a copied table:
+
+```bash
+jq -r '.fixtures | group_by(.licence) | map("\(length)\t\(.[0].licence)") | .[]' fixtures/manifest.json
+```
 
 ## Provenance is auditable, not asserted
 
@@ -53,16 +55,16 @@ vp run fixtures:validate   # build, then verify everything below
 
 `validateFixtureCorpus()` checks:
 
-- the manifest and lock satisfy their schemas;
-- each `originalSha256` matches the committed file;
+- the manifest and lock satisfy their schemas.
+- each `originalSha256` matches the committed file.
 - each `provenanceKey` resolves to a lock record with a 2xx status and non-zero bytes, whose URL
-  corresponds to the fixture's `sourceUrl`;
-- no share-alike or copyleft licence, and a licence quote of at least 10 characters with a URL;
-- CC-BY sources propagate attribution into `derivativeLicence`;
-- category minimums (≥ 2 per category across 9 categories) and corpus size (≥ 15);
-- `heldout` is at least 25% of the corpus, and the splits are disjoint by content hash;
-- no unlisted files in `fixtures/original/`;
-- **protected literals are byte-identical** between an original and its counterpart;
+  corresponds to the fixture's `sourceUrl`.
+- no share-alike or copyleft licence, and a licence quote of at least 10 characters with a URL.
+- `CC-BY` sources propagate attribution into `derivativeLicence`.
+- category minimums (≥ 2 per category across 9 categories) and corpus size (≥ 15).
+- `heldout` is at least 25% of the corpus, and the splits are disjoint by content hash.
+- no unlisted files in `fixtures/original/`.
+- **protected literals are byte-identical** between an original and its counterpart.
 - annotations parse, agree with the manifest split, quote text that actually exists, and use real
   character offsets.
 
@@ -70,23 +72,30 @@ vp run fixtures:validate   # build, then verify everything below
 
 Each category has at least two fixtures:
 
-`installation`, `maintenance`, `troubleshooting`, `safety-warning`, `descriptive`,
-`api-configuration`, `cli-reference`, `structured-content` (tables + lists + code blocks),
-`hard-negative`.
+- `installation`
+- `maintenance`
+- `troubleshooting`
+- `safety-warning`
+- `descriptive`
+- `api-configuration`
+- `cli-reference`
+- `structured-content` (tables + lists + code blocks)
+- `hard-negative`
 
-`hard-negative` fixtures were selected because a naive linter flags them _wrongly_: long sentences
-that are really lists of identifiers, correct passive constructions, dense abbreviation use, SQL
-keywords that look like unintroduced abbreviations. They exist to keep false positives visible, and
-their annotations mostly record `disputed` findings rather than rewrites.
+`hard-negative` fixtures were selected because a naive linter flags them _wrongly_. Examples include
+long sentences that are really lists of identifiers, correct passive constructions, and dense
+abbreviation use. They also include SQL keywords that look like unintroduced abbreviations. These
+fixtures exist to keep false positives visible, and their annotations mostly record `disputed`
+findings rather than rewrites.
 
 ## Splits
 
 `dev` (12 fixtures) is for tuning rules, prompts and thresholds. `heldout` (6) is for reporting
 evaluator quality and must not be tuned against.
 
-The separation is enforced three ways: the validator asserts the splits are disjoint by content hash
-and that `heldout` is ≥ 25% of the corpus; `vp run eval:semantic` defaults to `heldout` and requires
-`--split all` to mix; and a test asserts no `heldout` content hash appears in `dev`.
+The separation is enforced three ways. The validator asserts the splits are disjoint by content
+hash, and that `heldout` is ≥ 25% of the corpus. `vp run eval:semantic` defaults to `heldout`, and
+requires `--split all` to mix. A test also asserts no `heldout` content hash appears in `dev`.
 
 ## Rewriting rules
 
@@ -95,19 +104,24 @@ This is not a style rewrite.
 
 Byte-identical in both versions:
 
-- fenced and inline code, shell commands, literal output;
-- identifiers, API and field names, constants, flags, environment variables;
-- URLs, email addresses, file paths;
-- product, component and part names; version strings;
-- every number, quantity, tolerance, range and unit;
-- placeholders; table structure and cell literals;
+- fenced and inline code, shell commands, literal output.
+- identifiers, API names, and field names.
+- constants, flags, and environment variables.
+- email addresses, file paths, and URLs.
+- product, component and part names.
+- version strings.
+- every number, quantity, tolerance, range and unit.
+- placeholders.
+- table structure and cell literals.
 - the required order of procedural steps.
 
 Preserved in meaning:
 
-- negation; preconditions and conditions; actor responsibility;
+- negation.
+- preconditions and conditions.
+- actor responsibility.
 - modal force — `must` / `shall` / `should` / `can` / `may` / `do not` are never softened or
-  strengthened;
+  strengthened.
 - the distinction between instruction, description, note, caution and warning. A `WARNING` is never
   downgraded to a note, and no hazard statement is removed.
 
@@ -140,129 +154,137 @@ touched.
 ```
 
 `disputed` is a first-class outcome: it records that the linter was **wrong** and the prose was left
-alone. A reviewer is not obliged to satisfy a heuristic, and the tests are built so that refusing does
-not fail the build — a fixture with no accepted change must simply be a `hard-negative` or carry a
-`notes` explanation, and must record something as `disputed` or `deferred`.
+alone. A reviewer is not obliged to satisfy a heuristic. The tests are built so that refusing does
+not fail the build. A fixture with no accepted change must simply be a `hard-negative`, or carry a
+`notes` explanation. It must also record something as `disputed` or `deferred`.
 
 ## How the adjudication was run
 
 The corpus holds two populations of record, produced by different runs over different partitions.
 Conflating them is easy and the distinction matters, so state it first:
 
-| Records                  | Count | Produced by                | Partition              | Provenance in the data   |
-| ------------------------ | ----: | -------------------------- | ---------------------- | ------------------------ |
-| `candidateAdjudications` |   105 | `reviewer-a`…`reviewer-d`  | 5 / 4 / 4 / 4 fixtures | `reviewerKind`, required |
-| `changes`                |    70 | `rewriter-a`, `rewriter-b` | 9 fixtures each        | `reviewerKind`, required |
+| Records                  | Count | Produced by                       | Partition              | Provenance in the data   |
+| ------------------------ | ----: | --------------------------------- | ---------------------- | ------------------------ |
+| `candidateAdjudications` |   105 | `reviewer-a` through `reviewer-d` | 5 / 4 / 4 / 4 fixtures | `reviewerKind`, required |
+| `changes`                |    70 | `rewriter-a`, `rewriter-b`        | 9 fixtures each        | `reviewerKind`, required |
 
-**`candidateAdjudications` — four independent agent reviewers**, one per `fixtures/verdicts/` file,
-each judging a passage against the rule intent in `provisional-rules.md` and nothing else. No human
-produced any of these 105 records. Every one carries `reviewerKind`, so that is answerable from the
-data rather than from this paragraph; the field is required and undefaulted precisely so a record can
-never omit it, and duplicate keys are refused so that the answer a reader gets from the bytes is the
-answer every consumer gets from the parse. `reviewer` (`reviewer-a`…`reviewer-d`) is a label for which run produced a verdict,
-never a person.
+**`candidateAdjudications` comes from four independent agent reviewers**, one per
+`fixtures/verdicts/` file. Each reviewer judges a passage against the rule intent in
+`provisional-rules.md`, and nothing else. No human produced any of these 105 records. Every record
+carries `reviewerKind`. That makes the question answerable from the data itself, not from this
+paragraph. The field is required and undefaulted, so a record can never omit it. Duplicate keys are
+refused too. The answer a reader gets from the bytes is the answer every consumer gets from the
+parse. `reviewer` (one of `reviewer-a` through `reviewer-d`) is a label for which run produced a
+verdict, never a person.
 
 **`changes` — the 70 rewrite records** behind the 32 accepted / 36 disputed / 2 deferred figures in
 `implementation-report.md`. These carry the same required `reviewer` and `reviewerKind` as the
-adjudications. They did not at first, and the gap was not cosmetic: while the only trace of who
-wrote a rewrite was the annotation's `reviewers` array, that array was an assertion no record
-pointed into, so a name could be added to it or removed from it without contradicting anything in
-the file. It is now derived — exactly the set of names the two record populations carry — and
+adjudications. They did not at first, and the gap was not cosmetic. The only trace of who wrote a
+rewrite used to be the annotation's `reviewers` array. That array was an assertion no record pointed
+into. So a name could be added to it, or removed from it, without contradicting anything else in the
+file. It is now derived — exactly the set of names the two record populations carry.
 `merge-candidate-verdicts.mjs` refuses a file where it is anything else.
 
 Be precise about what that buys, because it is less than it sounds. The adjudications are pinned to
-something outside their own file: each one binds to a live candidate passage, so it cannot be
-invented. The rewrite records are not. Editing every `changes[].reviewer` in an annotation _and_ its
-`reviewers` array together is self-consistent, and so is adding a rewrite that never happened or
-deleting four that did — measured, all three pass the merge tool untouched.
+something outside their own file. Each one binds to a live candidate passage, so it cannot be
+invented. The rewrite records are not. Editing every `changes[].reviewer` in an annotation, together
+with its `reviewers` array, is self-consistent. So is adding a rewrite that never happened. So is
+deleting four rewrites that did happen. Measured, all three pass the merge tool untouched.
 
-What refuses them is `scripts/ci/check-annotation-provenance.sh`, and it took three attempts to get
-there, each defeated by the same mistake: a check that constrains an aggregate is defeated by
-whatever rearrangement preserves that aggregate. The totals (105 adjudications, 70 rewrites, the
-per-run split, every record saying `agent`) are preserved by moving credit between two fixtures in
-opposite directions. The per-fixture reviewer sets that closed _that_ hole are themselves preserved
-by shuffling record counts between fixtures crediting the same run — measured, splicing a real
-`disputed` record out of `curl-url-option-reference` and dropping in a second copy of that file's own
-`accepted` record passed every gate in the project and moved the split reported above from 32 / 36 to
-33 / 35.
+What refuses them is `scripts/ci/check-annotation-provenance.sh`. It took three attempts to get
+there, each defeated by the same mistake. A check that constrains an aggregate is defeated by
+whatever rearrangement preserves that aggregate. The totals are preserved by moving credit between
+two fixtures in opposite directions. Those totals are: 105 adjudications, 70 rewrites, the per-run
+split, and every record saying `agent`. The per-fixture reviewer sets closed _that_ hole. But those
+sets are preserved too, by shuffling record counts between fixtures that credit the same run. This
+was measured directly. Two mutations passed every gate, but only together. One mutation spliced a
+real `disputed` record out of `curl-url-option-reference`. The other dropped in a second copy of
+that file's own `accepted` record. Neither mutation passes alone. Removing the disputed record
+alone lowers the expected change total. Adding the duplicate alone raises it. That paired swap also
+moved the split reported above from 32 / 36 to 33 / 35.
 
-So the script also declares a digest of each fixture's annotation: object keys sorted, so
-reformatting is not a change, array order preserved, so reordering is. That pins content rather than
-counts, which is the only thing left when a record binds to nothing outside its own file.
+So the script also declares a digest of each fixture's annotation. Object keys are sorted, so
+reformatting is not a change. Array order is preserved, so reordering is a change. That pins content
+rather than counts. Content is the only thing left to pin when a record binds to nothing outside its
+own file.
 
-The digest covers the whole annotation rather than only its `changes`, and the reason is worth
-recording because the narrower version looked obviously sufficient. An adjudication binds to a live
-candidate passage, so it seemed anchored — but the binding constrains _where a record sits_, not
-_what it says_. `verdict`, `reason` and `reviewerConfidence` are copied from the reviewer row and
-checked against nothing, and the only things constraining them were two aggregates in
-`corpus.test.ts` — since replaced by a record-by-record comparison against `fixtures/verdicts/`.
-Measured: demoting the corpus's two confirmed `passive-voice-candidate` defects
-while promoting two other passages of the same rule preserved both aggregates, passed every gate,
-and quietly changed which passages the semantic evaluators are scored against.
+The digest covers the whole annotation rather than only its `changes`. The reason is worth
+recording, because the narrower version seemed like enough. An adjudication binds to a live candidate
+passage, so it seemed anchored. But the binding constrains _where a record sits_, not _what it says_.
+`verdict`, `reason`, and `reviewerConfidence` are copied from the reviewer row and checked against
+nothing. The only things constraining them were two aggregates in `corpus.test.ts`, since replaced by
+a record-by-record comparison against `fixtures/verdicts/`. Measured: two moves preserved both
+aggregates, but only together. One move demoted the corpus's two confirmed
+`passive-voice-candidate` defects. The other promoted two other passages of the same rule. Neither
+move alone does. Demoting alone shifts the class balance one way. Promoting alone shifts it back the
+other way. The combined move passed every gate, and it quietly changed which passages the semantic
+evaluators are scored against.
 
 Two smaller things follow from hashing parsed values rather than bytes. Duplicate JSON keys make the
-file on disk and the value every check sees disagree — `JSON.parse` keeps the last and says nothing —
-so every JSON file under `fixtures/` is read through `scripts/lib/parse-json-strict.mjs`, which
-refuses them. That scan covers the whole tree rather than the annotations alone, and the reason is
-worth recording: a revision that guarded only the annotations argued the rest was defence in depth,
-and a review disproved it by moving the identical forgery one directory over. `fixtures/verdicts/` is
-what the adjudications are _derived from_, so a duplicated `reviewer` pair there flows the last value
-into every record while the committed annotation and its digest stay byte-identical — the file reads
-as human-audited and `agent=175` still matches. The same trick on `manifest.json` makes the manifest
-document a share-alike licence while the validator reads the permissive duplicate, walking through
-the gate that exists to refuse copyleft.
+file on disk and the value every check sees disagree. `JSON.parse` keeps the last key and says
+nothing about the conflict. So every JSON file under `fixtures/` is read through
+`scripts/lib/parse-json-strict.mjs`, which refuses them. That scan covers the whole tree, not just
+the annotations. The reason is worth recording. An earlier revision guarded only the annotations,
+arguing the rest was defence in depth. A review disproved that: it moved the identical forgery one
+directory over. `fixtures/verdicts/` is what the adjudications are _derived from_. So a duplicated
+`reviewer` pair there flows the last value into every record. The committed annotation and its digest
+stay byte-identical while that happens. The file still reads as human-audited, and `agent=175` still
+matches. The same trick works on `manifest.json`. It makes the manifest document a share-alike
+licence, while the validator reads the permissive duplicate. That walks straight through the gate
+that exists to refuse copyleft.
 
-Bytes are not hashed directly, which would also catch that, because the repository sets no
-`.gitattributes` and a CRLF checkout would then fail for everyone on Windows.
+Bytes are not hashed directly, even though that would also catch the problem. The repository sets no
+`.gitattributes`, so a CRLF checkout would then fail for everyone on Windows.
 
-All of these numbers and digests are expected to change when the corpus does; the point is that
-changing them is an edit somebody makes on purpose, in the same commit as the edit that caused it.
-The gate itself is covered by `test/e2e/check-annotation-provenance.test.ts`, which exists because
-a review deleted each of its checks in turn and the project stayed green every time.
+All of these numbers and digests are expected to change when the corpus does. The point is that
+changing them is a deliberate edit. It happens in the same commit as the edit that caused it. The
+gate itself is covered by `test/e2e/check-annotation-provenance.test.ts`. That test exists because a
+review once deleted each of its checks in turn. Even then, the project stayed green every time.
 
 One more limit, since the field name invites the wrong reading. `reviewer` names the run that
-produced an annotation's rewrites, not the author of the text as it stands: 11 of the 70 records
-have had their content edited since, by later reconciliation commits that recorded nothing about
-themselves.
+produced an annotation's rewrites. It does not name the author of the text as it stands today. 11 of
+the 70 records have had their content edited since. Later reconciliation commits made those edits,
+and those commits recorded nothing about themselves.
 
 What the adjudication method establishes, and what it does not:
 
-- **Each passage was judged exactly once.** The four reviewers' fixture sets are pairwise disjoint —
-  measured: zero fixtures shared between any pair — and `merge-candidate-verdicts.mjs` rejects a
+- **Each passage was judged exactly once**. The four reviewers' fixture sets are pairwise disjoint.
+  Measured, zero fixtures were shared between any pair. `merge-candidate-verdicts.mjs` also rejects a
   second verdict on the same `(ruleId, span)` as a duplicate. So there is no cross-check to appeal
-  to: no passage was independently confirmed, and `goldLabelFor`'s disagreement path
+  to. No passage was independently confirmed, and `goldLabelFor`'s disagreement path
   (`labels.size !== 1 → unlabelled`) never fires on this corpus. Agreement between reviewers is not
-  weak evidence here; it is absent, because no two reviewers looked at the same thing.
-- **The binding is enforced even though the judgement is not corroborated.** The merge tool binds
-  each verdict to a `(ruleId, span, quote)` triple, and a verdict that does not bind to a live
-  passage fails the build.
-- **The labels are model-authored ground truth for a model-based evaluator.** The semantic evaluators
-  are scored against these records, so a favourable score is partly a measure of agreement between
-  two applications of similar judgement, not an external check.
-- **The reference documents were not written as controlled language.** A "false positive" here means
-  a finding a reviewer judged wrong against the rule's stated intent — not a finding that contradicts
-  any standard. The corpus can therefore say a good deal about precision and very little about recall.
+  weak evidence here. It is absent, because no two reviewers looked at the same thing.
+- **The binding is enforced even though the judgement is not corroborated**. The merge tool binds
+  each verdict to a `(ruleId, span, quote)` triple. A verdict that does not bind to a live passage
+  fails the build.
+- **The labels are model-authored ground truth for a model-based evaluator**. The semantic evaluators
+  are scored against these records. A favourable score is therefore partly a measure of agreement
+  between two similar applications of judgement. It is not an external check.
+- **The reference documents were not written as controlled language**. A "false positive" here means
+  a finding a reviewer judged wrong against the rule's stated intent. It does not mean a finding that
+  contradicts any external standard. The corpus can therefore say a good deal about precision and
+  very little about recall.
 
 Treat the resulting figures as the project's own measurement of its own heuristics. They are reported
-because a rule set with no measurement at all is worse, not because they are independent evidence.
+because a rule set with no measurement at all is worse. They are not reported because they are
+independent evidence.
 
 ## What the records are bound to, and what would break the binding
 
 `originalSpans`, and the `candidateAdjudications` merged in from `fixtures/verdicts/` (see
 [`provisional-rules.md`](./provisional-rules.md#measured-precision-of-the-candidate-heuristics)),
-both bind a verdict to a specific `(ruleId, span, quote)`, on the assumption that spans are derived
-the way they are today, by the regex-based scanner.
-[Issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25) proposes deriving spans
-from a real parser instead; if that change moves a span, the verdict recorded against the old span
-no longer describes the new one and needs fresh review.
-`scripts/ci/check-candidate-ground-truth.sh` already enforces this for candidate verdicts; a parser
+both bind a verdict to a specific `(ruleId, span, quote)`. That binding assumes spans are derived the
+way they are today, by the regex-based scanner. [Issue #25](https://github.com/Jamie-BitFlight/textlint-ASD-ai/issues/25)
+proposes deriving spans from a real parser instead. If that change moves a span, the verdict recorded
+against the old span no longer describes the new one. It then needs fresh review.
+`scripts/ci/check-candidate-ground-truth.sh` already enforces this for candidate verdicts. A parser
 adoption would need the same discipline applied to `originalSpans`.
 
-That check runs `scripts/merge-candidate-verdicts.mjs --check`, which does two things: it refuses a
-verdict that binds to no live passage, and it compares every record the verdicts produce against
+That check runs `scripts/merge-candidate-verdicts.mjs --check`, which does two things. It refuses a
+verdict that binds to no live passage. It also compares every record the verdicts produce against
 what is committed in `fixtures/annotations/`. The second half is what makes the annotation files
-themselves checked rather than merely generated — an adjudication edited by hand there, or left
-behind after its candidate moved, fails the build instead of sitting in the corpus unnoticed. To
+themselves checked, rather than merely generated. An adjudication edited by hand there fails the
+build. So does one left behind after its candidate moved. Neither sits in the corpus unnoticed. To
 regenerate rather than check, run the same script without `--check` and review the diff.
 
 ## Corpus tests
@@ -285,12 +307,14 @@ regenerate rather than check, run the same script without `--check` and review t
 
 ## Adding a fixture
 
-1. Add the source to `scripts/fetch-sources.mjs` and run `vp run fixtures:fetch`. Never hand-write a
-   provenance record.
-2. Verify the licence by fetching the licence page or the repository `LICENSE` file, and quote it
-   verbatim in the manifest and in `LICENSES.md`.
-3. Cut a verbatim excerpt of 300–2400 characters into `fixtures/original/<id>.md` with the header
+Never hand-write a provenance record: `scripts/fetch-sources.mjs` writes it for you.
+
+1. Add the source to `scripts/fetch-sources.mjs`.
+2. Run `vp run fixtures:fetch` to download it.
+3. Verify the licence using the licence page or the repository `LICENSE` file.
+4. Quote the licence verbatim in the manifest and in `LICENSES.md`.
+5. Cut a verbatim excerpt of `300–2400` characters into `fixtures/original/<id>.md`, using the header
    comment the other fixtures use.
-4. Add the manifest entry, including the SHA-256 of the file as committed.
-5. Write the counterpart and the annotation.
-6. `vp run fixtures:validate && vp test test/fixtures`.
+6. Add the manifest entry, including the file's committed `SHA-256`.
+7. Write the counterpart and the annotation.
+8. Run `vp run fixtures:validate && vp test test/fixtures`.

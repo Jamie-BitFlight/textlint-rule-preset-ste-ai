@@ -346,8 +346,8 @@ describe('merge-candidate-verdicts', () => {
     // field at all, so this call is the write pass that puts one there. `mutate` below (via
     // `firstAdjudication`) expects that field to already exist; dropping this call makes every
     // case that edits an existing adjudication fail with "candidateAdjudications is not an array"
-    // before it ever reaches the behaviour under test. Confirmed by deleting it and watching five
-    // of the eight cases below fail that way.
+    // before it ever reaches the behaviour under test. Confirmed by deleting it and watching every
+    // case below that edits an existing adjudication fail that way.
     const checked = (mutate: (annotation: MutableAnnotation) => void) => {
       const layout = makeCorpus(withRow(agentVerdicts));
       expect(run(layout).status).toBe(0);

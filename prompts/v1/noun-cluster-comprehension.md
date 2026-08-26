@@ -2,7 +2,7 @@
 id: noun-cluster-comprehension
 version: v1
 task: Decide whether a run of nouns is hard to read or is one established name.
-variables: ruleId passage invariants cluster length limit
+variables: ruleId, passage, invariants, cluster, length, limit
 <<<SYSTEM>>>
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.

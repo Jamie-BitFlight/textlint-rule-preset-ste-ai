@@ -344,9 +344,8 @@ describe('a refused candidate reports its refusal exactly once', () => {
     // is the exact condition this test is for.
     expect(expectedRange).not.toEqual(candidate.range);
     expect(diagnostic?.range).toEqual(expectedRange);
-    // Independent of resolveEvidenceRange's own arithmetic, since nothing else in the suite tests
-    // that function directly: without this, a bug inside resolveEvidenceRange itself (as opposed to
-    // the diagnostic pipeline failing to use its output) would pass both assertions above.
+    // Without this, a bug inside resolveEvidenceRange itself (as opposed to the diagnostic
+    // pipeline failing to use its output) would pass both assertions above.
     expect(diagnostic?.range.start).toBe(text.indexOf(SENTENCE) + evidenceStart);
     expect(diagnostic?.range.start).not.toBe(text.indexOf('is opened by'));
 

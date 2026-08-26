@@ -11,14 +11,9 @@ A single HTTP route:
 POST <endpoint>/v1/chat/completions
 ```
 
-The request body is OpenAI-shaped. It carries these fields:
-
-- `model`
-- `messages`
-- `temperature`
-- `max_tokens`
-- `stream: false`
-- `response_format: { type: "json_schema", json_schema: { … } }`
+The request body is OpenAI-shaped. `LlamaCppClient.complete()` builds it, in the `body` object
+(`src/model-client/llama-client.ts`). Read that source for the field list. It cannot drift out of
+sync with what the client actually sends, and this page could.
 
 The response returns `choices[0].message.content` as a string.
 
@@ -63,7 +58,7 @@ The evaluators are narrow classification tasks that must emit one small JSON obj
 requirement, and a small instruction-tuned model is usually adequate. What matters:
 
 - **it must follow a JSON schema.** llama.cpp converts `response_format: json_schema` into a
-  grammar. The grammar uses Backus-Naur Form (GBNF), llama.cpp's own grammar syntax. This
+  grammar. The grammar syntax is llama.cpp's own: the ggml project's Backus-Naur Form (GBNF). This
   constraint makes malformed JSON nearly impossible. Every response is still validated — grammar-constrained
   decoding is a convenience, not a trust boundary.
 - **`--ctx-size` must fit the prompt.** The largest prompt is `rewrite-equivalence`. It carries the
@@ -97,16 +92,9 @@ Then:
 npx ste-ai lint docs/install.md --semantic --trace
 ```
 
-`--trace` writes one JSON line per request to stderr. Each line includes:
-
-- the prompt version
-- the model id
-- a content hash
-- the try count
-- a cache-hit flag
-- the latency
-
-These fields form the audit trail for a semantic finding.
+`--trace` writes one JSON line per request to stderr, shaped by the `SemanticTrace` interface
+(`src/core/types.ts`). That interface, not this page, is the field list: it forms the audit trail
+for a semantic finding.
 
 ## Measuring it
 
@@ -122,12 +110,14 @@ vp run eval:semantic -- --split dev --endpoint http://127.0.0.1:8080 --model my-
 vp run eval:semantic -- --split heldout --out eval-heldout.json
 ```
 
-The report lists these metrics, per evaluator and overall:
+The report lists metrics per evaluator and overall. `EvaluatorMetrics`
+(`src/evaluation/evaluate.ts`) defines every field. Read that interface for the full list. It
+includes:
 
-- true positives (TP), false positives (FP), true negatives (TN), and false negatives (FN)
+- confusion-matrix counts
 - precision, recall, and F1
-- uncertain rate and failure rate
-- p50, p90, and p99 latency
+- uncertain and failure rates
+- latency percentiles
 
 Ground truth comes from the fixture adjudication records. Unadjudicated candidates are excluded and
 counted separately, rather than guessed at. See
@@ -150,13 +140,9 @@ deterministic finding set byte-identical to an offline run.
 ## Security notes
 
 - Bind to `127.0.0.1`. The client sends document text to the endpoint. Do not expose it.
-- Protected content is masked out of the passages sent to evaluators. None of the following reach
-  the request.
-  - Code
-  - Credentials in configuration fragments
-  - URLs
-  - Paths
-  - Identifiers
+- Protected content is masked out of the passages sent to evaluators. The masking passes
+  (`src/core/protected-regions.ts`) are the source of truth for what that covers. It includes code
+  and credentials, plus URLs, paths, and identifiers. None of it reaches the request.
 
   Some evaluators still need to know that a protected token is present — the candidate-antecedent
   list, for instance. In that case, the evaluator gets a placeholder naming the kind (`«file-path»`)

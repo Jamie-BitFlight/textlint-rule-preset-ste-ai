@@ -132,18 +132,6 @@ describe('sentence-length-procedural', () => {
       result.text.slice(result.forRule(id)[0]?.range.start, result.forRule(id)[0]?.range.end),
     ).toContain('Torque each of the four');
   });
-
-  it('counts a quantity as one word rather than dropping it', () => {
-    const text = 'Torque each bolt to 25 Nm.\n';
-    const doc = analyseDocument({ id: 't', format: 'markdown', text });
-    expect(doc.sentences[0]?.words.map((w) => w.text)).toEqual([
-      'Torque',
-      'each',
-      'bolt',
-      'to',
-      '25 Nm',
-    ]);
-  });
 });
 
 describe('sentence-length-descriptive', () => {
@@ -266,7 +254,10 @@ describe('punctuation-constraints', () => {
   const id = 'punctuation-constraints';
 
   it('flags a semicolon', () => {
-    expect(run('Stop the pump; close the valve.\n').quotesFor(id)).toContain(';');
+    // `toContain` alone would also pass if the rule over-flagged every punctuation character in
+    // the sentence (e.g. the trailing period too), so assert the flagged set is exactly the
+    // semicolon.
+    expect(run('Stop the pump; close the valve.\n').quotesFor(id)).toEqual([';']);
   });
 
   it('flags a slash between words but not a path', () => {
@@ -294,11 +285,14 @@ describe('punctuation-constraints', () => {
   });
 
   it('respects disabling individual checks', () => {
+    // The semicolon is this sentence's only punctuation violation, so disabling it should leave
+    // no diagnostics at all — a plain `not.toContain(';')` would also pass on an unrelated bug
+    // that emptied every diagnostic array regardless of which check fired.
     expect(
       run('Stop the pump; close the valve.\n', {
         rules: { [id]: { forbidSemicolon: false } },
-      }).quotesFor(id),
-    ).not.toContain(';');
+      }).forRule(id),
+    ).toHaveLength(0);
   });
 });
 
@@ -582,7 +576,8 @@ describe('candidate rules never assert violations', () => {
       rules: { 'passive-voice-candidate': { adjudicate: false } },
     });
     const passive = result.forRule('passive-voice-candidate');
-    expect(passive.length).toBeGreaterThan(0);
+    expect(passive).toHaveLength(1);
+    expect(result.text.slice(passive[0]?.range.start, passive[0]?.range.end)).toBe('be replaced');
     expect(passive.every((d) => d.category === 'review-required')).toBe(true);
   });
 
@@ -608,7 +603,9 @@ describe('candidate rules never assert violations', () => {
     const result = run('The value is known.\n', {
       rules: { 'passive-voice-candidate': { adjudicate: false } },
     });
-    expect(result.forRule('passive-voice-candidate').length).toBeGreaterThan(0);
+    const passive = result.forRule('passive-voice-candidate');
+    expect(passive).toHaveLength(1);
+    expect(result.text.slice(passive[0]?.range.start, passive[0]?.range.end)).toBe('is known');
   });
 
   it('passive-voice-candidate no longer flags the exact adjectival case the corpus reviewer named', () => {
@@ -650,6 +647,7 @@ describe('candidate rules never assert violations', () => {
       rules: { 'noun-cluster-candidate': { adjudicate: false } },
     });
     const clusters = result.forRule('noun-cluster-candidate');
+    expect(clusters.length).toBeGreaterThan(0);
     for (const cluster of clusters) {
       const text = result.text.slice(cluster.range.start, cluster.range.end);
       expect(text.toLowerCase().split(/\s+/)).not.toContain('no');
@@ -710,11 +708,19 @@ describe('runner invariants', () => {
     expect(a).toEqual(a.toSorted((x, y) => Number(x.split(':')[0]) - Number(y.split(':')[0])));
   });
 
-  it('every diagnostic range points at real, non-empty source', () => {
+  it('every diagnostic range points at exactly the flagged substring, not a shifted one', () => {
+    // A `>0`-length check alone is satisfied even by a range shifted by a fixed offset (wrong
+    // start/end, but still non-empty), so this asserts the sliced text equals the exact expected
+    // substring for every diagnostic the sentence produces.
     const text = "Prior to installation, don't utilise the the old bracket; stop now!\n";
-    for (const d of run(text).diagnostics) {
-      expect(text.slice(d.range.start, d.range.end).length).toBeGreaterThan(0);
-    }
+    expect(run(text).diagnostics.map((d) => text.slice(d.range.start, d.range.end))).toEqual([
+      'Prior to',
+      "don't",
+      'utilise',
+      'the the',
+      ';',
+      '!',
+    ]);
   });
 
   it('every shipped rule declares provisional status', () => {

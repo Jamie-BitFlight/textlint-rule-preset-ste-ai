@@ -9,11 +9,11 @@
 # "preset-ste-ai", which textlint resolves as a package called `textlint-rule-preset-ste-ai` via
 # Node module resolution. Nothing installs that package into this repo's own node_modules by
 # default -- the root package *is* that package -- so `textlint` printed "No rules found" and the
-# config silently never ran anything. Every `.textlintrc.json` under this repo (excluding
-# node_modules/ and dist/) is discovered and checked here, against a fixture with known,
-# rule-specific violations, so a future edit -- or a new config nobody remembers to add here --
-# that breaks resolution (or silently loads zero rules) fails the build instead of shipping
-# unnoticed again.
+# config silently never ran anything. This discovers every `.textlintrc.json` the repository ships
+# (currently the root one this repo lints its own docs with, and examples/.textlintrc.json, which
+# docs/configuration.md calls "a complete working file") and checks each against a fixture with
+# known, rule-specific violations, so a future edit that breaks resolution (or silently loads zero
+# rules), or a new config nobody wired in here, fails the build instead of shipping unnoticed.
 #
 # Usage: scripts/ci/check-textlint-configs-resolve.sh
 set -euo pipefail
@@ -84,12 +84,13 @@ check_config() {
 # this check stops guarding the thing it exists to guard.
 mapfile -d '' configs < <(
   find . \
-    \( -path ./node_modules -o -path ./dist -o -path ./.git \) -prune -o \
-    -name '.textlintrc.json' -print0
+    \( -path ./node_modules -o -path ./dist -o -path ./.git -o -path ./.claude \) -prune -o \
+    -name '.textlintrc.json' -print0 |
+    sort -z
 )
 
 if [ "${#configs[@]}" -eq 0 ]; then
-  echo "found no .textlintrc.json files to check -- expected at least the root config." >&2
+  echo "No .textlintrc.json files found -- nothing to check." >&2
   exit 2
 fi
 

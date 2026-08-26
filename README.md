@@ -341,8 +341,8 @@ The repository lints its own docs with its own preset. `.textlintrc.json` and `.
 repository root carry the `additionalWellKnown` exceptions this project's own writing needs.
 
 Most of that prose does not pass yet. `scripts/ci/check-dogfood-lint.mjs` ratchets it.
-`scripts/ci/dogfood-lint-baseline.json` records what each file reports today. Three rules follow
-from it. A file with no entry must be clean. No file may get worse. A file's findings may shrink,
+`scripts/ci/dogfood-lint-baseline.json` records what each file reports today. Rules follow from it.
+A file with no entry must be clean. No file may get worse. A file's findings may shrink,
 even partway, not only to zero. Record that too. Otherwise a later change could quietly reintroduce
 what was fixed. So the baseline only ever shrinks. Clean a file up, even partway, run the script
 with `--update`, then commit the smaller baseline.

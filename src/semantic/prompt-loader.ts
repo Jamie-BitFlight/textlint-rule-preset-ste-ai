@@ -67,13 +67,21 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   // carrying a `{{length}}` placeholder that `variables` (derived from `user` alone) never saw, so
   // every real request sent the model the literal text `{{length}}` instead of a rendered number,
   // undetected because nothing here or in the test corpus looked at `<<<SYSTEM>>>` for this shape.
-  // A `{{...}}` placeholder only makes sense where it is rendered, so one in `<<<SYSTEM>>>` is
-  // rejected outright rather than silently forwarded -- move the value into `<<<USER>>>`, or drop
-  // it and keep the instruction general, the way every sibling prompt's system message already is.
-  const systemPlaceholder = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/.exec(system);
-  if (systemPlaceholder !== null) {
+  // A `{{...}}` token only makes sense where it is rendered, so one in `<<<SYSTEM>>>` is rejected
+  // outright rather than silently forwarded -- move the value into `<<<USER>>>`, or drop it and
+  // keep the instruction general, the way every sibling prompt's system message already is.
+  //
+  // Matches any `{{...}}`-shaped token, not only a well-formed placeholder name: review found the
+  // first version of this guard using `renderTemplate`'s own strict identifier pattern
+  // (`[A-Za-z][A-Za-z0-9_]*`, no spaces or hyphens), which let a malformed token like
+  // `{{ length }}` or `{{length-default}}` parse as ordinary prose and reach the model verbatim --
+  // exactly the defect this guard exists to catch, just spelled slightly differently. `[^{}]*`
+  // between the braces accepts anything that is not itself a brace, so this only fails to catch a
+  // token containing a nested `{` or `}`, which cannot be a placeholder in the first place.
+  const systemMustache = /\{\{[^{}]*\}\}/.exec(system);
+  if (systemMustache !== null) {
     throw new PromptError(
-      `Prompt ${origin} has a {{${systemPlaceholder[1] ?? ''}}} placeholder in <<<SYSTEM>>>, but ` +
+      `Prompt ${origin} has a mustache-shaped token "${systemMustache[0]}" in <<<SYSTEM>>>, but ` +
         'the system message is sent to the model unrendered -- move it to <<<USER>>>, or remove ' +
         'it and keep the instruction general.',
     );

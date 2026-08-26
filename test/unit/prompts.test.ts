@@ -256,6 +256,36 @@ describe('prompt file parsing', () => {
         '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na {{x}} b\n<<<USER>>>\nu',
         'x',
       ),
-    ).toThrow(/\{\{x\}\} placeholder in <<<SYSTEM>>>/);
+    ).toThrow(/mustache-shaped token "\{\{x\}\}" in <<<SYSTEM>>>/);
+  });
+
+  it('rejects a malformed mustache token in <<<SYSTEM>>>, not only a well-formed placeholder name', () => {
+    // The first version of this guard reused `renderTemplate`'s strict identifier pattern
+    // (`[A-Za-z][A-Za-z0-9_]*`), so `{{ length }}` (a space inside the braces) and
+    // `{{length-default}}` (a hyphen) did not match it and parsed as ordinary prose -- the same
+    // silent-forwarding defect this guard exists to catch, just spelled slightly differently.
+    for (const malformed of ['{{ length }}', '{{length-default}}']) {
+      expect(
+        () =>
+          parsePromptFile(
+            `<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na ${malformed} b\n<<<USER>>>\nu`,
+            'x',
+          ),
+        malformed,
+      ).toThrow(/mustache-shaped token/);
+    }
+  });
+
+  it('every prompt states it performs exactly one classification task', () => {
+    // `docs/prompt-authoring.md`'s "What every prompt must say" list leads with "One bounded
+    // classification task," but nothing in this file asserted it -- a future prompt broadened into
+    // a general or multi-task request could pass every other check here undetected.
+    for (const file of promptFiles) {
+      const { system } = provider.get(file.version, file.evaluatorId);
+      const label = `${file.version}/${file.evaluatorId}`;
+      expect(system.toLowerCase().replace(/\s+/g, ' '), label).toContain(
+        'exactly one classification task',
+      );
+    }
   });
 });

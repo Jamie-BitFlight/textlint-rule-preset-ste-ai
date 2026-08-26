@@ -150,3 +150,7 @@ vite.config.ts.timestamp-*
 # configuration (settings.json, commands, agents) that belongs in version control. Only the
 # transient, tool-generated worktrees an isolated agent creates under it are ignored here.
 .claude/worktrees/
+
+# Working artefacts for the test-suite benchmarking work (baselines, analysis reports, plans).
+# Evidence that matters is carried in the pull request description, not committed here.
+.tmp/

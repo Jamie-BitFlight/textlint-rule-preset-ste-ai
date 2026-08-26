@@ -80,7 +80,6 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     environment: 'node',
     globals: true,
-    maxWorkers: 1,
     testTimeout: 20_000,
     coverage: {
       provider: 'v8',
@@ -94,5 +93,12 @@ export default defineConfig({
         lines: 94,
       },
     },
+  },
+  staged: {
+    // Runs from `.vite-hooks/pre-commit` via `vp staged`. `vp check --fix` type-checks the whole
+    // project on every invocation regardless of which paths are passed (see `vp check --help`),
+    // so source and prose are split: source files pay that cost, prose/config files only format.
+    '*.{ts,mjs}': 'vp check --fix',
+    '*.{md,json,yml,yaml}': 'vp fmt --write',
   },
 });

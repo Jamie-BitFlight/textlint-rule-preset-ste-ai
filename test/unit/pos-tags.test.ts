@@ -1,57 +1,288 @@
 import nlp from 'compromise';
-import { describe, expect, it } from 'vite-plus/test';
-import {
-  isBareVerbTagSet,
-  isFunctionTagSet,
-  sentenceOpensImperative,
-  tagByOffset,
-} from '../../src/core/pos-tags.js';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
+import { sentenceOpensImperative, tagByOffset } from '../../src/core/pos-tags.js';
 import { MASK_CHAR } from '../../src/core/text.js';
 
-function sharedLexicon(): Record<string, unknown> {
+// ---------------------------------------------------------------------------
+// The shared `compromise` singleton: reading it, and putting back exactly what
+// this file itself writes to it directly (see `simulateHostAddWords` below)
+// ---------------------------------------------------------------------------
+
+interface SharedStores {
+  lexicon: Record<string, unknown>;
+  _multiCache: Record<string, unknown>;
+}
+
+function sharedStores(): SharedStores {
   // Same untyped `nlp.world()` reach-into as `lexiconStore()` in `src/core/pos-tags.ts`, needed
   // here to verify what that module actually wrote to (and restored in) the shared singleton.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model
-    .one.lexicon;
+  return (nlp.world() as unknown as { model: { one: SharedStores } }).model.one;
 }
 
+function sharedLexicon(): Record<string, unknown> {
+  return sharedStores().lexicon;
+}
+
+/** Keys where `live` no longer says what `snapshot` said — added, removed, or changed. */
+function driftedKeys(live: Record<string, unknown>, snapshot: Record<string, unknown>): string[] {
+  const keys = new Set([...Object.keys(live), ...Object.keys(snapshot)]);
+  return [...keys].filter((key) => {
+    const inLive = Object.prototype.hasOwnProperty.call(live, key);
+    const inSnapshot = Object.prototype.hasOwnProperty.call(snapshot, key);
+    if (inLive !== inSnapshot) return true;
+    return live[key] !== snapshot[key];
+  });
+}
+
+/** A shallow copy of both stores `addWords` writes into, as of the moment it was taken. */
+interface StoreSnapshot {
+  readonly lexicon: Record<string, unknown>;
+  readonly multiCache: Record<string, unknown>;
+}
+
+function snapshotStores(): StoreSnapshot {
+  const stores = sharedStores();
+  return { lexicon: { ...stores.lexicon }, multiCache: { ...stores._multiCache } };
+}
+
+/**
+ * Every key in either shared store that no longer matches `snapshot`, labelled by the store it
+ * came from — an empty array means the process-global singleton says exactly what it said then.
+ * Returned as data rather than asserted in here, so that a failure names the leaked words.
+ *
+ * Deliberately full-object: this is called exactly twice in the whole file (once to capture
+ * {@link PRISTINE} at load time, once by `shared compromise singleton isolation` at the very end),
+ * not per test — `compromise`'s base lexicon is large enough (confirmed directly) that a shallow
+ * copy of it is a real, one-off cost, not something to pay on every test in this file. The two
+ * tests that deliberately mutate the singleton are cleaned up individually by
+ * {@link simulateHostAddWords}'s own `afterEach` instead, at O(1) per test.
+ */
+function driftFrom(snapshot: StoreSnapshot): string[] {
+  const stores = sharedStores();
+  return [
+    ...driftedKeys(stores.lexicon, snapshot.lexicon).map((key) => `lexicon.${key}`),
+    ...driftedKeys(stores._multiCache, snapshot.multiCache).map((key) => `_multiCache.${key}`),
+  ];
+}
+
+/**
+ * The shared singleton exactly as this file found it, captured before any test in it has run.
+ * `compromise` is imported as one process-global object (`src/core/pos-tags.ts` documents this at
+ * length), so anything this file leaves taught, it leaves taught for every test that runs after
+ * it in the same process. Two tests below deliberately teach it, standing in for another consumer
+ * of the same singleton; `simulateHostAddWords` below undoes each such write individually, and
+ * `shared compromise singleton isolation` at the end of the file checks the net result against
+ * this snapshot.
+ */
+const PRISTINE: StoreSnapshot = snapshotStores();
+
+// ---------------------------------------------------------------------------
+// Simulating another `compromise` consumer sharing this process's singleton
+// ---------------------------------------------------------------------------
+
+interface DirectWrite {
+  readonly key: string;
+  readonly hadKey: boolean;
+  readonly prevValue: unknown;
+}
+
+let pendingDirectWrites: DirectWrite[] = [];
+
+/**
+ * Call `nlp.addWords` directly on the shared singleton, exactly as a host application or another
+ * package sharing this process's `compromise` import would — bypassing this project's own
+ * `withLexicons` entirely — and record enough to put the key back the way it was. Restoration
+ * happens in the module-level `afterEach` below, not here: the write must survive for the rest of
+ * the test that called this (that is the point of the two tests that use it), and the restore must
+ * still run even if that test's own assertions throw partway through.
+ */
+function simulateHostAddWords(word: string, tag: string): void {
+  const lexicon = sharedLexicon();
+  const hadKey = Object.prototype.hasOwnProperty.call(lexicon, word);
+  pendingDirectWrites.push({ key: word, hadKey, prevValue: lexicon[word] });
+  nlp.addWords({ [word]: tag });
+}
+
+// An `afterEach`, not a trailing statement inside the tests that call `simulateHostAddWords`: the
+// restore has to run even when the test that mutated the singleton failed part-way through, or one
+// red test turns into a cascade of unrelated red tests in everything that runs after it. A no-op,
+// O(1) check (`pendingDirectWrites` is empty) for every test in this file that never calls
+// `simulateHostAddWords`.
+afterEach(() => {
+  const lexicon = sharedLexicon();
+  for (const { key, hadKey, prevValue } of pendingDirectWrites) {
+    // Restore the PRIOR value, never a blind delete: a key that existed before keeps whatever it
+    // said then, and only a key that did not exist before is removed.
+    if (hadKey) lexicon[key] = prevValue;
+    else delete lexicon[key];
+  }
+  pendingDirectWrites = [];
+});
+
+// ---------------------------------------------------------------------------
+// sentenceOpensImperative: the plain (sentence, extraVerbs?) -> boolean cases
+// ---------------------------------------------------------------------------
+
+interface OpenerCase {
+  readonly name: string;
+  readonly text: string;
+  readonly extraVerbs?: readonly string[];
+  readonly expected: boolean;
+}
+
+const OPENER_CASES: readonly OpenerCase[] = [
+  {
+    name: 'an ordinary sentence-initial imperative',
+    text: 'Install the driver before you continue.',
+    expected: true,
+  },
+
+  // Confirmed directly: without the domain lexicon, `compromise` tags "Torque" as a bare Noun.
+  {
+    name: 'a domain verb the compromise base lexicon does not know on its own',
+    text: 'Torque the bolt to 25 Nm.',
+    expected: true,
+  },
+
+  // A leading "Do not"/"Never"/"Always" is imperative. `compromise` does not tag the "Always" case
+  // as `#Imperative` on its own — the leading adverb defeats its verb-initial heuristic.
+  {
+    name: 'a leading "Do not"',
+    text: 'Do not remove the cover while power is connected.',
+    expected: true,
+  },
+  {
+    name: 'a leading contracted "Don’t"',
+    text: "Don't remove the cover while power is connected.",
+    expected: true,
+  },
+  { name: 'a leading "Never"', text: 'Never touch the terminal.', expected: true },
+  { name: 'a leading "Always"', text: 'Always check the pressure gauge first.', expected: true },
+
+  // Neither "wipe" nor "trim" is in `IMPERATIVE_VERBS` — this is real recall the hardcoded list
+  // never had, not just parity with it.
+  {
+    name: 'a verb the closed list never enumerated, that compromise knows on its own ("wipe")',
+    text: 'Wipe the sensor lens before recalibrating.',
+    expected: true,
+  },
+  {
+    name: 'a verb the closed list never enumerated, that compromise knows on its own ("trim")',
+    text: 'Trim the excess cable.',
+    expected: true,
+  },
+
+  // Confirmed directly: `compromise` does not put an `#Imperative` tag on any of "Build", "flash"
+  // or "run" in this sentence, even though the shape is a textbook coordinated instruction list.
+  // `sentenceOpensImperative` recovers this from the bare-verb tag of the very first word instead
+  // of relying on `#Imperative` alone.
+  {
+    name: 'a coordinated imperative list, which compromise does not tag #Imperative on its own',
+    text: 'Build, flash, and run a sample application.',
+    expected: true,
+  },
+
+  {
+    name: 'a user-configured extra imperative verb',
+    text: 'Reticulate the splines before shipping the part.',
+    extraVerbs: ['reticulate'],
+    expected: true,
+  },
+
+  {
+    name: 'not a passive-voice sentence opener',
+    text: 'The driver is installed before you continue.',
+    expected: false,
+  },
+
+  // Regression: without a colon guard, "Note" alone is a bare present-tense verb and the
+  // coordinated-list fallback above would misclassify this as procedural.
+  {
+    name: 'not a label ("Note:", "Exception:")',
+    text: 'Note: Exception: the employer need not document the required procedure.',
+    expected: false,
+  },
+
+  // Regression found via fixtures/original/sqlite-pragma-hard-negative.md: "List Of PRAGMAs ..."
+  // is a heading rendered as a run-on line, not an instruction to list something.
+  {
+    name: 'not a Title Case heading',
+    text: 'List Of PRAGMAs analysis_limit application_id auto_vacuum.',
+    expected: false,
+  },
+
+  // Regression found via fixtures/original/postgres-vacuum-overview.md: `compromise` tags
+  // capitalised sentence-initial "VACUUM" as Verb+Imperative on its own, which then makes it
+  // mistag the real verb "reclaims" as a noun.
+  {
+    name: 'not a capitalised technical term that collides with a common verb',
+    text: 'VACUUM reclaims storage occupied by dead tuples.',
+    expected: false,
+  },
+
+  // Regression (chatgpt-codex-connector, P2, r3700698040): the "vacuum"/"list" false-positive
+  // suppression used to apply unconditionally, so a project that explicitly configured
+  // `extraImperativeVerbs: ['vacuum']` (e.g. to treat "VACUUM the table." as a command in its own
+  // SQL-heavy docs) had that configuration silently overridden back to descriptive. The third row
+  // is the control: unconfigured, the suppression still applies as before.
+  {
+    name: 'a configured extra verb overriding the corpus-specific suppression list ("vacuum")',
+    text: 'Vacuum the table.',
+    extraVerbs: ['vacuum'],
+    expected: true,
+  },
+  {
+    name: 'a configured extra verb overriding the corpus-specific suppression list ("list")',
+    text: 'List the files.',
+    extraVerbs: ['list'],
+    expected: true,
+  },
+  {
+    name: 'the corpus-specific suppression still applying when nothing configured the verb',
+    text: 'Vacuum the table.',
+    expected: false,
+  },
+
+  // NOT a guarantee — a limitation this function is documented to have, recorded here so that
+  // fixing it produces a named, self-explaining failure ("the known limitation no longer holds")
+  // rather than a mysterious red test somebody restores the old behaviour to satisfy. The input is
+  // a real one: only the first word is examined, so a sentence whose real grammatical subject is a
+  // later clause reads as an imperative. If this row ever goes red, the correct response is to
+  // delete the row and celebrate, not to put the limitation back.
+  {
+    name: 'KNOWN LIMITATION, not a guarantee: only the sentence opener is examined, so a later-clause subject still reads as imperative',
+    text: 'Record the value is stored in flash.',
+    expected: true,
+  },
+
+  // Regression (chatgpt-codex-connector, P2): on the direct `analyseDocument`/`scanBlocks` path,
+  // protected content (e.g. an inline-code identifier) is already replaced with `MASK_CHAR` before
+  // this function runs. The old leading-strip regex discarded a whole leading run of `MASK_CHAR`
+  // the same way it discards structural whitespace/markup (`>`, `*`, `_`, `-`), so a masked
+  // identifier sitting in subject position was skipped straight through to the verb that follows
+  // it — "`workers` run the service and emit metrics." (masked: a run of `MASK_CHAR` standing in
+  // for the backticked "workers", then " run the service...") was analysed as if it opened with
+  // "run", a bare imperative verb.
+  {
+    name: 'not a leading masked protected token treated as if it were structural whitespace',
+    text: `${MASK_CHAR.repeat(9)} run the service and emit metrics.`,
+    expected: false,
+  },
+
+  // Contrast case for the row above: a masked structural marker (e.g. a blockquote arrow) that is
+  // immediately, contiguously followed by the verb — no separating space, unlike a masked
+  // content-bearing token — must not stop the opener from being recognised.
+  {
+    name: 'an imperative whose leading structural markup is masked with no gap before the verb',
+    text: `${MASK_CHAR.repeat(2)}Install the driver.`,
+    expected: true,
+  },
+];
+
 describe('sentenceOpensImperative', () => {
-  it('recognises an ordinary sentence-initial imperative', () => {
-    expect(sentenceOpensImperative('Install the driver before you continue.')).toBe(true);
-  });
-
-  it('recognises a domain verb the compromise base lexicon does not know on its own', () => {
-    // Confirmed directly: without the domain lexicon, `compromise` tags "Torque" as a bare Noun.
-    expect(sentenceOpensImperative('Torque the bolt to 25 Nm.')).toBe(true);
-  });
-
-  it('recognises a leading "Do not" / "Never" / "Always" as imperative', () => {
-    expect(sentenceOpensImperative('Do not remove the cover while power is connected.')).toBe(true);
-    expect(sentenceOpensImperative("Don't remove the cover while power is connected.")).toBe(true);
-    expect(sentenceOpensImperative('Never touch the terminal.')).toBe(true);
-    expect(sentenceOpensImperative('Always check the pressure gauge first.')).toBe(true);
-  });
-
-  it('recognises a verb the closed list never enumerated, that compromise knows on its own', () => {
-    // Neither "wipe" nor "trim" is in `IMPERATIVE_VERBS` — this is real recall the hardcoded list
-    // never had, not just parity with it.
-    expect(sentenceOpensImperative('Wipe the sensor lens before recalibrating.')).toBe(true);
-    expect(sentenceOpensImperative('Trim the excess cable.')).toBe(true);
-  });
-
-  it('recognises a coordinated imperative list, which compromise does not tag #Imperative on its own', () => {
-    // Confirmed directly: `compromise` does not put an `#Imperative` tag on any of "Build",
-    // "flash" or "run" in this sentence, even though the shape is a textbook coordinated
-    // instruction list. `sentenceOpensImperative` recovers this from the bare-verb tag of the
-    // very first word instead of relying on `#Imperative` alone.
-    expect(sentenceOpensImperative('Build, flash, and run a sample application.')).toBe(true);
-  });
-
-  it('recognises a user-configured extra imperative verb', () => {
-    expect(
-      sentenceOpensImperative('Reticulate the splines before shipping the part.', ['reticulate']),
-    ).toBe(true);
+  it.each(OPENER_CASES)('$name', ({ text, extraVerbs, expected }) => {
+    expect(sentenceOpensImperative(text, extraVerbs ?? [])).toBe(expected);
   });
 
   // Regression (chatgpt-codex-connector, P2): `extraVerbsKey()` joins a normalised `extraVerbs`
@@ -61,10 +292,14 @@ describe('sentenceOpensImperative', () => {
   // configured `["gadget widget"]` (one two-word phrase) was therefore taught as two independent
   // single-word verbs, "gadget" and "widget", rather than as the phrase "gadget widget".
   //
-  // "gadget"/"widget" (not "gizmo", already taught permanently as a verb by a different test in
-  // this file simulating another `compromise` consumer): confirmed directly that `compromise` tags
-  // both as `Noun Singular` on their own, and does not guess either as a verb, so either one only
-  // reads as an imperative opener here because `extraVerbs` taught it to.
+  // "gadget"/"widget": confirmed directly that `compromise` tags both as `Noun Singular` on their
+  // own, and does not guess either as a verb, so either one only reads as an imperative opener
+  // here because `extraVerbs` taught it to. That is the entire requirement on the word choice, and
+  // this pair now satisfies it by choice rather than by constraint: the pair also used to have to
+  // avoid "gizmo", which the "another compromise consumer" test below taught to the process-global
+  // singleton permanently. The file-level `afterEach` restore above ended that leak, so "gizmo" is
+  // free again — it is simply not used here, because this case needs a two-word phrase and
+  // gadget/widget already meet the requirement.
   it('teaches a multi-word extraImperativeVerbs entry as one phrase, not as separate words', () => {
     const extraVerbs = ['gadget widget'];
     // The phrase itself, used together, must open an imperative.
@@ -115,10 +350,14 @@ describe('sentenceOpensImperative', () => {
   // "gizmo" (not "cache", not "reticulate", not in `IMPERATIVE_VERBS`): confirmed directly that
   // `compromise` tags it `Noun Singular` on its own and does not guess it as a verb, so — like
   // "cache" above — it only reads as an imperative opener here because something taught it to.
+  //
+  // The `simulateHostAddWords` call below writes straight to the process-global singleton, on
+  // purpose: that is the scenario. The module-level `afterEach` takes it back out again, so the
+  // word is taught for the duration of this one test rather than for the rest of the process.
   it('leaves a word added by another compromise consumer sharing this process intact across a restore/reteach cycle', () => {
     // Simulate a host application (or another package) that shares this process's one
     // `compromise` singleton and calls `addWords` directly, bypassing this module entirely.
-    nlp.addWords({ gizmo: 'Verb' });
+    simulateHostAddWords('gizmo', 'Verb');
     expect(sentenceOpensImperative('Gizmo the widget before shipping.')).toBe(true);
 
     // Force `ensureExtraLexicon`'s restore/reteach cycle to run twice, by switching this module's
@@ -142,13 +381,16 @@ describe('sentenceOpensImperative', () => {
   //
   // "sprocket" (not "cache"/"reticulate"/"gizmo", used above): confirmed directly that `compromise`
   // tags it `Noun Singular` on its own and does not guess it as a verb.
+  //
+  // As above, the `simulateHostAddWords` call is a deliberate write to the process-global
+  // singleton, undone for the rest of the process by the module-level `afterEach`.
   it('does not restore over a newer value another compromise consumer wrote to the same key', () => {
     // This module teaches "sprocket" as a configured verb.
     expect(sentenceOpensImperative('Sprocket the gear before shipping.', ['sprocket'])).toBe(true);
 
     // Simulate a host application (or another package) sharing this process's one `compromise`
     // singleton, updating that exact same key to something else *after* this module wrote it.
-    nlp.addWords({ sprocket: 'Adjective' });
+    simulateHostAddWords('sprocket', 'Adjective');
 
     // Force `ensureExtraLexicon`'s restore/reteach cycle to run, by switching this module's own
     // `extraImperativeVerbs` configuration away from "sprocket".
@@ -156,11 +398,7 @@ describe('sentenceOpensImperative', () => {
 
     // The host's newer write must survive: this module's restore must never overwrite a key whose
     // live value no longer matches what this module itself last wrote there.
-    expect(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- see sharedLexicon() above
-      (nlp.world() as unknown as { model: { one: { lexicon: Record<string, unknown> } } }).model.one
-        .lexicon['sprocket'],
-    ).toBe('Adjective');
+    expect(sharedLexicon()['sprocket']).toBe('Adjective');
   });
 
   // Regression (chatgpt-codex-connector round 4, finding A / discussion_r3698561010): the previous
@@ -201,101 +439,35 @@ describe('sentenceOpensImperative', () => {
     expect(sharedLexicon()['torque']).toBe(beforeTorque);
     expect(sharedLexicon()['cache']).toBeUndefined();
   });
-
-  it('does not misfire on a passive-voice sentence opener', () => {
-    expect(sentenceOpensImperative('The driver is installed before you continue.')).toBe(false);
-  });
-
-  it('does not treat a label ("Note:", "Exception:") as an imperative opener', () => {
-    // Regression: without a colon guard, "Note" alone is a bare present-tense verb and the
-    // coordinated-list fallback above would misclassify this as procedural.
-    expect(
-      sentenceOpensImperative(
-        'Note: Exception: the employer need not document the required procedure.',
-      ),
-    ).toBe(false);
-  });
-
-  it('does not treat a Title Case heading as an imperative opener', () => {
-    // Regression found via fixtures/original/sqlite-pragma-hard-negative.md: "List Of PRAGMAs ..."
-    // is a heading rendered as a run-on line, not an instruction to list something.
-    expect(
-      sentenceOpensImperative('List Of PRAGMAs analysis_limit application_id auto_vacuum.'),
-    ).toBe(false);
-  });
-
-  it('does not cascade-mistag a capitalised technical term that collides with a common verb', () => {
-    // Regression found via fixtures/original/postgres-vacuum-overview.md: `compromise` tags
-    // capitalised sentence-initial "VACUUM" as Verb+Imperative on its own, which then makes it
-    // mistag the real verb "reclaims" as a noun.
-    expect(sentenceOpensImperative('VACUUM reclaims storage occupied by dead tuples.')).toBe(false);
-  });
-
-  it('lets an explicitly configured extra verb override the corpus-specific suppression list', () => {
-    // Regression (chatgpt-codex-connector, P2, r3700698040): the "vacuum"/"list" false-positive
-    // suppression above used to apply unconditionally, so a project that explicitly configured
-    // `extraImperativeVerbs: ['vacuum']` (e.g. to treat "VACUUM the table." as a command in its own
-    // SQL-heavy docs) had that configuration silently overridden back to descriptive.
-    expect(sentenceOpensImperative('Vacuum the table.', ['vacuum'])).toBe(true);
-    expect(sentenceOpensImperative('List the files.', ['list'])).toBe(true);
-    // Unconfigured, the suppression still applies as before.
-    expect(sentenceOpensImperative('Vacuum the table.')).toBe(false);
-  });
-
-  it('is a known, documented limitation that only the sentence opener is examined', () => {
-    // Matches the previous heuristic's own documented limit: this still misclassifies a sentence
-    // whose real grammatical subject is a later clause, because only the first word is examined.
-    expect(sentenceOpensImperative('Record the value is stored in flash.')).toBe(true);
-  });
-
-  // Regression (chatgpt-codex-connector, P2): on the direct `analyseDocument`/`scanBlocks` path,
-  // protected content (e.g. an inline-code identifier) is already replaced with `MASK_CHAR` before
-  // this function runs. The old leading-strip regex discarded a whole leading run of `MASK_CHAR`
-  // the same way it discards structural whitespace/markup (`>`, `*`, `_`, `-`), so a masked
-  // identifier sitting in subject position was skipped straight through to the verb that follows
-  // it — "`workers` run the service and emit metrics." (masked: a run of `MASK_CHAR` standing in
-  // for the backticked "workers", then " run the service...") was analysed as if it opened with
-  // "run", a bare imperative verb.
-  it('does not skip a leading masked protected token as if it were structural whitespace', () => {
-    const masked = `${MASK_CHAR.repeat(9)} run the service and emit metrics.`;
-    expect(sentenceOpensImperative(masked)).toBe(false);
-  });
-
-  it('still recognises an imperative whose leading structural markup is masked with no gap before the verb', () => {
-    // Contrast case for the fix above: a masked structural marker (e.g. a blockquote arrow) that is
-    // immediately, contiguously followed by the verb — no separating space, unlike a masked
-    // content-bearing token — must not stop the opener from being recognised.
-    const masked = `${MASK_CHAR.repeat(2)}Install the driver.`;
-    expect(sentenceOpensImperative(masked)).toBe(true);
-  });
 });
 
-describe('isFunctionTagSet', () => {
-  it('recognises the closed-class compromise tags', () => {
-    for (const tag of ['Determiner', 'Preposition', 'Conjunction', 'Pronoun', 'Modal', 'Copula']) {
-      expect(isFunctionTagSet([tag]), tag).toBe(true);
-    }
+// ---------------------------------------------------------------------------
+// This file's own footprint on the process-global singleton
+// ---------------------------------------------------------------------------
+
+// Two tests above call `simulateHostAddWords` — `nlp.addWords` on `compromise`'s process-global
+// singleton — deliberately, to stand in for another consumer of it. Until that helper's
+// module-level `afterEach` existed, neither mutation was ever undone: "gizmo" and "sprocket" stayed
+// taught for every test that ran later in the same worker process — in this file and in any file
+// after it. That is why the multi-word-phrase test above had to be written around "gizmo" rather
+// than with it, and why `maxWorkers: 1` was load-bearing for correctness here rather than only for
+// speed.
+//
+// These two tests are declared last, so they run last in the file and observe whatever the tests
+// above actually left behind. Remove the `afterEach` in `simulateHostAddWords`'s block and the
+// first goes red, naming the leaked keys; the second says the same thing in the file's own
+// vocabulary.
+describe('shared compromise singleton isolation', () => {
+  it('leaves the process-global compromise lexicon exactly as this file found it', () => {
+    expect(driftFrom(PRISTINE)).toEqual([]);
   });
 
-  it('does not treat an ordinary content-word tag set as a function word', () => {
-    expect(isFunctionTagSet(['Noun', 'Singular'])).toBe(false);
-    expect(isFunctionTagSet(['Verb', 'PresentTense', 'Infinitive'])).toBe(false);
-  });
-});
-
-describe('isBareVerbTagSet', () => {
-  it('accepts an infinitive/present-tense verb', () => {
-    expect(isBareVerbTagSet(['Verb', 'PresentTense', 'Infinitive'])).toBe(true);
-  });
-
-  it('rejects a gerund, a past tense and a passive participle', () => {
-    expect(isBareVerbTagSet(['Verb', 'PresentTense', 'Gerund'])).toBe(false);
-    expect(isBareVerbTagSet(['Verb', 'PastTense'])).toBe(false);
-    expect(isBareVerbTagSet(['Verb', 'PastTense', 'Passive'])).toBe(false);
-  });
-
-  it('rejects a non-verb tag set', () => {
-    expect(isBareVerbTagSet(['Noun', 'Singular'])).toBe(false);
-    expect(isBareVerbTagSet(['Adjective'])).toBe(false);
+  it('leaves no trace of the words this file taught the singleton directly', () => {
+    // Compared against PRISTINE, not hardcoded to `toBeUndefined()`: if a future `compromise`
+    // upgrade ships either word in its own base lexicon, `simulateHostAddWords`'s afterEach
+    // correctly restores THAT prior value, and a bare `toBeUndefined()` would then fail even
+    // though nothing leaked.
+    expect(sharedLexicon()['gizmo']).toBe(PRISTINE.lexicon['gizmo']);
+    expect(sharedLexicon()['sprocket']).toBe(PRISTINE.lexicon['sprocket']);
   });
 });

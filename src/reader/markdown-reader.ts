@@ -17,6 +17,7 @@ import {
   defaultStructureOptions,
   isAdmonitionLabelLine,
   isBareAdmonitionOpener,
+  stripTrailingCR,
 } from '../core/structure.js';
 import type { AdmonitionKind, SourceDocument, SourceRange, TextMode } from '../core/types.js';
 import type { TextUnit } from './types.js';
@@ -182,7 +183,10 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         const header = child;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
-        const own = detectAdmonition(header.raw);
+        // header.raw is sliced straight from the untouched source (see stripTrailingCR's doc
+        // comment in structure.ts), so it still carries a trailing \r under CRLF -- stripped here,
+        // never from anything an offset is later computed from.
+        const own = detectAdmonition(stripTrailingCR(header.raw));
         yield buildUnit(
           ctx,
           'heading',
@@ -203,7 +207,12 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
         const raw = paragraph.raw;
-        const own = detectAdmonition(raw);
+        // `raw` is sliced straight from the untouched source, so it still carries a trailing \r
+        // under CRLF (see stripTrailingCR's doc comment in structure.ts). Stripped only for the
+        // classification checks below -- `raw` itself stays untouched for `splitLeadingOpener`,
+        // which computes an offset from it.
+        const detectionRaw = stripTrailingCR(raw);
+        const own = detectAdmonition(detectionRaw);
         // `isBareAdmonitionOpener`'s GFM alternative is written against a raw source *line*, which
         // always carries its blockquote's leading `>` — but an HTML comment on its own line (the
         // shape a suppression directive takes) makes the parser split the blockquote into separate
@@ -211,7 +220,8 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // has already attributed to the container. Reconstructed here, for this one check only —
         // `detectAdmonition` already tolerates the marker with or without `>`, so `own` above needed
         // no such reconstruction.
-        const openerCandidate = ctx.containerKind === 'blockquote' ? `> ${raw}` : raw;
+        const openerCandidate =
+          ctx.containerKind === 'blockquote' ? `> ${detectionRaw}` : detectionRaw;
         // An opener carries no prose: it names a register for what follows and produces no unit,
         // matching `scanBlocks`'s "a block made only of markup carries no prose" rule.
         //
@@ -225,7 +235,7 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         // the scope), it stays one-shot via `ctx.pending`, same as before — the immediately
         // following unit (typically the indented body `CodeBlock`, see that case below) is what
         // actually needs it.
-        if (own !== 'none' && isAdmonitionLabelLine(raw)) {
+        if (own !== 'none' && isAdmonitionLabelLine(detectionRaw)) {
           ctx.pending.value = own;
           continue;
         }
@@ -349,7 +359,8 @@ function* walkChildren(children: readonly AnyTxtNode[], ctx: WalkContext): Gener
         const cell = child;
         const pending = ctx.pending.value;
         ctx.pending.value = 'none';
-        const own = detectAdmonition(cell.raw);
+        // cell.raw carries the same trailing-\r-under-CRLF hazard as header.raw above.
+        const own = detectAdmonition(stripTrailingCR(cell.raw));
         yield buildUnit(
           ctx,
           'table-cell',
@@ -417,7 +428,12 @@ function splitLeadingOpener(
 ): { readonly admonition: AdmonitionKind; readonly bodyOffset: number } | undefined {
   const newline = raw.indexOf('\n');
   if (newline < 0) return undefined;
-  const firstLine = raw.slice(0, newline);
+  // `newline` is an offset into the untouched `raw` and feeds `bodyOffset` below, so it is never
+  // computed from a CR-stripped string. `firstLine` itself carries a trailing \r under CRLF (the
+  // slice ends right before the \n, and CRLF's \r sits immediately before it) -- stripped only for
+  // the classification checks that follow, same as every other admonition-detecting call site in
+  // this file.
+  const firstLine = stripTrailingCR(raw.slice(0, newline));
   const admonition = detectAdmonition(firstLine);
   if (admonition === 'none') return undefined;
   if (!isBareAdmonitionOpener(firstLine) && !isAdmonitionLabelLine(firstLine)) return undefined;

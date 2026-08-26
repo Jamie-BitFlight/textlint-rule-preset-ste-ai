@@ -215,6 +215,34 @@ describe('a claim on a candidate inside a safety admonition', () => {
   });
 });
 
+describe('a claim inside a CRLF-authored admonition, through the real reader', () => {
+  it('is refused, proving the production reader path detects a bare-label opener under CRLF', () => {
+    // `analyseTextDeterministic` (unlike `test/unit/suppressions.test.ts`'s `run()` helper, which
+    // calls `analyseDocument` directly and falls back to `scanBlocks`) goes through
+    // `readerBlocksFor` -> `readMarkdownUnitsSync`, the real markdown-reader.ts path — a separate
+    // admonition-detection call site from `structure.ts`'s `scanBlocks`, and the one a CRLF fix
+    // scoped only to `scanBlocks` would leave unprotected in production. No blank line between
+    // `[WARNING]` and the body sentence, so the parser merges them into one `Paragraph` node and
+    // `splitLeadingOpener` — not the whole-raw `detectAdmonition` check above it, which only ever
+    // sees a multi-line blob ending in prose — is what has to recognise the label.
+    const text = [
+      '<!-- ste-ai-ignore-next-line passive-voice-candidate -- Quoted verbatim. -->',
+      '',
+      '[WARNING]',
+      'The bracket is removed by the technician.',
+      '',
+    ]
+      .join('\n')
+      .replace(/\n/g, '\r\n');
+    const result = analyseTextDeterministic(text);
+
+    expect(result.candidates.map((c) => c.ruleId)).toEqual([CANDIDATE_RULE]);
+    expect(result.suppressions.filter((s) => s.ruleId === CANDIDATE_RULE)).toEqual([]);
+    const refusal = result.notices.find((n) => n.code === 'suppression-refused-in-admonition');
+    expect(refusal?.detail).toEqual({ ruleId: CANDIDATE_RULE, admonition: 'warning' });
+  });
+});
+
 describe('a refused candidate reports its refusal exactly once', () => {
   const RANGE_OVER_ALERT = [
     '<!-- ste-ai-ignore-start passive-voice-candidate -- reviewed, keep as written -->',

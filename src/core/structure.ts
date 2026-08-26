@@ -96,8 +96,15 @@ const BARE_LABEL_RE = /^\s*(?:\*{1,2}|_{1,2})?([A-Z][A-Z]{2,11})(?:\*{1,2}|_{1,2
  * `normalizeLineEndings` cannot be reused as-is: its lookahead requires a *following* `\n`, which
  * a line already split on `\n` never has. Removing rather than space-substituting is safe here
  * because the result only feeds a boolean/enum classification, never a sliced offset.
+ *
+ * Exported because `scanBlocks` is not the only admonition-detecting caller: `src/reader/
+ * markdown-reader.ts` feeds a real parser's own `node.raw` (or a substring of it) into the same
+ * `detectAdmonition`/`isBareAdmonitionOpener`/`isAdmonitionLabelLine` matchers, and that `raw` is
+ * sliced straight from the untouched source the same way `Line.raw` is, carrying the same trailing
+ * `\r` under CRLF. Applying this only to what feeds the classifiers there too — never to the string
+ * an offset is computed from — keeps the same safety property this function relies on here.
  */
-function stripTrailingCR(line: string): string {
+export function stripTrailingCR(line: string): string {
   return normalizeLineEndings(line).replace(/\r$/, '');
 }
 

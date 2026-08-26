@@ -430,8 +430,12 @@ describe('semantic autofix gate', () => {
     // second, later call. Keying off the literal word "REWRITTEN" instead would coincidentally work
     // today (it happens to appear in the real prompt template) but would break the moment that
     // prompt's wording changed, for reasons unrelated to the gating behaviour under test.
-    const REPLACEMENT = 'Remove the cover';
+    // Deliberately not a substring of TWO_ACTIONS: if it were, a regression that fired the second
+    // call as a verbatim duplicate of the first (whose message embeds the whole original passage)
+    // would satisfy a bare `toContain` check below without the gate ever running.
+    const REPLACEMENT = 'Detach the guard';
     let callCount = 0;
+    let firstCallUser = '';
     let secondCallUser = '';
     service = await startFakeSemanticService({
       handler: (body) => {
@@ -439,6 +443,7 @@ describe('semantic autofix gate', () => {
         const isGate = callCount > 1;
         const user = body.messages?.find((m) => m.role === 'user')?.content ?? '';
         if (isGate) secondCallUser = user;
+        else firstCallUser = user;
         const ruleId = /ruleId:\s*(\S+)/.exec(user)?.[1] ?? 'unknown';
         return {
           content: verdictJson({
@@ -470,7 +475,10 @@ describe('semantic autofix gate', () => {
     // interpolates the real `rewritten` value verbatim into the user message
     // (`REWRITTEN (offsets...): {{rewritten}}`), so requiring the primary evaluation's own
     // suggested replacement to appear in the second call's content ties this assertion to the data
-    // actually flowing through `verifyRewriteEquivalence`, not to the template's prose.
+    // actually flowing through `verifyRewriteEquivalence`, not to the template's prose. The negative
+    // half — the first call must NOT contain it — is what actually rules out a duplicate-of-primary
+    // regression, since REPLACEMENT is chosen to be absent from TWO_ACTIONS itself.
+    expect(firstCallUser).not.toContain(REPLACEMENT);
     expect(secondCallUser).toContain(REPLACEMENT);
     const fixed = result.diagnostics.find(
       (d) => d.producedBy === 'semantic' && d.fix !== undefined,

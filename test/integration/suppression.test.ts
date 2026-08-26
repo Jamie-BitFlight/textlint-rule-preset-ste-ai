@@ -57,6 +57,22 @@ const admonitionDoc = (kind: 'WARNING' | 'NOTE'): string =>
 
 const CANDIDATE_RULE = 'passive-voice-candidate';
 
+/**
+ * The message a withheld `passive-voice-candidate` diagnostic actually carries, obtained by running
+ * the same suppression path (`candidateRecord` in `src/analysis/analyse.ts`) the tests below
+ * exercise, rather than hardcoded — a suppression record whose `message` construction silently
+ * swapped in an unrelated (but still non-empty) string would satisfy a bare `toBeTruthy()` check
+ * without this comparison. Not the rule's literal wording either, so an unrelated tweak to it
+ * doesn't break this file: this value is derived from a live suppressed run at test time.
+ */
+const LIVE_PASSIVE_VOICE_MESSAGE = analyseTextDeterministic(
+  [
+    '<!-- ste-ai-ignore-next-line passive-voice-candidate -- probe. -->',
+    'The bracket is removed by the technician.',
+    '',
+  ].join('\n'),
+).suppressions.find((s) => s.ruleId === CANDIDATE_RULE)?.message;
+
 /** Only the vocabulary findings: the fixtures also raise candidates the assertions do not concern. */
 function vocabulary(findings: readonly { readonly ruleId: string }[]): string[] {
   return findings.filter((d) => d.ruleId === 'unapproved-vocabulary').map((d) => d.ruleId);
@@ -379,10 +395,11 @@ describe('a suppressed candidate is never sent to the model', () => {
     ]);
     const record = result.suppressions.find((s) => s.ruleId === 'passive-voice-candidate');
     expect(record?.category).toBe('review-required');
-    // Non-empty, not an exact match: the rule's own wording is `candidate-rules.ts`'s
-    // concern (covered by its own unit tests), not this suppression test's — pinning the exact
-    // copy here would break this test on an unrelated wording tweak.
-    expect(record?.message).toBeTruthy();
+    // Compared against a live run, not a bare truthy check: a record-construction bug that
+    // stored some unrelated non-empty string would satisfy `toBeTruthy()`. Not the rule's literal
+    // wording hardcoded here either, so an unrelated wording tweak in candidate-rules.ts doesn't
+    // break this file.
+    expect(record?.message).toBe(LIVE_PASSIVE_VOICE_MESSAGE);
     expect(record?.reason).toBe('Quoted verbatim from the supplier.');
     expect(result.notices.map((n) => n.code)).not.toContain('suppression-unused');
   });
@@ -438,10 +455,11 @@ describe('a suppressed candidate is never sent to the model', () => {
     const record = result.suppressions.find((s) => s.ruleId === CANDIDATE_RULE);
     expect(record?.reason).toBe('directive text is not prose');
     expect(record?.category).toBe('review-required');
-    // Non-empty, not an exact match: the rule's own wording is `candidate-rules.ts`'s
-    // concern (covered by its own unit tests), not this suppression test's — pinning the exact
-    // copy here would break this test on an unrelated wording tweak.
-    expect(record?.message).toBeTruthy();
+    // Compared against a live run, not a bare truthy check: a record-construction bug that
+    // stored some unrelated non-empty string would satisfy `toBeTruthy()`. Not the rule's literal
+    // wording hardcoded here either, so an unrelated wording tweak in candidate-rules.ts doesn't
+    // break this file.
+    expect(record?.message).toBe(LIVE_PASSIVE_VOICE_MESSAGE);
   });
 
   it('redacts a directive comment from a surviving candidate that merely shares its sentence', async () => {

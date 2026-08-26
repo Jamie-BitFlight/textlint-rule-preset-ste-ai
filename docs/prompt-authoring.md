@@ -122,7 +122,18 @@ A prompt file on its own will not work. `prompt-corpus.test.ts` requires the cor
 - a definition in `evaluators.ts`
 - a prompt file in each version directory
 - a fixture in `test/helpers/evaluator-payloads.ts`, in both the single and the multi-entry map
-- a deterministic rule that produces the candidate
+- a code path that produces its `CandidatePassage`
+
+That last one is usually a deterministic rule in `src/deterministic/rules/`.
+`test/integration/candidate-payload-contract.test.ts` verifies it. That test discovers every
+`evaluatorId` those rules assign.
+
+`rewrite-equivalence` differs. Its candidate is built elsewhere, in `verifyRewriteEquivalence`
+(`src/semantic/analyse.ts`), as part of the autofix gate.
+`test/integration/semantic-service.test.ts`'s `'semantic autofix gate'` tests verify it instead.
+
+A non-deterministic producer still needs real, end-to-end coverage. It just will not come from the
+contract test above.
 
 `semantic-evaluators.md` covers the design question. It asks whether the task is narrow enough.
 

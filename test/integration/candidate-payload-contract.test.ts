@@ -187,6 +187,22 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
       }
     }
 
+    // A literal that resolves to a string outside `declared` is not a form this test cannot
+    // parse -- it parsed fine -- it is a producer naming an evaluator that does not exist. Review
+    // found this silently discarded instead of failing: `declared.get(...)` returning `undefined`
+    // just skipped the `ids.add`, so a typo'd or not-yet-declared `evaluatorId` vanished from the
+    // derived set the same way an unresolvable syntax form used to, with no test noticing either.
+    function addIfDeclared(literal: string): void {
+      const known = declared.get(literal);
+      if (known === undefined) {
+        throw new Error(
+          `${entry}: an "evaluatorId" property is assigned the literal "${literal}", which is ` +
+            'not a declared evaluatorDefinitions id -- add the definition, or fix the typo.',
+        );
+      }
+      ids.add(known);
+    }
+
     function resolveIdentifierAlias(name: string): void {
       const alias = topLevelStringConsts.get(name);
       if (alias === undefined) {
@@ -196,8 +212,7 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
             'derivedProducerIds() to handle this form, or use a literal or a top-level const.',
         );
       }
-      const known = declared.get(alias);
-      if (known !== undefined) ids.add(known);
+      addIfDeclared(alias);
     }
 
     walk(ast.program, (node) => {
@@ -226,8 +241,7 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
         }
         const value = prop.value;
         if (t.isStringLiteral(value)) {
-          const known = declared.get(value.value);
-          if (known !== undefined) ids.add(known);
+          addIfDeclared(value.value);
           continue;
         }
         if (t.isIdentifier(value)) {

@@ -18,7 +18,7 @@
  * What the baseline records, and why it is not a plain per-file count.
  *
  * A first version of this script recorded one integer per file: how many error-severity findings
- * it had. Review found six ways that hid a regression, each fixed in turn:
+ * it had. Review found seven ways that hid a regression, each fixed in turn:
  *
  *   - `--update` rewrote the baseline with whatever the working tree currently produced, including
  *     a larger count than before. A contributor who introduced new errors and ran `--update` to
@@ -57,6 +57,16 @@
  *     `--accept-regressions` for ordinary local cleanup. `localContext` now clamps its window to the
  *     paragraph the finding sits in (see `paragraphBounds`), so an edit in a neighbouring block
  *     cannot reach into it. The ordinal mechanism above still does its own job inside one paragraph.
+ *   - The ordinal alone was not the whole fix for repeated identical content either: it numbers
+ *     occurrences by position among matches, not by any property of the occurrence itself, so
+ *     removing one of several identical findings and introducing an identical one elsewhere in the
+ *     same file just renumbers 1..N for whatever set remains -- both `findRegressions` and
+ *     `findImprovements` see no change. Reproduced directly: two identical semicolon violations
+ *     under two different headings, baselined, then one removed and an identical one added under a
+ *     third, previously clean heading -- assert mode reported `dogfood lint holds`. `findingKey` now
+ *     also folds in `nearestHeading`, the finding's enclosing section, which the four LICENSES.md
+ *     occurrences turn out to already have one each of, distinct from one another. See
+ *     `findingKey`'s own comment for what this closes and what it still, honestly, does not.
  *
  * This file is machine-written and not meant to be hand-edited, the same way
  * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
@@ -92,6 +102,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 const BASELINE_PATH = resolve(REPO_ROOT, 'scripts/ci/dogfood-lint-baseline.json');
@@ -124,7 +135,7 @@ function discoverMarkdownFiles() {
  * after it (or the string bounds, at either end, if there is no such blank line). A blank line is
  * one that is empty once trailing whitespace is stripped.
  */
-function paragraphBounds(source, index) {
+export function paragraphBounds(source, index) {
   const blankLine = /\n[ \t]*\n/g;
   let start = 0;
   for (const match of source.matchAll(blankLine)) {
@@ -157,7 +168,7 @@ function paragraphBounds(source, index) {
  * The occurrence ordinal in `findingKey` is what actually disambiguates that case; this clamp only
  * keeps an edit in one paragraph from perturbing a finding that lives in a different one.
  */
-function localContext(source, index) {
+export function localContext(source, index) {
   const { start: paraStart, end: paraEnd } = paragraphBounds(source, index);
   const start = Math.max(paraStart, index - CONTEXT_RADIUS);
   const end = Math.min(paraEnd, index + CONTEXT_RADIUS);
@@ -165,34 +176,79 @@ function localContext(source, index) {
 }
 
 /**
- * `ruleId`, `message`, a local-context fingerprint, and an occurrence ordinal joined into one
- * baseline key, with a separator that cannot appear in the first three fields: `message` is a
- * single-line string, `localContext` collapses all whitespace, including newlines, to single
- * spaces, and `ordinal` is a decimal integer.
+ * The nearest Markdown ATX heading (`#` through `######`) at or before `index`, trimmed, or the
+ * empty string when `index` sits before the file's first heading.
  *
- * The ordinal exists because `localContext` alone is not always unique within a file. Review
- * found `fixtures/LICENSES.md` quoting the identical SQLite public-domain licence statement
- * verbatim for four separate fixtures -- same rule, same message, same surrounding text, because
- * the surrounding text really is byte-identical, not merely similarly shaped. No context radius
- * fixes that; the four occurrences are indistinguishable by content. `ordinal` is each finding's
- * 1-based position among findings sharing the same `(ruleId, message, context)` triple, assigned
- * in document order (see `lint`'s `groupOrdinal`).
- *
- * This trades a rare, safe failure mode for a real one it closes. Inserting or removing an earlier
- * same-triple occurrence shifts every later occurrence's ordinal, so an edit far from a finding
- * that never itself changed can still make `--update` see it as new-here/missing-there. That shows
- * up as demanding a baseline update for content that did not really regress -- a false positive,
- * caught by `--update` and fixed by running it. The alternative, ordinal-free scheme signals
- * nothing when a real occurrence is quietly swapped for a different one inside a repeated block --
- * a false negative, which is silent and is exactly what this ratchet exists to rule out. Between a
- * ratchet that is occasionally too strict and one that can be silently fooled, only the first one
- * is doing its job.
+ * This is a structural anchor: unlike `localContext`, it does not shrink or shift when unrelated
+ * prose is edited elsewhere in the same section, and unlike `ordinal` (see `findingKey`), it stays
+ * tied to which section a finding lives in rather than to how many identical findings happen to
+ * precede it in document order.
  */
-function findingKey(ruleId, message, context, ordinal) {
-  return [ruleId, message, context, String(ordinal)].join(FINDING_KEY_SEPARATOR);
+export function nearestHeading(source, index) {
+  const heading = /^#{1,6}[ \t]+.*$/gm;
+  let found = '';
+  for (const match of source.matchAll(heading)) {
+    if (match.index > index) break;
+    found = match[0].trim();
+  }
+  return found;
 }
 
-function splitFindingKey(key) {
+/**
+ * `ruleId`, `message`, a local-context fingerprint, the enclosing heading, and an occurrence
+ * ordinal joined into one baseline key, with a separator that cannot appear in the first four
+ * fields: `message` is a single-line string, `localContext` and `nearestHeading` both collapse or
+ * exclude newlines, and `ordinal` is a decimal integer.
+ *
+ * The heading and the ordinal close two different gaps in the same problem: `localContext` alone
+ * is not always unique within a file. Review found `fixtures/LICENSES.md` quoting the identical
+ * SQLite public-domain licence statement verbatim for four separate fixtures -- same rule, same
+ * message, same surrounding text, because the surrounding text really is byte-identical, not
+ * merely similarly shaped. No context radius fixes that.
+ *
+ * A first fix used only an ordinal: each finding's 1-based position among findings sharing the
+ * same `(ruleId, message, context)` triple, assigned in document order. Review then found that
+ * scheme still misses a swap: removing one of several identical occurrences and introducing an
+ * identical one elsewhere in the file regenerates ordinals 1..N for whatever set remains, so
+ * `findRegressions` and `findImprovements` both see no change -- confirmed by reproducing exactly
+ * that swap between two headings and observing `dogfood lint holds` when a real defect had moved.
+ * The four LICENSES.md occurrences turned out to already sit under four distinct headings
+ * (`sqlite-vacuum-space-reclaim`, `sqlite-cli-description`, `sqlite-cli-dot-commands`,
+ * `sqlite-pragma-hard-negative`), so folding in `nearestHeading` gives each one a key the others
+ * do not share, and a cross-heading swap now changes two keys' counts instead of zero.
+ *
+ * `ordinal` still does real work within `nearestHeading`'s scope: two identical occurrences under
+ * the very same heading are indistinguishable by any content- or structure-based fingerprint, so
+ * swapping one for another there remains undetectable. That residual gap is real but strictly
+ * narrower than the one this fix closes, and is inherent to fingerprinting content that is
+ * genuinely, deliberately duplicated -- no key built only from what the text says can tell two
+ * byte-identical same-section occurrences apart.
+ *
+ * The wider fingerprint still trades a rare, safe failure mode for a real one it closes. Inserting
+ * or removing an earlier same-group occurrence shifts every later occurrence's ordinal, and
+ * rewording a heading's own text changes every finding under it, so an edit far from a finding that
+ * never itself changed can still make `--update` see it as new-here/missing-there. That shows up as
+ * demanding a baseline update for content that did not really regress -- a false positive, caught
+ * by `--update` and fixed by running it. The narrower, heading-free scheme signals nothing when a
+ * real occurrence is quietly swapped across sections -- a false negative, which is silent and is
+ * exactly what this ratchet exists to rule out. Between a ratchet that is occasionally too strict
+ * and one that can be silently fooled, only the first one is doing its job.
+ *
+ * This does not reopen the false positive `paragraphBounds` was added to close: that fix is about
+ * `localContext`'s window reaching past a paragraph boundary into unrelated body text nearby, and
+ * an edit to a neighbouring paragraph under the same, unrenamed heading still leaves every field of
+ * `findingKey` unchanged -- verified directly, by editing a filler paragraph next to a finding while
+ * leaving its heading untouched and confirming `dogfood lint holds`. Only editing the heading's own
+ * text is newly in scope here, and that is a distinct, coarser-grained edit: this repository's own
+ * headings partition fixtures and topics deliberately (see `fixtures/LICENSES.md`), so a rename is
+ * closer to restructuring a section than to the incidental nearby-prose edits `paragraphBounds`
+ * targets.
+ */
+export function findingKey(ruleId, message, context, heading, ordinal) {
+  return [ruleId, message, context, heading, String(ordinal)].join(FINDING_KEY_SEPARATOR);
+}
+
+export function splitFindingKey(key) {
   const [ruleId, message, context] = key.split(FINDING_KEY_SEPARATOR);
   return { ruleId, message, context };
 }
@@ -245,10 +301,13 @@ function lint() {
     const findings = new Map();
     for (const message of ordered) {
       const context = localContext(source, message.index);
-      const groupKey = [message.ruleId, message.message, context].join(FINDING_KEY_SEPARATOR);
+      const heading = nearestHeading(source, message.index);
+      const groupKey = [message.ruleId, message.message, context, heading].join(
+        FINDING_KEY_SEPARATOR,
+      );
       const ordinal = (groupOrdinal.get(groupKey) ?? 0) + 1;
       groupOrdinal.set(groupKey, ordinal);
-      const key = findingKey(message.ruleId, message.message, context, ordinal);
+      const key = findingKey(message.ruleId, message.message, context, heading, ordinal);
       // Each key is now unique per file by construction (ordinal strictly increases within a
       // group), so this is always 1 -- kept as an accumulation, not a hardcoded 1, only so a
       // future change to key construction fails loudly here instead of silently overwriting.
@@ -281,7 +340,7 @@ function toBaselineShape(byFile) {
  * Every (file, findingKey) pair whose current count exceeds what `baseline` allows for it. Covers
  * both a brand-new finding (baseline count 0) and an existing one that got more frequent.
  */
-function findRegressions(byFile, baseline) {
+export function findRegressions(byFile, baseline) {
   const regressions = [];
   for (const [path, findings] of byFile) {
     const allowed = baseline[path]?.findings ?? {};
@@ -306,7 +365,7 @@ function findRegressions(byFile, baseline) {
  * some findings in a still-dirty file leaves slack in the baseline that a later change could spend
  * back by reintroducing exactly what was fixed, and assert mode would not notice either edit.
  */
-function findImprovements(byFile, baseline) {
+export function findImprovements(byFile, baseline) {
   const improved = [];
   for (const path of Object.keys(baseline)) {
     const allowed = baseline[path].findings;
@@ -416,4 +475,6 @@ function main() {
   );
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

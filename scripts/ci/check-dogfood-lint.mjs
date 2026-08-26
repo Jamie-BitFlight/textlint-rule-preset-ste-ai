@@ -29,8 +29,8 @@
  *     introduce a different one in the same edit, and the count before and after is identical. The
  *     baseline moved from one total per file to one count per distinct (ruleId, message) pair.
  *   - The same (ruleId, message) pair can occur many times in one file with no distinguishing
- *     detail in the message itself -- `docs/architecture.md` carries 31 separate semicolons, every
- *     one reported as the identical string. Fixing five of those and introducing five different
+ *     detail in the message itself -- `docs/architecture.md` carries many separate semicolons,
+ *     every one reported as the identical string. Fixing some of those and introducing different
  *     ones left the per-message count unchanged, so the swap was invisible. Each finding's key
  *     folded in a normalized slice of the source text surrounding it (see `localContext`), not
  *     merely its rule and message. Line and column stay out of the key on purpose: prose gets

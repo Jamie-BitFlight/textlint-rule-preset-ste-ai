@@ -75,6 +75,13 @@ They are read once from a shared file, resolved in this order (first hit wins):
 3. The same names in `process.cwd()`.
 4. Built-in defaults: bundled provisional pack, semantic analysis **off**.
 
+The CLI (`ste-ai lint`, with no `--config` flag) has no "textlint config base directory" of its
+own. It follows this same order starting from step 1, using `process.cwd()` for step 3. A bare
+`ste-ai lint` — run as a pre-commit or Husky hook, for instance — therefore applies the same
+`.ste-ai.json` a project's own `textlint --config .textlintrc.json` invocation already applies.
+The CLI's own `--config <path>` flag is a separate override. It takes precedence over all four
+steps above when given.
+
 `.ste-ai.json`:
 
 ```jsonc

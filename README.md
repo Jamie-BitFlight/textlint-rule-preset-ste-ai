@@ -89,23 +89,32 @@ are real today, not proposed:
   - `3` — any `error`-level run notice. See
     [`docs/configuration.md`](docs/configuration.md#protected-patterns-are-screened-before-they-run)
     for the full list: a protection mechanism failing, or a rule skipped for invalid options
+- This repository ships a [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) manifest at its root.
+  The Python `pre-commit` framework and `prek` can both point straight at this repository. Neither
+  needs a hand-copied `repo: local` block.
+
+Every path below needs the package installed locally first. See "Install" above. `npx` resolves the
+already-installed copy. Nothing here installs it for you.
 
 ```yaml
-# .pre-commit-config.yaml — works with prek too, same config format
+# .pre-commit-config.yaml — prek reads the same file format
 repos:
-  - repo: local
+  - repo: https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai
+    rev: <latest release tag> # see the repository's Releases page
     hooks:
       - id: ste-ai
-        name: Simplified Technical English check
-        entry: npx --yes ste-ai lint --fail-on-review
-        language: system
-        files: \.md$
 ```
 
 ```sh
 # .husky/pre-commit
-npx ste-ai lint docs/**/*.md --fail-on-review
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.txt')
+[ -z "$files" ] && exit 0
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.md' '*.txt' \
+  | xargs -0 npx --yes textlint-rule-preset-ste-ai lint --fail-on-review --
 ```
+
+See [`docs/pre-commit-hooks.md`](docs/pre-commit-hooks.md) for both, including why the manifest
+uses `language: system` rather than `language: node`, and for troubleshooting.
 
 **2. An authoring agent consulting the vocabulary in-loop — proposed, not built**. The agent would
 check its own draft voluntarily, during composition, not just after the fact:
@@ -342,6 +351,7 @@ either one yourself.
 | [`docs/diagnostic-policy.md`](docs/diagnostic-policy.md)         | categories, outage policy, autofix policy                      |
 | [`docs/suppression.md`](docs/suppression.md)                     | inline directives, and what they record                        |
 | [`docs/configuration.md`](docs/configuration.md)                 | every option                                                   |
+| [`docs/pre-commit-hooks.md`](docs/pre-commit-hooks.md)           | wiring this into `pre-commit`, `prek`, or Husky                |
 | [`docs/rule-pack-import.md`](docs/rule-pack-import.md)           | supplying licensed material                                    |
 | [`docs/llama-cpp-setup.md`](docs/llama-cpp-setup.md)             | running the model service                                      |
 | [`docs/fixtures.md`](docs/fixtures.md)                           | the corpus and its provenance                                  |

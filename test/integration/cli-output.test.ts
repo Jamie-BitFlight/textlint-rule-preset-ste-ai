@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { z } from 'zod';
 import { main } from '../../src/cli/main.js';
 import { SteAiConfigError } from '../../src/core/config.js';
+import { clearSharedConfigCache } from '../../src/textlint/shared-config.js';
 
 /** The subset of `--json`'s real output shape this test itself inspects. */
 const jsonOutputSchema = z.object({
@@ -124,6 +125,37 @@ describe('ste-ai lint --config', () => {
     if (!(thrown instanceof SteAiConfigError)) throw thrown;
     expect(thrown.message).toContain('diagnostics.severity');
     expect(thrown.message).toContain('style-preference');
+  });
+});
+
+describe('ste-ai lint without --config', () => {
+  // Regression (`chatgpt-codex-connector`, P2, PR #107): `buildConfig` used to fall back to `{}`
+  // when `--config` was not given, so `ste-ai lint` invoked bare -- exactly how a pre-commit or
+  // Husky hook invokes it, per docs/pre-commit-hooks.md -- silently ran under built-in defaults
+  // only. A project's own `.ste-ai.json` (approved terms, rule pack, severities) was ignored, even
+  // though `textlint --config .textlintrc.json` in the same project respected it. `buildConfig` now
+  // falls back to the same shared-config discovery the textlint adapter uses
+  // (`loadSharedConfig(undefined)`, see docs/configuration.md's "Shared configuration file"
+  // resolution order), so both entry points apply the same policy.
+  const originalEnv = process.env['STE_AI_CONFIG'];
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env['STE_AI_CONFIG'];
+    else process.env['STE_AI_CONFIG'] = originalEnv;
+    clearSharedConfigCache();
+  });
+
+  it('applies a shared-config file found via STE_AI_CONFIG, with no --config flag', async () => {
+    const dir = directory ?? tmpdir();
+    const configFile = join(dir, 'shared.json');
+    writeFileSync(configFile, JSON.stringify({ approvedTerms: ['Utilise'] }), 'utf8');
+    process.env['STE_AI_CONFIG'] = configFile;
+    clearSharedConfigCache();
+
+    const output = await lint('doc.md', 'Utilise the bracket.\n');
+
+    expect(output).toContain('no diagnostics');
+    expect(output).not.toContain('unapproved-vocabulary');
   });
 });
 

@@ -1,0 +1,9 @@
+- id: ste-ai
+  name: Simplified Technical English check
+  description: >-
+    Lint prose for Simplified-Technical-English-style vocabulary, sentence
+    structure and terminology. Provisional rules; not ASD-STE100 certified.
+    See docs/DISCLAIMER.md.
+  entry: npx --yes textlint-rule-preset-ste-ai lint --fail-on-review --
+  language: system
+  types_or: [markdown, plain-text]

@@ -24,6 +24,8 @@ Observed by `git log`, `git status`, and a full file listing at `HEAD` (`1379788
 
 `https://asd-ste100.org/` states verbatim:
 
+<!-- ste-ai-ignore-next-line punctuation-constraints -- verbatim quotation, not our prose -->
+
 > Simplified Technical English, ASD-STE100, is a Copyright and a Trademark of ASD, Brussels,
 > Belgium. All rights reserved. European Union Trade Mark No. 017966390.
 

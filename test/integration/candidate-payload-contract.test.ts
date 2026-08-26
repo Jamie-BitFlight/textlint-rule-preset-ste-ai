@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { semanticConfigSchema, type SteAiConfigInput } from '../../src/core/config.js';
@@ -61,24 +64,46 @@ const TRIGGER_DOCUMENTS: Partial<Record<SemanticEvaluatorId, Trigger>> = {
   },
 };
 
+const RULES_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'deterministic',
+  'rules',
+);
+
 /**
- * Evaluators confirmed to have no deterministic rule producing a candidate for them --
- * `grep -n "evaluatorId:" src/deterministic/rules/*.ts` names exactly the five evaluators listed
- * in `TRIGGER_DOCUMENTS` above and no others, so this is every evaluator definition that leaves.
+ * Every `evaluatorId` a deterministic rule actually assigns, derived from
+ * `src/deterministic/rules/*.ts` source text rather than hand-maintained.
  *
- * Review found that `TRIGGER_DOCUMENTS` alone could not distinguish "no producer exists" from
- * "someone forgot to add the trigger document": both looked identical, a missing key, to the loop
- * in `'covers every evaluator...'` below, so a new candidate-producing rule added without a
- * matching trigger document stayed silently unchecked despite that test's own comment claiming
- * otherwise. Declaring the no-producer set explicitly, and requiring every other evaluator to
- * appear in `TRIGGER_DOCUMENTS`, closes that: an evaluator in neither place now fails the test
- * that reads as "covers every evaluator" instead of quietly passing.
+ * A first fix here added `NO_DETERMINISTIC_PRODUCER`, a hand-maintained set of evaluators
+ * confirmed (by the same grep this function now runs) to have no producer. Review found that only
+ * caught a brand-new evaluator missing from both lists: an *existing* exemption, such as
+ * `technical-term-legitimacy`, stayed silently exempt even after a producer was added for it,
+ * because the exemption itself was never re-checked against source -- the covering test's stubbed
+ * candidate count kept it passing. Deriving the set from source on every run, and requiring it to
+ * equal `TRIGGER_DOCUMENTS`'s keys exactly (see the covering test below), closes that: an
+ * exemption source no longer supports now fails immediately, in either direction.
  */
-const NO_DETERMINISTIC_PRODUCER: ReadonlySet<SemanticEvaluatorId> = new Set([
-  'permitted-part-of-speech',
-  'technical-term-legitimacy',
-  'rewrite-equivalence',
-]);
+function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
+  // Maps each declared id to itself so a source-text match can be typed as SemanticEvaluatorId
+  // without an unsafe assertion: the value returned by a successful lookup is already that type.
+  const declared = new Map<string, SemanticEvaluatorId>(
+    evaluatorDefinitions.map((d) => [d.id, d.id]),
+  );
+  const ids = new Set<SemanticEvaluatorId>();
+  for (const entry of readdirSync(RULES_DIR)) {
+    if (!entry.endsWith('.ts')) continue;
+    const text = readFileSync(join(RULES_DIR, entry), 'utf8');
+    for (const match of text.matchAll(/evaluatorId:\s*'([^']+)'/g)) {
+      const id = match[1];
+      const known = id === undefined ? undefined : declared.get(id);
+      if (known !== undefined) ids.add(known);
+    }
+  }
+  return ids;
+}
 
 /**
  * Evaluator variables allowed to resolve from missing data today, each tracked by an open issue
@@ -104,27 +129,29 @@ function candidatesFor(evaluatorId: SemanticEvaluatorId, trigger: Trigger): Cand
 }
 
 describe('real candidates satisfy their evaluator payload contract', () => {
+  const derivedProducers = derivedProducerIds();
   const covered = evaluatorDefinitions
     .map((d) => d.id)
     .filter((id) => TRIGGER_DOCUMENTS[id] !== undefined);
 
+  it('finds at least one evaluatorId assignment in the rules source, so derivation is not vacuous', () => {
+    expect(derivedProducers.size).toBeGreaterThan(0);
+  });
+
+  it('has a trigger document for exactly the evaluators src/deterministic/rules assigns', () => {
+    // Fails loudly whichever way the two sets diverge: a new producer added without a trigger
+    // document, or an existing trigger document left behind after its rule stopped assigning that
+    // evaluatorId -- both are the same "TRIGGER_DOCUMENTS no longer matches source" defect.
+    const triggerIds = Object.keys(TRIGGER_DOCUMENTS).toSorted();
+    expect(triggerIds).toEqual([...derivedProducers].toSorted());
+  });
+
   it('covers every evaluator that has a deterministic producer', () => {
-    // Fails loudly if a new candidate-producing rule is added without a trigger document here: a
-    // missing TRIGGER_DOCUMENTS entry is only allowed for an evaluator NO_DETERMINISTIC_PRODUCER
-    // also declares has no producer, never merely because both maps happen to omit it.
     for (const definition of evaluatorDefinitions) {
       const trigger = TRIGGER_DOCUMENTS[definition.id];
-      const isDeclaredNoProducer = NO_DETERMINISTIC_PRODUCER.has(definition.id);
-      expect(
-        trigger !== undefined || isDeclaredNoProducer,
-        `${definition.id}: no TRIGGER_DOCUMENTS entry, and not declared in ` +
-          `NO_DETERMINISTIC_PRODUCER -- add a trigger document if it has a deterministic ` +
-          `producer, or add it to NO_DETERMINISTIC_PRODUCER if it genuinely has none`,
-      ).toBe(true);
-
-      // 1 stands in for "not applicable" when there is no trigger to run -- the assertion above
-      // already failed the test in that case unless the evaluator is declared to have no producer,
-      // and this expect must stay unconditional regardless.
+      // 1 stands in for "not applicable" when there is no trigger to run -- the sibling test above
+      // already fails when a derived producer has no trigger document, and this expect must stay
+      // unconditional regardless of that other test's outcome.
       const candidateCount =
         trigger === undefined ? 1 : candidatesFor(definition.id, trigger).length;
       expect(

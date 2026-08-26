@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 import { analyseText, analyseTextDeterministic } from '../../src/analysis/analyse.js';
+import { resolveEvidenceRange } from '../../src/semantic/analyse.js';
 import {
   ScriptedTransport,
   startFakeSemanticService,
@@ -310,8 +311,25 @@ describe('a refused candidate reports its refusal exactly once', () => {
     });
 
     const diagnostic = result.diagnostics.find((d) => d.ruleId === CANDIDATE_RULE);
+    const candidate = result.candidates.find((c) => c.ruleId === CANDIDATE_RULE);
+    if (candidate === undefined) throw new Error('expected a passive-voice-candidate candidate');
+    // Call the production remap directly rather than recomputing its formula by hand here: this
+    // proves the diagnostic's range is whatever `resolveEvidenceRange` actually produces, not
+    // whatever offset arithmetic this test happens to reimplement — the two would silently drift
+    // apart the moment either one changed.
+    const expectedRange = resolveEvidenceRange(
+      result.document,
+      candidate,
+      evidenceStart,
+      evidenceEnd,
+    );
     // Positive control: the remapped range really did diverge from the candidate's own span, which
     // is the exact condition this test is for.
+    expect(expectedRange).not.toEqual(candidate.range);
+    expect(diagnostic?.range).toEqual(expectedRange);
+    // Independent of resolveEvidenceRange's own arithmetic, since nothing else in the suite tests
+    // that function directly: without this, a bug inside resolveEvidenceRange itself (as opposed to
+    // the diagnostic pipeline failing to use its output) would pass both assertions above.
     expect(diagnostic?.range.start).toBe(text.indexOf(SENTENCE) + evidenceStart);
     expect(diagnostic?.range.start).not.toBe(text.indexOf('is opened by'));
 
@@ -361,7 +379,10 @@ describe('a suppressed candidate is never sent to the model', () => {
     ]);
     const record = result.suppressions.find((s) => s.ruleId === 'passive-voice-candidate');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
+    // Non-empty, not an exact match: the rule's own wording is `candidate-rules.ts`'s
+    // concern (covered by its own unit tests), not this suppression test's — pinning the exact
+    // copy here would break this test on an unrelated wording tweak.
+    expect(record?.message).toBeTruthy();
     expect(record?.reason).toBe('Quoted verbatim from the supplier.');
     expect(result.notices.map((n) => n.code)).not.toContain('suppression-unused');
   });
@@ -417,7 +438,10 @@ describe('a suppressed candidate is never sent to the model', () => {
     const record = result.suppressions.find((s) => s.ruleId === CANDIDATE_RULE);
     expect(record?.reason).toBe('directive text is not prose');
     expect(record?.category).toBe('review-required');
-    expect(record?.message).toBe('Auxiliary plus a word wink-nlp tags as a verb.');
+    // Non-empty, not an exact match: the rule's own wording is `candidate-rules.ts`'s
+    // concern (covered by its own unit tests), not this suppression test's — pinning the exact
+    // copy here would break this test on an unrelated wording tweak.
+    expect(record?.message).toBeTruthy();
   });
 
   it('redacts a directive comment from a surviving candidate that merely shares its sentence', async () => {

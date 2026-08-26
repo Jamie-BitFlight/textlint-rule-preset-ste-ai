@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http';
+import type { Socket } from 'node:net';
 import { z } from 'zod';
 import type {
   CompletionRequest,
@@ -108,6 +109,14 @@ export interface FakeServiceOptions {
     body?: unknown;
     content?: string;
     delayMs?: number;
+    /**
+     * Never send a response. The connection is left open until the client itself aborts or times
+     * out. Used to prove a client-side timeout/abort resolves the call — with a real reply
+     * scheduled at some finite delay, however large, that property holds only probabilistically
+     * (a slow-enough CI runner could still invert it); leaving the server silent forever makes it
+     * true by construction instead.
+     */
+    neverRespond?: boolean;
   };
 }
 
@@ -120,7 +129,18 @@ export interface FakeService {
 /** Start a real HTTP server that behaves like llama.cpp's OpenAI-compatible endpoint. */
 export async function startFakeSemanticService(options: FakeServiceOptions): Promise<FakeService> {
   let requests = 0;
+  // Timers scheduled for a delayed reply (`reply.delayMs`), tracked so `close()` can cancel any
+  // that haven't fired yet. Left unmanaged, a timer for a reply nobody is waiting for any more
+  // (the client already aborted or timed out) fires long after the test that started it has ended,
+  // trying to write to an already-destroyed response.
+  const pendingTimers = new Set<NodeJS.Timeout>();
+  // Live sockets, tracked so `close()` can force them shut. A socket left open by a client that
+  // aborted mid-request (or by a `neverRespond` reply nobody ever answers) would otherwise hold
+  // `server.close()`'s callback pending indefinitely.
+  const sockets = new Set<Socket>();
   const server: Server = createServer((req, res) => {
+    sockets.add(req.socket);
+    req.socket.on('close', () => sockets.delete(req.socket));
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/chat/completions')) {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'not found' } }));
@@ -147,6 +167,11 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
         return;
       }
       const reply = options.handler(parsed);
+      if (reply.neverRespond === true) {
+        // Deliberately left hanging — see `neverRespond` above. The socket-tracking in `close()`
+        // is what reclaims this connection; nothing here ever calls `res.end()`.
+        return;
+      }
       const send = (): void => {
         if (reply.status !== undefined && reply.status >= 400) {
           res.writeHead(reply.status, { 'content-type': 'application/json' });
@@ -164,8 +189,15 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
           ),
         );
       };
-      if (reply.delayMs !== undefined && reply.delayMs > 0) setTimeout(send, reply.delayMs);
-      else send();
+      if (reply.delayMs !== undefined && reply.delayMs > 0) {
+        const timer = setTimeout(() => {
+          pendingTimers.delete(timer);
+          send();
+        }, reply.delayMs);
+        pendingTimers.add(timer);
+      } else {
+        send();
+      }
     });
   });
 
@@ -182,6 +214,16 @@ export async function startFakeSemanticService(options: FakeServiceOptions): Pro
     requestCount: () => requests,
     close: () =>
       new Promise<void>((resolve, reject) => {
+        // Cancel every reply still on the clock before closing. Without this, a timer for a test
+        // that already moved on (its client aborted or timed out first) survives `close()` and
+        // fires later, in an unrelated test, trying to write a response through an already-closed
+        // socket.
+        for (const timer of pendingTimers) clearTimeout(timer);
+        pendingTimers.clear();
+        // Force-close any connection still open (a `neverRespond` reply the client never came
+        // back to abort, or one whose abort raced this very `close()` call) so `server.close()`'s
+        // callback cannot be left pending on a connection nothing will ever finish.
+        for (const socket of sockets) socket.destroy();
         server.close((error) => {
           if (error === undefined) {
             resolve();

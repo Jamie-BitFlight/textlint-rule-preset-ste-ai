@@ -63,9 +63,9 @@ the test suite.
   `test/fixtures/corpus.test.ts` — the class balance and per-rule tally when this was written, a
   record-by-record comparison against `fixtures/verdicts/` since — are computed from
   `annotation.candidateAdjudications`, static JSON in `fixtures/annotations/`, **not** from linter
-  output. Layering cannot move them. What layering _can_ break is
-  `corpus.test.ts:327-341` and `scripts/ci/check-candidate-ground-truth.sh`, which do run the
-  linter. Both are safe iff the no-config default path still resolves to exactly
+  output. Layering cannot move them. What layering _can_ break is the `'candidate ground truth'`
+  describe block in `corpus.test.ts` and `scripts/ci/check-candidate-ground-truth.sh`, which do run
+  the linter. Both are safe iff the no-config default path still resolves to exactly
   `provisionalRulePack` (`loader.ts:53`).
 - **`check-rules-provisional.sh 14` is not at risk** from layering as such: `listRules`
   (`src/cli/main.ts:277-296`) enumerates the `deterministicRules` code registry and reports
@@ -199,8 +199,9 @@ What _indirectly_ pins the `undefined → provisionalRulePack` default:
 
 - `test/e2e/textlint-tester.test.ts:88-213` — exact messages that depend on the bundled pack's
   `contractions`, `dictionary.unapproved` and `safeSubstitution` flags.
-- `test/fixtures/corpus.test.ts:124-177, 187-283, 327-341` — every call is
-  `analyseTextDeterministic(text)` with no config, i.e. the default pack.
+- `test/fixtures/corpus.test.ts`'s `'original fixtures produce diagnostics'` and
+  `'candidate ground truth'` describe blocks — every analysis they run goes through the file's
+  memoised `analyse()` helper with no `config` option, i.e. the default pack.
 - `scripts/ci/check-exit-codes.sh` + `assert-corpus-report.mjs:36` — asserts the emitted
   `packAuthority` is `provisional`.
 
@@ -392,23 +393,23 @@ need of updating. State that in the PR description so a reviewer does not "fix" 
 
 ### What IS at risk — all of it conditional on the default path
 
-Every one of the following calls `analyseTextDeterministic(text)` **with no config**, i.e. the
-`loader.ts:53` default:
+Every one of the following goes through `corpus.test.ts`'s memoised `analyse()` helper **with no
+`config` option**, i.e. the `loader.ts:53` default:
 
 | Assertion                                                     | Line                     | Breaks if                                                                              |
 | ------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------- |
-| every candidate the linter emits has a bound reviewer verdict | `corpus.test.ts:327-341` | the default pack changes at all — new/moved candidates orphan the ground truth         |
-| at least half the originals produce ≥1 diagnostic             | `:124-132`               | the default pack loses entries                                                         |
-| no diagnostic inside a code fence                             | `:134-151`               | (structural; pack-insensitive, but runs the linter)                                    |
-| every diagnostic points at non-empty source                   | `:153-161`               | duplicate/zero-width entries from a merge                                              |
-| no fix inside an admonition                                   | `:163-177`               | a merge changes `safeSubstitution`                                                     |
-| violations never increase after a rewrite                     | `:187-197`               | duplicate diagnostics (D10) inflate the _original_ and the _compliant_ count unequally |
-| accepted changes reduce the specific `(ruleId, quote)` count  | `:240-256`               | duplicates change counts on both sides                                                 |
-| annotated expected diagnostics actually fire                  | `:258-277`               | a merge drops an entry                                                                 |
-| `scripts/ci/check-candidate-ground-truth.sh`                  | (whole script)           | same as `:327-341`, via `dist/`                                                        |
+| every candidate the linter emits has a bound reviewer verdict | `corpus.test.ts:470-501` | the default pack changes at all — new/moved candidates orphan the ground truth         |
+| at least half the originals produce ≥1 diagnostic             | `:219-227`               | the default pack loses entries                                                         |
+| no diagnostic inside a code fence                             | `:228-246`               | (structural; pack-insensitive, but runs the linter)                                    |
+| every diagnostic points at non-empty source                   | `:247-255`               | duplicate/zero-width entries from a merge                                              |
+| no fix inside an admonition                                   | `:256-272`               | a merge changes `safeSubstitution`                                                     |
+| violations never increase after a rewrite                     | `:279-286`               | duplicate diagnostics (D10) inflate the _original_ and the _compliant_ count unequally |
+| accepted changes reduce the specific `(ruleId, quote)` count  | `:287-307`               | duplicates change counts on both sides                                                 |
+| annotated expected diagnostics actually fire                  | `:352-372`               | a merge drops an entry                                                                 |
+| `scripts/ci/check-candidate-ground-truth.sh`                  | (whole script)           | same as `:470-501`, via `dist/`                                                        |
 
 **Conclusion:** the corpus needs **no reconciliation** if the default path returns
-`provisionalRulePack` by identity. If a merge defect changes it, `corpus.test.ts:327-341` and
+`provisionalRulePack` by identity. If a merge defect changes it, `corpus.test.ts:470-501` and
 `check-candidate-ground-truth.sh` fail — which is the design intent of both
 (`docs/fixtures.md:179-180`). The correct posture is therefore _not_ to update the fixture
 expectations, but to treat any movement in them as a stop-the-line signal.

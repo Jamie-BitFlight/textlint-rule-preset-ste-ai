@@ -17,6 +17,13 @@ This file lists instructions for AI (artificial intelligence) agents in this rep
    - Update stale behavior descriptions.
    - Replace or remove commands, paths, and claims that the change invalidates.
    - Also replace or remove any manually maintained, derivable data that the change invalidates.
+4. Before writing or editing prose in this repository, load the `ste-ai-prose-style` skill.
+   - This repository lints its own documentation with its own preset.
+   - Every existing doc holds to zero hard errors from that preset.
+   - The skill holds the numeric limits (sentence grade level, comma count, and more) a compliant
+     first draft needs.
+   - Loading it before drafting avoids the repeated write-lint-rewrite cycle a draft written
+     without them produces.
 
 ## Notice a problem, log it — never silently skip it
 

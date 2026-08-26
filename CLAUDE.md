@@ -20,19 +20,7 @@ finished-with-a-follow-up.
 
 ## A doc that describes runtime behaviour needs an executable pin, not a careful sentence
 
-Prose cannot fail a build. A page that asserts what the code does is unfalsifiable by CI, so it
-drifts, and the drift is found one claim at a time by whoever reads both sides — usually external
-review, usually several rounds late.
-
-PR #90 is the worked example. It set out to fix lint violations in `docs/rule-pack-import.md` and
-turned into three rounds and six P2 findings, every one of the form "the prose asserts X, the code
-does Y". No round changed any code. Each prose correction was itself unverified, so rounds 2 and 3
-were largely _caused_ by the fix applied in the round before. The root cause was not carelessness:
-the rule-pack extension point had no test coverage at all, and the same false claim was duplicated
-across `docs/rule-pack-import.md`, `README.md` and a doc comment in `src/rule-pack/schema.ts`, so
-correcting one left two.
-
-Therefore, when a change touches a doc that describes behaviour:
+When a change touches a doc that describes behaviour:
 
 - **Pin the claim, do not just reword it.** `test/integration/rule-pack.test.ts` is the model: it
   exists to make documentation claims fail CI, not to prove a module works.
@@ -41,9 +29,7 @@ Therefore, when a change touches a doc that describes behaviour:
   assert it, as `test/architecture/doc-pack-control-surface.test.ts` does.
 - **Grep for the claim before fixing it in one place.** A behavioural assertion is usually
   duplicated across `README.md`, `docs/`, and a doc comment near the code.
-- **Verify the replacement claim empirically before writing it.** Run the thing. Both the original
-  doc and PR #90's correction of it stated the pack/hard-coded-vocabulary boundary wrongly, in
-  opposite directions, and a five-line probe settled it.
+- **Verify the replacement claim empirically before writing it.** Run the thing.
 
 When review findings stop converging — each fix drawing a new or reshaped one — that is the signal
 that the artefact under review is the wrong one. Stop editing the prose and go fix what makes the

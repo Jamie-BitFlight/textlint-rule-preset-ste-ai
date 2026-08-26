@@ -5,8 +5,9 @@ package. The active pack supplies the controlled-language dictionary and the num
 Supplying licensed data therefore changes that behaviour without changing a line of rule code.
 
 Do you want to see a pack work before you write one? [`examples/rule-pack/`](../examples/rule-pack/)
-is a complete worked pack with commands that show the same document linted twice. It is linted once
-under the bundled pack, then once under the custom pack.
+is a complete worked pack. It lints the same document under the bundled pack. Then it lints the
+same document under a custom pack, and under that same pack once trusted. See its README for the
+trust gate's effect on each run.
 
 Every behaviour this page describes has a passing assertion in
 [`test/integration/rule-pack.test.ts`](../test/integration/rule-pack.test.ts). That file covers:
@@ -14,14 +15,14 @@ Every behaviour this page describes has a passing assertion in
 - the trust gate.
 - the status split between deterministic and candidate rules.
 - `limits`, `contractions`, and `approvedTechnicalTerms`.
-- per-rule overrides.
+- per-rule `severity`, `enabled`, and `options` — each a default the user's own configuration
+  outranks.
 - relative-path resolution against `baseDir`.
 - pack validation.
 - the autofix gate's refusal of a pack-declared-safe fix.
 
-It does not assert every combination. One limit field stands in for all five. One contraction
-stands in for the mechanism. Read that file when you need the exact answer rather than the
-summary.
+It does not assert every combination. One `limits` field stands in for the mechanism, and so does
+one `contractions` entry. Read that file when you need the exact answer rather than the summary.
 
 ## What a pack controls
 

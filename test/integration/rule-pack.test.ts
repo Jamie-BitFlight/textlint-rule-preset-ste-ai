@@ -509,6 +509,37 @@ describe('rule pack: limits, contractions, path resolution, and the autofix gate
     expect(tightened, 'a near-zero limit must flag the same sentence').toHaveLength(1);
   });
 
+  it('applies rules[].options as a default that user configuration outranks', () => {
+    // docs/rule-pack-import.md's control-surface table: "rules[].options — Default options, below
+    // anything the user configures." Three layers, in ascending precedence: the rule's own default
+    // (here, pack.limits.descriptiveMaxGradeLevel, since neither options source sets one), the
+    // pack's rules[].options, and the user's own rules[] config.
+    const packOptions = {
+      ruleId: 'sentence-length-descriptive',
+      status: 'provisional',
+      sourceRef: 'ACME-DOC-1 clause 1',
+      options: { maxGradeLevel: 20 },
+    };
+
+    const fallsBackToPackLimits = analyse(DESCRIPTIVE_SENTENCE, {
+      rulePack: pack({ limits: limitsWith({ descriptiveMaxGradeLevel: 8 }), rules: [] }),
+    }).diagnostics.filter((d) => d.ruleId === 'sentence-length-descriptive');
+    expect(fallsBackToPackLimits, 'no rules[].options: falls back to pack.limits').toHaveLength(1);
+
+    const usesPackOptions = analyse(DESCRIPTIVE_SENTENCE, {
+      rulePack: pack({ rules: [packOptions] }),
+    }).diagnostics.filter((d) => d.ruleId === 'sentence-length-descriptive');
+    expect(usesPackOptions, 'rules[].options.maxGradeLevel=20 permits this sentence').toHaveLength(
+      0,
+    );
+
+    const userOutranksPack = analyse(DESCRIPTIVE_SENTENCE, {
+      rulePack: pack({ rules: [packOptions] }),
+      rules: { 'sentence-length-descriptive': { maxGradeLevel: 1 } },
+    }).diagnostics.filter((d) => d.ruleId === 'sentence-length-descriptive');
+    expect(userOutranksPack, 'user config overrides the pack default of 20').toHaveLength(1);
+  });
+
   it('drives no-contractions from contractions[]', () => {
     const text = "The technician confirms it's ready.\n";
 

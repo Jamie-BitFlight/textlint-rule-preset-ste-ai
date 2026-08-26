@@ -137,8 +137,8 @@ in the underlying analysis. Tracked as
 
 ## The rules
 
-Run `npx ste-ai rules --json` for the current list and count. It reads from the live registry, so it
-stays correct as rules are added or removed.
+Run `npx ste-ai rules` for the current list and count, or `npx ste-ai rules --json | jq length` for
+just the count. Both read from the live registry, so they stay correct as rules are added or removed.
 
 | Rule                           | Decides?           | Fix                                  |
 | ------------------------------ | ------------------ | ------------------------------------ |

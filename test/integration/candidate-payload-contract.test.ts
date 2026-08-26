@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from '@babel/parser';
+import * as t from '@babel/types';
 import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
 import { semanticConfigSchema, type SteAiConfigInput } from '../../src/core/config.js';
@@ -77,44 +79,80 @@ const RULES_DIR = resolve(
  * Every `evaluatorId` a deterministic rule actually assigns, derived from
  * `src/deterministic/rules/*.ts` source text rather than hand-maintained.
  *
- * A first fix here added `NO_DETERMINISTIC_PRODUCER`, a hand-maintained set of evaluators
- * confirmed (by the same grep this function's predecessor ran) to have no producer. Review found
- * that only caught a brand-new evaluator missing from both lists: an *existing* exemption, such as
- * `technical-term-legitimacy`, stayed silently exempt even after a producer was added for it,
- * because the exemption itself was never re-checked against source.
+ * Four fixes preceded this one, each a hand-written text pattern closing the gap the last one
+ * left open, and each review round finding the next gap the same way: a hand-maintained exemption
+ * list that was never re-checked against source; a literal-only regex that missed an identifier
+ * alias; a colon-anchored regex that never matched shorthand properties at all; a shorthand
+ * detector that matched destructuring bindings and unrelated bare mentions of the word, not only
+ * genuine object-literal shorthand. Each fix was real and individually correct, and each still
+ * left a syntax shape a text pattern cannot soundly tell apart from a similar-looking one --
+ * object-literal shorthand and destructuring shorthand read identically as text, and only differ
+ * in which kind of node encloses them.
  *
- * A second fix derived the set from source with a regex matching only a literal-valued
- * `evaluatorId: '...'`. Review found that misses an aliased assignment: `CandidateRuleSpec
- * .evaluatorId` is typed as `SemanticEvaluatorId`, not required to be a literal, so `const
- * evaluator: SemanticEvaluatorId = 'technical-term-legitimacy'` followed by `evaluatorId:
- * evaluator` type-checks today and that regex silently missed it -- the same class of gap the
- * first fix left open, one indirection deeper.
+ * A real AST closes that class of gap by construction rather than by enumeration, and was tried
+ * first, before the first text-pattern fix: this repository pins `typescript` at `^7.0.2`, the
+ * native rewrite, which does not ship the classic Compiler API this needs -- confirmed directly,
+ * `Object.keys(require('typescript'))` returns only `['version', 'versionMajorMinor']`, no
+ * `createSourceFile`, no parser at all. `@babel/parser` was not a project dependency then either,
+ * but is resolved in `package-lock.json` regardless, pulled in transitively by `magicast` (used by
+ * `vite-plus`'s own config tooling) -- confirmed via `node -e "require.resolve('@babel/parser')"`
+ * succeeding before it was ever added to `package.json`. Declared as a direct devDependency now,
+ * pinned to the version already resolved, rather than continuing to rely on an undeclared
+ * transitive one or patching another text-pattern edge case.
  *
- * A real AST would resolve this cleanly, and was tried first: this repository pins `typescript`
- * at `^7.0.2`, the native rewrite, which does not ship the classic Compiler API this needs --
- * confirmed directly, `Object.keys(require('typescript'))` returns only `['version',
- * 'versionMajorMinor']`, no `createSourceFile`, no parser at all. No other AST-capable package is
- * a project dependency (`@oxc-project/types` and `@oxc-project/runtime` ship type declarations and
- * a runtime helper, not a callable parser). Adding one just for this single test file was judged
- * disproportionate to the gap it closes.
+ * `walk` is a generic, visitor-key-agnostic AST walk: `@babel/traverse` is not available the same
+ * way `@babel/parser` is, and a real traversal library is more machinery than this needs. It
+ * recurses into every own property that looks like a node or an array of nodes, skipping metadata
+ * fields, which needs no per-node-type knowledge and cannot silently miss a node shape.
  *
- * This matches every `evaluatorId:` property assignment's full right-hand side up to its
- * terminating comma or line end, then resolves that captured text three ways: directly, when it is
- * a single-quoted string literal; through a same-file top-level `const NAME = 'literal';`
- * declaration, when it is a bare identifier; or recognised and skipped, for the one genuine
- * pass-through this codebase has -- `pushCandidate` in `candidate-rules.ts` forwards
- * `spec.evaluatorId` into the `CandidatePassage` it returns, which is not a second producer
- * declaration, only the first one's value reaching a different object literal. Anything else
- * throws immediately, naming the file and the unresolved text, rather than silently resolving to
- * nothing the way the first two fixes both did in their own way -- so a syntax form this function
- * does not yet understand fails the test loudly instead of quietly under-counting the producer set.
+ * The lookup itself walks for `ObjectExpression` nodes -- genuine object value literals -- and
+ * inspects only their own `.properties`, which is what makes an `ObjectPattern` (a destructuring
+ * binding, from a function parameter or a `const { evaluatorId } = ...` declaration) categorically
+ * unreachable: this never visits an `ObjectPattern`'s properties at all, not merely a check that
+ * excludes them after finding them. Babel's own explicit `shorthand` flag on `ObjectProperty`
+ * replaces the old position-based regex for shorthand detection.
  *
- * A third fix added a second pass for object-literal shorthand (`{ ...base, evaluatorId, payload }`)
- * -- review found the colon-anchored pattern above does not merely mis-resolve that form, it never
- * matches it at all, so a producer written that way stayed silently absent from the derived set
- * with no throw. The second pass finds every bare `evaluatorId` identifier the first pass's
- * resolutions do not already account for and resolves or throws the same way.
+ * The `spec.evaluatorId` pass-through inside `pushCandidate` (`candidate-rules.ts`) is still the
+ * one recognised exception -- forwarding an already-declared value into the `CandidatePassage`
+ * `pushCandidate` returns, not a second producer declaration -- but review found the prior fix's
+ * exemption matched any `X.evaluatorId` member expression, not only that one verified site. It is
+ * now matched by name: only a `MemberExpression` whose object is exactly the identifier `spec` is
+ * recognised: anything else -- a differently-named forwarding variable a future producer might
+ * use -- falls through to the same throw as any other unresolvable form, naming the file and the
+ * unresolved code, rather than being silently accepted as an equivalent pass-through it was never
+ * verified to be.
  */
+function isNode(value: unknown): value is t.Node {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { type?: unknown }).type === 'string'
+  );
+}
+
+const AST_METADATA_KEYS: ReadonlySet<string> = new Set([
+  'loc',
+  'start',
+  'end',
+  'range',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+  'extra',
+]);
+
+function walk(node: t.Node, visit: (node: t.Node) => void): void {
+  visit(node);
+  for (const [key, value] of Object.entries(node)) {
+    if (AST_METADATA_KEYS.has(key)) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) if (isNode(item)) walk(item, visit);
+    } else if (isNode(value)) {
+      walk(value, visit);
+    }
+  }
+}
+
 function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
   // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
   // without an unsafe assertion: the value returned by a successful lookup is already that type.
@@ -125,73 +163,79 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
 
   for (const entry of readdirSync(RULES_DIR)) {
     if (!entry.endsWith('.ts')) continue;
-    const text = readFileSync(join(RULES_DIR, entry), 'utf8');
+    const filePath = join(RULES_DIR, entry);
+    const text = readFileSync(filePath, 'utf8');
+    const ast = parse(text, { sourceType: 'module', plugins: ['typescript'] });
 
     // Every top-level `const NAME = 'literal';` in this file, for resolving a same-file identifier
-    // alias back to the string it names. Anchored to column 0 so a nested `const` inside a
-    // function body -- a genuinely different binding -- is not treated as this file's alias table.
+    // alias back to the string it names. Only `program.body` is scanned, not the full tree, so a
+    // nested `const` inside a function body -- a genuinely different binding -- is not treated as
+    // this file's alias table.
     const topLevelStringConsts = new Map<string, string>();
-    for (const match of text.matchAll(/^const (\w+)(?::\s*\w+)?\s*=\s*'([^']*)'/gm)) {
-      const [, name, value] = match;
-      if (name !== undefined && value !== undefined) topLevelStringConsts.set(name, value);
-    }
-
-    for (const match of text.matchAll(/evaluatorId:\s*([^,;\n]+?)\s*(,|;)?\s*$/gm)) {
-      const rhs = match[1];
-      const terminator = match[2];
-      if (rhs === undefined) continue;
-      // A semicolon terminator means this is a type-member declaration (like
-      // `CandidateRuleSpec`'s own `readonly evaluatorId: SemanticEvaluatorId;`), not a value
-      // assignment -- nothing to resolve, since no producer is declared here.
-      if (terminator === ';') continue;
-      const literalMatch = /^'([^']*)'$/.exec(rhs);
-      if (literalMatch?.[1] !== undefined) {
-        const known = declared.get(literalMatch[1]);
-        if (known !== undefined) ids.add(known);
-        continue;
-      }
-      const identifierMatch = /^(\w+)$/.exec(rhs);
-      if (identifierMatch?.[1] !== undefined) {
-        const alias = topLevelStringConsts.get(identifierMatch[1]);
-        if (alias === undefined) {
-          throw new Error(
-            `${entry}: an "evaluatorId" property is assigned from identifier "${identifierMatch[1]}", ` +
-              'which is not a same-file top-level string const this test can resolve -- extend ' +
-              'derivedProducerIds() to handle this form, or use a literal or a top-level const.',
-          );
+    for (const statement of ast.program.body) {
+      if (!t.isVariableDeclaration(statement) || statement.kind !== 'const') continue;
+      for (const decl of statement.declarations) {
+        if (
+          t.isIdentifier(decl.id) &&
+          decl.init !== null &&
+          decl.init !== undefined &&
+          t.isStringLiteral(decl.init)
+        ) {
+          topLevelStringConsts.set(decl.id.name, decl.init.value);
         }
-        const known = declared.get(alias);
-        if (known !== undefined) ids.add(known);
-        continue;
       }
-      if (/^\w+\.evaluatorId$/.test(rhs)) continue; // the known `spec.evaluatorId` pass-through
-      throw new Error(
-        `${entry}: an "evaluatorId" property has a value this test cannot statically resolve to ` +
-          `a string ("${rhs}") -- extend derivedProducerIds() to handle this form.`,
-      );
     }
 
-    // Object-literal shorthand (`{ ...base, evaluatorId, payload }`) never matches the pattern
-    // above at all -- there is no colon for it to match against -- so it would otherwise leave a
-    // real producer silently out of `ids` rather than resolving or throwing. This finds every bare
-    // `evaluatorId` identifier sitting in shorthand-property position: immediately preceded by `{`
-    // or `,` and immediately followed by `,` or `}` (each allowing surrounding whitespace, so a
-    // multi-line object literal still matches). That position requirement is deliberately narrow --
-    // review found an earlier version matched *any* bare "evaluatorId" token, including a comment,
-    // a function parameter's name, or an unrelated top-level declaration, none of which declare a
-    // producer -- so this only matches genuine object-literal shorthand syntax.
-    for (const _ of text.matchAll(/(?<=[{,]\s*)evaluatorId(?=\s*[,}])/g)) {
-      const alias = topLevelStringConsts.get('evaluatorId');
+    function resolveIdentifierAlias(name: string): void {
+      const alias = topLevelStringConsts.get(name);
       if (alias === undefined) {
         throw new Error(
-          `${entry}: found a shorthand "evaluatorId" property (no colon) this test cannot ` +
-            'statically resolve unless a top-level "const evaluatorId = \'...\';" exists in the ' +
-            'same file -- extend derivedProducerIds() to handle this form.',
+          `${entry}: an "evaluatorId" property is assigned from identifier "${name}", which is ` +
+            'not a same-file top-level string const this test can resolve -- extend ' +
+            'derivedProducerIds() to handle this form, or use a literal or a top-level const.',
         );
       }
       const known = declared.get(alias);
       if (known !== undefined) ids.add(known);
     }
+
+    walk(ast.program, (node) => {
+      if (!t.isObjectExpression(node)) return;
+      for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop) || prop.computed || !t.isIdentifier(prop.key)) continue;
+        if (prop.key.name !== 'evaluatorId') continue;
+
+        if (prop.shorthand) {
+          // `{ ...base, evaluatorId, payload }` -- the property's own name is the value.
+          resolveIdentifierAlias(prop.key.name);
+          continue;
+        }
+        const value = prop.value;
+        if (t.isStringLiteral(value)) {
+          const known = declared.get(value.value);
+          if (known !== undefined) ids.add(known);
+          continue;
+        }
+        if (t.isIdentifier(value)) {
+          resolveIdentifierAlias(value.name);
+          continue;
+        }
+        if (
+          t.isMemberExpression(value) &&
+          !value.computed &&
+          t.isIdentifier(value.object) &&
+          value.object.name === 'spec' &&
+          t.isIdentifier(value.property) &&
+          value.property.name === 'evaluatorId'
+        ) {
+          continue; // the one verified pass-through: pushCandidate forwarding spec.evaluatorId
+        }
+        throw new Error(
+          `${entry}: an "evaluatorId" property has a value this test cannot statically resolve ` +
+            `to a string (a ${value.type} node) -- extend derivedProducerIds() to handle this form.`,
+        );
+      }
+    });
   }
 
   return ids;
@@ -297,12 +341,59 @@ describe('real candidates satisfy their evaluator payload contract', () => {
         const gapKey = `${evaluatorId}.${variable}`;
         if (KNOWN_GAPS.has(gapKey)) continue;
         const expected = formatValue(realValueFor(variable));
+        // Anchored to the placeholder's own label, not a bare substring search. Review found the
+        // bare form false-passes: pronoun-antecedent-ambiguity's real offsetInPassage is 0, and
+        // its own template carries unrelated boilerplate reading "offsets are 0-based" -- so
+        // `rendered.toContain('0')` was satisfied by that text even when {{offsetInPassage}}'s own
+        // placeholder rendered as "none". Confirmed by construction: replacing the real render's
+        // correct "...passage: 0" with "...passage: none" left `rendered.includes('0')` still true.
+        // `labeledExpectation` finds the text template.user itself carries immediately before
+        // {{variable}}, on the same line, and requires that label followed by the real value to
+        // appear together in the rendered output -- pinning each value to its own placeholder's
+        // position instead of to the passage anywhere.
+        const labeled = labeledExpectation(template.user, variable, expected);
         expect(
           rendered,
-          `${gapKey}: rendered request does not contain the real candidate's value for ` +
-            `{{${variable}}} -- buildEvaluatorRequest resolved it from somewhere else`,
-        ).toContain(expected);
+          `${gapKey}: rendered request does not carry the real candidate's value for ` +
+            `{{${variable}}} at its own label -- buildEvaluatorRequest resolved it from ` +
+            `somewhere else, or another field's text happens to contain the same value`,
+        ).toContain(labeled);
       }
     });
   }
 });
+
+/**
+ * The text `template.user` carries immediately before `{{variable}}`, from the start of that
+ * line, concatenated with `expected`. Checking this combined string, rather than `expected` alone,
+ * requires the rendered request to carry the value at the position its own placeholder occupies,
+ * not merely anywhere in the passage or another field's rendered text.
+ *
+ * A placeholder that begins its own line (`{{passage}}` on a bare line, for instance) yields an
+ * empty label here, which reduces to the original bare check for that one case -- still correct,
+ * since a value alone on its own line is already unlikely to collide with unrelated boilerplate
+ * the way a short, common value substituted mid-line can.
+ *
+ * A line can carry more than one placeholder --
+ * `noun-cluster-comprehension`'s "Cluster length: {{length}} (configured limit: {{limit}})" is
+ * one -- so the label cannot simply be "back to the start of the line": for `{{limit}}`, that
+ * would include `{{length}}`'s own literal, unrendered brace syntax, which never appears in a
+ * real rendered request (it is always substituted first). Caught by this function's own first
+ * version failing exactly that case when run. The label instead starts right after the nearest
+ * earlier placeholder's closing `}}` on the same line, when one exists, so it only ever contains
+ * text this template renders verbatim.
+ */
+function labeledExpectation(templateText: string, variable: string, expected: string): string {
+  const placeholder = `{{${variable}}}`;
+  const index = templateText.indexOf(placeholder);
+  if (index === -1) {
+    throw new Error(
+      `template does not contain {{${variable}}} -- unreachable for a declared variable`,
+    );
+  }
+  const lineStart = templateText.lastIndexOf('\n', index) + 1;
+  const precedingClose = templateText.lastIndexOf('}}', index);
+  const labelStart = precedingClose >= lineStart ? precedingClose + 2 : lineStart;
+  const label = templateText.slice(labelStart, index);
+  return label + expected;
+}

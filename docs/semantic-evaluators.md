@@ -17,6 +17,9 @@ Instead there are eight bounded classification tasks. Each has:
 
 ## The eight
 
+This table mirrors `evaluatorDefinitions` in `src/semantic/evaluators.ts`. That array is the source
+of truth. If the table and the array disagree, this table is stale.
+
 | Evaluator                      | Question                                                                         | Produced by                                          |
 | ------------------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `approved-word-sense`          | Is this word used in a sense the active pack permits?                            | `unapproved-vocabulary` with `adjudicateSense: true` |
@@ -96,16 +99,16 @@ instead of serving a stale verdict.
 
 `validateSemanticResponse()` is the only way this becomes a verdict. It rejects:
 
-| Rejection                                                                      | Kind                     |
-| ------------------------------------------------------------------------------ | ------------------------ |
-| no JSON object<br>truncated JSON<br>extra key<br>missing key<br>wrong type     | `invalid-response`       |
-| confidence outside `[0,1]`, non-integer or negative offsets, empty explanation | `invalid-response`       |
-| `ruleId` not the requested rule, more than three replacements                  | `invalid-response`       |
-| `evidenceEnd < evidenceStart`, or beyond the passage length                    | `out-of-range`           |
-| `compliant` **and** replacements suggested                                     | `contradictory-response` |
-| `compliant` **and** `meaningPreserved: false`                                  | `contradictory-response` |
-| replacement suggested **while** `meaningPreserved: false`                      | `contradictory-response` |
-| `uncertain` **at** confidence above `0.9`                                      | `contradictory-response` |
+| Rejection                                                                                                                          | Kind                     |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| no JSON object<br>truncated JSON<br>extra key<br>missing key<br>wrong type                                                         | `invalid-response`       |
+| confidence outside `[0,1]`, non-integer or negative offsets, empty explanation                                                     | `invalid-response`       |
+| `ruleId` not the requested rule, more than three replacements                                                                      | `invalid-response`       |
+| `evidenceEnd < evidenceStart`, or beyond the passage length                                                                        | `out-of-range`           |
+| `compliant` **and** replacements suggested                                                                                         | `contradictory-response` |
+| `compliant` **and** `meaningPreserved: false`                                                                                      | `contradictory-response` |
+| replacement suggested **while** `meaningPreserved: false`                                                                          | `contradictory-response` |
+| `uncertain` **at** confidence above the limit set in `validateSemanticResponse()`, `src/semantic/response-schema.ts` (`0.9` today) | `contradictory-response` |
 
 JSON is extracted from a fenced block, or from surrounding prose, before validation. Small local
 models often wrap their answer this way. But the schema still does all the deciding.
@@ -119,20 +122,20 @@ Both numbers are carried on the diagnostic, so a reader can see why a verdict wa
 
 ## Broker guarantees
 
-| Guarantee              | How                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| bounded concurrency    | worker pool sized to `min(maxConcurrency, queue length)`                                                                              |
-| deterministic ordering | candidates sorted by id for work, and outcomes returned in the caller's order                                                         |
-| safe batching          | identical content hashes share one request, and nothing else is merged                                                                |
-| content-hash caching   | hash covers evaluator<br>prompt version<br>model<br>temperature<br>rendered messages                                                  |
-| timeouts               | `AbortSignal.timeout` combined with the caller's signal via `AbortSignal.any`                                                         |
-| cancellation           | reported as `cancelled`, distinct from `timeout`, and never retried                                                                   |
-| retry policy           | transport faults only: network, timeout, or 408/429/5xx. Never 4xx, never invalid output                                              |
-| bounded repair         | `maxRepairAttempts` caps the repair loop at no more than one round. The repair message restates the contract and adds no task content |
-| redaction              | passages are built from masked text. Only declared payload keys are sent                                                              |
-| tracing                | prompt version<br>model id<br>content hash<br>attempts<br>cache hit<br>duration<br>repaired flag                                      |
-| dependency injection   | `transport`, `cache`, `promptProvider`, `now` and `trace` are all injectable                                                          |
-| graceful uncertainty   | `uncertain` becomes `review-required`, never a violation                                                                              |
+| Guarantee              | How                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| bounded concurrency    | worker pool sized to `min(maxConcurrency, queue length)`                                                                                                                  |
+| deterministic ordering | candidates sorted by id for work, and outcomes returned in the caller's order                                                                                             |
+| safe batching          | identical content hashes share one request, and nothing else is merged                                                                                                    |
+| content-hash caching   | hash covers evaluator<br>prompt version<br>model<br>temperature<br>rendered messages                                                                                      |
+| timeouts               | `AbortSignal.timeout` combined with the caller's signal via `AbortSignal.any`                                                                                             |
+| cancellation           | reported as `cancelled`, distinct from `timeout`, and never retried                                                                                                       |
+| retry policy           | transport faults only: network, timeout, or 408/429/5xx. Never 4xx, never invalid output                                                                                  |
+| bounded repair         | `maxRepairAttempts` (schema in `src/core/config.ts`, capped at one round today) bounds the repair loop. The repair message restates the contract and adds no task content |
+| redaction              | passages are built from masked text. Only declared payload keys are sent                                                                                                  |
+| tracing                | prompt version<br>model id<br>content hash<br>attempts<br>cache hit<br>duration<br>repaired flag                                                                          |
+| dependency injection   | `transport`, `cache`, `promptProvider`, `now` and `trace` are all injectable                                                                                              |
+| graceful uncertainty   | `uncertain` becomes `review-required`, never a violation                                                                                                                  |
 
 ## Measurement
 
@@ -161,8 +164,9 @@ model guessed.
 
 **Split discipline.** `dev` fixtures are for tuning prompts and thresholds. `heldout` fixtures are for
 reporting and must not be tuned against. The manifest records the split per fixture. The validator
-asserts that the splits are disjoint by content hash, and that `heldout` is at least 25% of the
-corpus. The evaluation script defaults to `heldout` and requires `--split all` to mix.
+in `src/fixture-tools/validate.ts` sets the rules. It asserts that the splits are disjoint by content
+hash. It also asserts a minimum `heldout` share of the corpus (25% today). The evaluation script
+defaults to `heldout` and requires `--split all` to mix.
 
 ## Adding an evaluator
 

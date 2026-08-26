@@ -34,8 +34,18 @@ const PROMPTS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'
  */
 const ALLOWED_META_KEYS = new Set(['id', 'version', 'task']);
 
-/** Placeholders every template may use, supplied from the candidate rather than its payload. */
-const SHARED_VARIABLES = new Set(['ruleId', 'passage', 'invariants']);
+/**
+ * Placeholders every template may use, supplied from the candidate rather than its payload.
+ *
+ * `mode` joined this set, rather than staying a `passive-voice-adjudication`-only payload key,
+ * because it is a `CandidatePassage`-level field (`sentence.mode`, set by every rule via
+ * `pushCandidate`) and no rule ever puts it in `payload` — declaring it as a payload key made
+ * `buildEvaluatorRequest` read `candidate.payload.mode`, which was always `undefined`, and render
+ * the sentinel `"none"` in every real request. See `src/semantic/evaluators.ts` and
+ * `test/integration/candidate-payload-contract.test.ts`, which drives a real candidate through
+ * the pipeline rather than a hand-built fixture and would have caught this.
+ */
+const SHARED_VARIABLES = new Set(['ruleId', 'passage', 'invariants', 'mode']);
 
 interface PromptFile {
   readonly version: string;

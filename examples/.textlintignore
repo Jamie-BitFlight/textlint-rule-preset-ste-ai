@@ -1,0 +1,12 @@
+# Deliberately empty.
+#
+# textlint auto-loads the repository root's `.textlintignore` for any invocation, and that file
+# excludes `examples/sample.md` from this repository's own dogfood lint (its violations are the
+# demo, not debt -- see the root file's comment). That exclusion is correct for the ratchet, but it
+# also silently empties the walkthrough command in `examples/README.md`, whose entire point is to
+# print those violations to a first-time user.
+#
+# `examples/README.md`'s commands pass `--ignore-path examples/.textlintignore` to opt back out of
+# the root file for that one invocation, without weakening the root exclusion for anything else.
+# This file has to exist and be empty for that override to work: `--ignore-path` needs a real file,
+# and an empty one contributes no patterns of its own.

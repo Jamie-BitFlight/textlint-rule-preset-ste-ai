@@ -26,7 +26,6 @@ export const EVALUATOR_PAYLOADS: Record<SemanticEvaluatorId, Record<string, unkn
     auxiliary: 'be',
     participle: 'replaced',
     hasExplicitAgent: false,
-    mode: 'descriptive',
   },
   'pronoun-antecedent-ambiguity': {
     pronoun: 'It',
@@ -74,7 +73,6 @@ export const MULTI_VALUE_PAYLOADS: Record<SemanticEvaluatorId, Record<string, un
     auxiliary: 'be',
     participle: 'replaced',
     hasExplicitAgent: false,
-    mode: 'descriptive',
   },
   'pronoun-antecedent-ambiguity': {
     pronoun: 'It',

@@ -79,18 +79,28 @@ purpose. Read the `--json` output when you need the authority the linter actuall
 
 ## What to copy
 
-Copy `acme-pack.json`. Do not stop at a handful of fields. The generated table in
-[`docs/rule-pack-import.md`](../../docs/rule-pack-import.md#what-a-pack-controls) is the complete
-list. Every row on it is a field this example set to a value specific to Acme. Go through the
-table. For each row, decide whether your pack needs its own value, or the placeholder is fine to
-keep.
+Copy `acme-pack.json`. The generated table in
+[`docs/rule-pack-import.md`](../../docs/rule-pack-import.md#what-a-pack-controls) is the schema's
+complete field inventory. It is not a list of fields this example populated.
+
+This pack sets most fields to a value specific to Acme. It leaves a few optional ones at their
+default: `rules[].options`, and the `note` field on one `dictionary.preferred` entry and the one
+`contractions` entry. None of the three has content worth writing for this scenario.
+
+Go through the table row by row. For each field, ask one question. Does your pack's real content
+give this a value worth setting? Or does the default already say what you mean? An empty `note` and
+an absent one behave identically. There is no placeholder to fill in either case.
 
 Two are worth calling out because getting them wrong is easy to miss until later.
 
 - `metadata.id` is the exact string `trustedRulePackIds` must match. The pack name and the file
   path do not count — see the trust gate above.
-- `metadata.authority` should stay `provisional` until you are actually supplying licensed data.
-  Declaring `normative` early makes the pack lie about itself, even while it stays untrusted.
+- `metadata.authority: "normative"` asserts two things at once. The pack carries a standard's rule
+  data. You are licensed to supply it. This example declares it because Acme wrote its own
+  maintenance standard. See the `notice` field in `acme-pack.json`. See also
+  `docs/DISCLAIMER.md`'s "a licence that permits it". Authorship is that licensed condition, not an
+  exception to it. Declaring `normative` without either fact true makes the pack lie about itself,
+  even while it stays untrusted and capped at `supplementary`.
 
 `docs/rule-pack-import.md` also covers the licence obligations. Do not commit a proprietary pack to
 a public repository.

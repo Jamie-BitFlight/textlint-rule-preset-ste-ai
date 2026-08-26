@@ -123,7 +123,14 @@ function arrayElement(schema: unknown): unknown {
   return readProperty(def, 'type') === 'array' ? readProperty(def, 'element') : undefined;
 }
 
-const MAX_DEPTH = 6;
+// Not a legitimate depth for this schema — `rulePackSchema` bottoms out within a handful of
+// levels. It exists only to turn a genuinely cyclic or pathological schema into a loud failure
+// instead of an infinite recursion. An earlier version used this as a silent truncation point
+// instead (`if (depth > MAX_DEPTH) return;`): a field nested past it would vanish from the
+// inventory with every test still green, defeating the "exhaustive" claim the same way the
+// name-based special-casing this file replaced did. Throwing here keeps that failure mode
+// impossible rather than merely unlikely.
+const RUNAWAY_RECURSION_DEPTH = 50;
 
 /**
  * Recurse into `schema` and append every reachable field path to `out`.
@@ -134,7 +141,12 @@ const MAX_DEPTH = 6;
  * under it to enumerate. Anything else — string, number, boolean, enum, `z.record` — is a leaf too.
  */
 function collectFields(schema: unknown, path: string, depth: number, out: string[]): void {
-  if (depth > MAX_DEPTH) return;
+  if (depth > RUNAWAY_RECURSION_DEPTH) {
+    throw new Error(
+      `schema walk exceeded ${RUNAWAY_RECURSION_DEPTH} levels at "${path}" — rulePackSchema is ` +
+        'not expected to nest this deep; check for a cyclic reference.',
+    );
+  }
 
   const shape = objectShape(schema);
   if (shape !== undefined) {

@@ -4,11 +4,11 @@
     "name": "Acme maintenance controlled-English pack",
     "version": "1.0.0",
     "authority": "normative",
-    "licence": "Example only. Authored for this repository, not derived from any standard.",
-    "source": "Authored as a worked example for docs/rule-pack-import.md.",
+    "licence": "Acme Industries internal document, ACME-MAINT-STD-2026. Internal use only.",
+    "source": "ACME-MAINT-STD-2026, Acme Industries' own internal controlled-English maintenance standard.",
     "retrievedAt": "2026-08-26",
     "conformanceClaim": "declared-by-supplier",
-    "notice": "Example pack. It carries no real controlled-language standard and confers no conformance."
+    "notice": "Acme, Acme WidgetPro, and ACME-MAINT-STD-2026 are fictional, authored for this example. The scenario is not: a licensee may declare normative authority over a standard it owns and authors itself, without a third party's licence. See docs/DISCLAIMER.md, \"a licence that permits it\" -- this pack is that case."
   },
 
   "limits": {

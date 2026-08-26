@@ -1,8 +1,13 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
-import { packPermitsConformanceClaim, parseRulePack } from '../../src/rule-pack/loader.js';
+import {
+  RulePackError,
+  packPermitsConformanceClaim,
+  parseRulePack,
+} from '../../src/rule-pack/loader.js';
 
 /**
  * The rule pack is this package's only extension point, and until this file existed it had no test
@@ -80,6 +85,33 @@ function only(text: string, config: Record<string, unknown>, ruleId: string) {
   const found = analyse(text, config).diagnostics.filter((d) => d.ruleId === ruleId);
   expect(found, `expected exactly one ${ruleId} diagnostic`).toHaveLength(1);
   return found[0]!;
+}
+
+/** `pack()`'s default limits, so a test overriding one field doesn't have to restate the rest. */
+function limitsWith(overrides: Record<string, number>): Record<string, number> {
+  return {
+    proceduralMaxGradeLevel: 7,
+    descriptiveMaxGradeLevel: 8,
+    sentenceReadabilityFloorWords: 20,
+    maxNounClusterLength: 3,
+    maxSentencesPerProceduralStep: 1,
+    ...overrides,
+  };
+}
+
+/**
+ * The thrown value, or `undefined` if `fn` did not throw.
+ *
+ * Kept out of a try/catch at the call site so the assertions on the result are never inside a
+ * conditional block — `vitest/no-conditional-expect` forbids `expect()` inside `catch`.
+ */
+function caughtError(fn: () => void): unknown {
+  try {
+    fn();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
 }
 
 describe('rule pack: the trust gate', () => {
@@ -446,5 +478,144 @@ describe('the shipped example pack', () => {
 
     expect(packPermitsConformanceClaim(parsed, [])).toBe(false);
     expect(packPermitsConformanceClaim(parsed, ['acme-maintenance-2026'])).toBe(true);
+  });
+});
+
+describe('rule pack: limits, contractions, path resolution, and the autofix gate', () => {
+  /**
+   * External review on this PR named four claims the page makes that nothing above exercised:
+   * `limits`, `contractions`, resolving a relative `rulePack` path against `baseDir`, and the
+   * autofix gate refusing a fix despite a pack's `safeSubstitution: true`. Removing the blanket "is
+   * pinned by" claim would have been the cheaper fix; this is the other one, closing the gap
+   * instead of describing it.
+   */
+
+  // Estimated Flesch-Kincaid grade 15.4 (28 words) under the bundled reader — comfortably between
+  // the two limit values exercised below, and confirmed empirically rather than assumed: see the
+  // identical sentence in test/unit/rules.test.ts's "applies the descriptive limit" case.
+  const DESCRIPTIVE_SENTENCE =
+    'The controller monitors the supply voltage and the ambient temperature and then reports ' +
+    'both of these values to the host system over the diagnostic bus once every second.\n';
+
+  it('drives sentence-length-descriptive from limits.descriptiveMaxGradeLevel', () => {
+    const atDefault = analyse(DESCRIPTIVE_SENTENCE, {
+      rulePack: pack({ limits: limitsWith({ descriptiveMaxGradeLevel: 20 }) }),
+    }).diagnostics.filter((d) => d.ruleId === 'sentence-length-descriptive');
+    expect(atDefault, 'a permissive limit must not flag this sentence').toHaveLength(0);
+
+    const tightened = analyse(DESCRIPTIVE_SENTENCE, {
+      rulePack: pack({ limits: limitsWith({ descriptiveMaxGradeLevel: 1 }) }),
+    }).diagnostics.filter((d) => d.ruleId === 'sentence-length-descriptive');
+    expect(tightened, 'a near-zero limit must flag the same sentence').toHaveLength(1);
+  });
+
+  it('drives no-contractions from contractions[]', () => {
+    const text = "The technician confirms it's ready.\n";
+
+    const withoutEntry = analyse(text, { rulePack: pack({ contractions: [] }) }).diagnostics.filter(
+      (d) => d.ruleId === 'no-contractions',
+    );
+    expect(withoutEntry).toHaveLength(0);
+
+    const withEntry = analyse(text, {
+      rulePack: pack({
+        contractions: [{ from: "it's", to: 'it is', safeSubstitution: true }],
+      }),
+    }).diagnostics.filter((d) => d.ruleId === 'no-contractions');
+    expect(withEntry).toHaveLength(1);
+  });
+
+  it('throws RulePackError with the failing field path, never falling back silently', () => {
+    // docs/rule-pack-import.md, "The schema": "A pack that fails validation throws RulePackError
+    // with the failing field paths. The linter never falls back to the provisional pack silently."
+    const invalid = pack({
+      metadata: {
+        id: PACK_ID,
+        name: 'Acme test pack',
+        version: '1.0.0',
+        authority: 'not-a-real-status',
+        licence: 'Proprietary — test fixture',
+        source: 'Authored for this test. Not derived from any standard.',
+        conformanceClaim: 'declared-by-supplier',
+      },
+    });
+
+    const error = caughtError(() => analyse(VOCABULARY_DOC, { rulePack: invalid }));
+
+    expect(error).toBeInstanceOf(RulePackError);
+    expect(error).toHaveProperty('message', expect.stringContaining('metadata.authority'));
+  });
+
+  describe('relative rulePack path resolution against baseDir', () => {
+    let dir: string;
+
+    it('loads a relative rulePack path resolved against baseDir', () => {
+      dir = mkdtempSync(join(tmpdir(), 'ste-ai-rule-pack-basedir-'));
+      writeFileSync(join(dir, 'pack.json'), JSON.stringify(pack()));
+
+      const result = analyseTextDeterministic(VOCABULARY_DOC, {
+        config: { rulePack: './pack.json' },
+        baseDir: dir,
+      });
+
+      expect(result.diagnostics.filter((d) => d.ruleId === 'unapproved-vocabulary')).toHaveLength(
+        1,
+      );
+
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('fails clearly when the relative path does not resolve under that baseDir', () => {
+      const otherDir = mkdtempSync(join(tmpdir(), 'ste-ai-rule-pack-basedir-missing-'));
+
+      expect(() =>
+        analyseTextDeterministic(VOCABULARY_DOC, {
+          config: { rulePack: './pack.json' },
+          baseDir: otherDir,
+        }),
+      ).toThrow(/Cannot read rule pack/);
+
+      rmSync(otherDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('the autofix gate outranks a pack declaring safeSubstitution: true', () => {
+    // `docs/rule-pack-import.md`, "What the pack cannot do": safeSubstitution: true is necessary
+    // but not sufficient. checkFixSafety() (src/core/rule.ts) still refuses a fix that changes a
+    // digit, a negation, a modal, or an ordering word, regardless of what the pack asserts.
+
+    it('applies a fix the pack marks safe when checkFixSafety agrees', () => {
+      const result = analyse('Utilise the bracket.\n', {
+        rulePack: pack({
+          dictionary: {
+            approved: [],
+            unapproved: [{ term: 'utilise', alternatives: ['use'], safeSubstitution: true }],
+            preferred: [],
+          },
+        }),
+      });
+
+      const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+      expect(diagnostic?.fix).toBeDefined();
+      expect(diagnostic?.fix?.text).toBe('Use');
+    });
+
+    it('refuses the same pack-declared-safe fix when it would change negation', () => {
+      const result = analyse('The bracket is not usable.\n', {
+        rulePack: pack({
+          dictionary: {
+            approved: [],
+            unapproved: [{ term: 'not usable', alternatives: ['usable'], safeSubstitution: true }],
+            preferred: [],
+          },
+        }),
+      });
+
+      const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+      expect(diagnostic, 'the violation is still reported').toBeDefined();
+      expect(diagnostic?.fix, 'no fix reaches the caller').toBeUndefined();
+      expect(diagnostic?.message).toContain('No automatic fix');
+      expect(diagnostic?.message).toContain('changes negation');
+    });
   });
 });

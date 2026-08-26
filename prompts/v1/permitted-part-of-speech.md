@@ -57,7 +57,9 @@ Invariants that must not change in any suggestion:
 
 Word: {{word}}
 Character offset of the occurrence in the passage: {{offsetInPassage}}
-Permitted parts of speech supplied by the active rule pack: {{permittedPartsOfSpeech}}
+
+Permitted parts of speech supplied by the active rule pack:
+{{permittedPartsOfSpeech}}
 
 Passage (offsets are 0-based into this exact string):
 {{passage}}

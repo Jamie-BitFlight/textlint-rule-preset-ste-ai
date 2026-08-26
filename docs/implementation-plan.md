@@ -74,21 +74,21 @@ not import `deterministic/rules/*` internals and that `model-client` never impor
 
 Each phase below is complete (✔). The scope column lists that phase's delivered components.
 
-| Phase           | Scope                                                                                                                                                                                | Status |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| Scaffolding     | `package.json`<br>TypeScript config<br>Vitest config<br>ESLint and Prettier config<br>CI                                                                                             | ✔      |
-| `core`          | Domain types<br>Source document and offset map<br>Protected-region extractor<br>Segmenter<br>Diagnostics<br>Fix planner<br>Rule registry                                             | ✔      |
-| `rule-pack`     | Zod schema<br>Loader<br>Provisional non-proprietary pack                                                                                                                             | ✔      |
-| `deterministic` | 14 rules<br>Each rule carries an id and a status<br>Each rule carries a config schema, exact ranges, and tests                                                                       | ✔      |
-| `textlint`      | Adapter (node and core)<br>Preset<br>Per-rule modules                                                                                                                                | ✔      |
-| `model-client`  | llama.cpp-compatible transport<br>Content-hash cache<br>Timeout and cancellation<br>Retry policy for transport-only failures                                                         | ✔      |
-| `semantic`      | Broker: concurrency, ordering, batching, and tracing<br>8 evaluators<br>Versioned prompt assets<br>Response schema                                                                   | ✔      |
-| Fixtures        | Fetch script with provenance capture<br>18 originals<br>Manifest                                                                                                                     | ✔      |
-| Adjudication    | Compliant counterparts<br>Annotation records<br>Corpus-integrity tests                                                                                                               | ✔      |
-| Tests           | Unit<br>Offsets<br>Protected regions<br>Contract<br>Malformed response<br>Timeout<br>Cancellation<br>Cache<br>Fake-server integration<br>Fixture expectations<br>End-to-end textlint | ✔      |
-| Eval tooling    | Confusion matrix<br>Precision<br>Recall<br>F1<br>Uncertain rate<br>Latency percentiles<br>Train, dev, and heldout split enforcement                                                  | ✔      |
-| Docs            | Architecture<br>Rule authoring<br>Semantic evaluators<br>Rule-pack import<br>llama.cpp setup<br>Diagnostic and autofix policy<br>Disclaimer<br>Implementation report                 | ✔      |
-| Verification    | Fresh-context verifier subagent<br>Defect correction<br>Gate re-run                                                                                                                  | ✔      |
+| Phase           | Scope                                                                                                                                                                                            | Status |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| Scaffolding     | `package.json`<br>TypeScript config<br>Vitest config<br>ESLint and Prettier config<br>CI                                                                                                         | ✔      |
+| `core`          | Domain types<br>Source document and offset map<br>Protected-region extractor<br>Segmenter<br>Diagnostics<br>Fix planner<br>Rule registry                                                         | ✔      |
+| `rule-pack`     | Zod schema<br>Loader<br>Provisional non-proprietary pack                                                                                                                                         | ✔      |
+| `deterministic` | Rules under `src/deterministic/rules/`, counted by `scripts/ci/check-rules-provisional.sh`<br>Each rule carries an id and a status<br>Each rule carries a config schema, exact ranges, and tests | ✔      |
+| `textlint`      | Adapter (node and core)<br>Preset<br>Per-rule modules                                                                                                                                            | ✔      |
+| `model-client`  | llama.cpp-compatible transport<br>Content-hash cache<br>Timeout and cancellation<br>Retry policy for transport-only failures                                                                     | ✔      |
+| `semantic`      | Broker: concurrency, ordering, batching, and tracing<br>Evaluators listed in `evaluatorDefinitions` (`src/semantic/evaluators.ts`)<br>Versioned prompt assets<br>Response schema                 | ✔      |
+| Fixtures        | Fetch script with provenance capture<br>Originals listed in `test/fixtures/manifest.json`<br>Manifest                                                                                            | ✔      |
+| Adjudication    | Compliant counterparts<br>Annotation records<br>Corpus-integrity tests                                                                                                                           | ✔      |
+| Tests           | Unit<br>Offsets<br>Protected regions<br>Contract<br>Malformed response<br>Timeout<br>Cancellation<br>Cache<br>Fake-server integration<br>Fixture expectations<br>End-to-end textlint             | ✔      |
+| Eval tooling    | Confusion matrix<br>Precision<br>Recall<br>F1<br>Uncertain rate<br>Latency percentiles<br>Train, dev, and heldout split enforcement                                                              | ✔      |
+| Docs            | Architecture<br>Rule authoring<br>Semantic evaluators<br>Rule-pack import<br>llama.cpp setup<br>Diagnostic and autofix policy<br>Disclaimer<br>Implementation report                             | ✔      |
+| Verification    | Fresh-context verifier subagent<br>Defect correction<br>Gate re-run                                                                                                                              | ✔      |
 
 ## Non-goals
 

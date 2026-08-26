@@ -46,8 +46,8 @@ for the history.
 npm install --save-dev textlint textlint-rule-preset-ste-ai
 ```
 
-`pnpm add -D`, `yarn add -D` and `vp install --save-dev` all work the same way. Nothing here needs
-this repository's own toolchain.
+`pnpm add -D`, `yarn add -D` and `vp install -D` all work the same way. Nothing here needs this
+repository's own toolchain.
 
 `.textlintrc.json`:
 
@@ -342,10 +342,10 @@ repository root carry the `additionalWellKnown` exceptions this project's own wr
 
 Most of that prose does not pass yet. `scripts/ci/check-dogfood-lint.mjs` ratchets it.
 `scripts/ci/dogfood-lint-baseline.json` records what each file reports today. Three rules follow
-from it. A file with no entry must be clean. No file may get worse. A file whose findings shrink,
-whether to zero or only partway, must have that recorded too -- progress cannot be silently banked
-and spent back later. So the baseline only ever shrinks. Clean a file up, even partway, run the
-script with `--update`, then commit the smaller baseline.
+from it. A file with no entry must be clean. No file may get worse. A file's findings may shrink,
+even partway, not only to zero. Record that too. Otherwise a later change could quietly reintroduce
+what was fixed. So the baseline only ever shrinks. Clean a file up, even partway, run the script
+with `--update`, then commit the smaller baseline.
 
 `textlint` resolves `preset-ste-ai` as an installed package here, the same way it does for any
 consumer. The package name is `textlint-rule-preset-ste-ai`. `package.json` lists this package as

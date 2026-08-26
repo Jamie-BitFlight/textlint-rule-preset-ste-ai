@@ -131,6 +131,7 @@ A prompt file on its own will not work. `prompt-corpus.test.ts` requires the cor
 ```bash
 vp check                                          # format, lint, types
 vp test --run test/unit/prompt-corpus.test.ts test/unit/prompts.test.ts
+vp pack                                           # builds dist/, which the next two steps need
 node scripts/ci/check-dogfood-lint.mjs            # the prompt files are linted by this preset too
 ```
 

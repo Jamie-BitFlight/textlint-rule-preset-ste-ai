@@ -79,17 +79,21 @@ purpose. Read the `--json` output when you need the authority the linter actuall
 
 ## What to copy
 
-Copy `acme-pack.json`. Four fields then need your own values.
+Copy `acme-pack.json`. Do not stop at a handful of fields. The generated table in
+[`docs/rule-pack-import.md`](../../docs/rule-pack-import.md#what-a-pack-controls) is the complete
+list. Every row on it is a field this example set to a value specific to Acme. Go through the
+table. For each row, decide whether your pack needs its own value, or the placeholder is fine to
+keep.
 
-- `metadata.id` is the string `trustedRulePackIds` must match. The pack name and the file path do
-  not count.
-- `metadata.licence` and `metadata.source` record what you are entitled to supply.
-- `dictionary` holds your terms.
-- `rules[]` takes one entry per rule whose authority or defaults you want to set.
+Two are worth calling out because getting them wrong is easy to miss until later.
 
-Leave `metadata.authority` as `provisional` until you are actually supplying licensed data.
-[`docs/rule-pack-import.md`](../../docs/rule-pack-import.md) covers the full field list and the
-licence obligations. Do not commit a proprietary pack to a public repository.
+- `metadata.id` is the exact string `trustedRulePackIds` must match. The pack name and the file
+  path do not count — see the trust gate above.
+- `metadata.authority` should stay `provisional` until you are actually supplying licensed data.
+  Declaring `normative` early makes the pack lie about itself, even while it stays untrusted.
+
+`docs/rule-pack-import.md` also covers the licence obligations. Do not commit a proprietary pack to
+a public repository.
 
 `scripts/ci/check-rule-pack-example.sh` runs each command above through the real command-line tool.
 It uses these same files. It asserts the counts and the `conformance` values this page quotes. It

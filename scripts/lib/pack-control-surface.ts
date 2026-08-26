@@ -10,29 +10,75 @@ import { rulePackSchema } from '../../src/rule-pack/schema.js';
  * `test/architecture/doc-pack-control-surface.test.ts` fails when the page and this renderer
  * disagree.
  *
- * A new schema field with no entry in `DESCRIPTIONS` throws rather than rendering a blank cell.
- * That is the ratchet: adding a field forces you to say what it controls.
+ * The walk below is generic, not name-based. An earlier version special-cased `dictionary` and
+ * `rules` and stopped after one level, so a field added under `metadata`, `limits`, or inside a
+ * `dictionary.unapproved` entry changed nothing here and passed every test. `collectFields()`
+ * instead recurses into every object shape and every array-of-object element, at any depth,
+ * bottoming out only at a genuine leaf (string, number, boolean, enum, or an unvalidated
+ * `z.record`, which `rules[].options` is by design — see "Extending the schema" on the page).
+ *
+ * A new leaf with no entry in `DESCRIPTIONS` throws rather than rendering a blank cell. That is the
+ * ratchet: adding a field forces you to say what it controls.
  */
 
 export const BEGIN = '<!-- pack-control-surface:begin -->';
 export const END = '<!-- pack-control-surface:end -->';
 
 const DESCRIPTIONS: Readonly<Record<string, string>> = {
-  approvedTechnicalTerms: 'Literal names protected from matching, rewriting, and the heuristics.',
-  contractions: 'The contraction expansions `no-contractions` offers.',
+  metadata: 'Identity, declared authority, licence, and the conformance claim.',
+  'metadata.id': "The identifier `trustedRulePackIds` must match. Not the pack's name or path.",
+  'metadata.name': 'A human-readable label. Cosmetic. Nothing matches on it.',
+  'metadata.version': "The pack's own version string, for the audit trail.",
+  'metadata.authority':
+    "The pack's declared authority. Capped at `supplementary` until the operator trusts the pack.",
+  'metadata.licence': 'What the supplier asserts you may distribute, for the audit trail.',
+  'metadata.source': 'Where the data came from, per the supplier, for the audit trail.',
+  'metadata.retrievedAt': 'Optional. When the source data was retrieved, for the audit trail.',
+  'metadata.conformanceClaim':
+    'One of none, partial, or declared-by-supplier. Gates the `--json` conformance field.',
+  'metadata.notice': 'Optional notice text, for the audit trail.',
+
+  limits: 'The numeric thresholds. Grade levels, cluster length, step count.',
+  'limits.proceduralMaxGradeLevel': 'Grade level above which a procedural sentence is reported.',
+  'limits.descriptiveMaxGradeLevel': 'As above, for descriptive sentences.',
+  'limits.sentenceReadabilityFloorWords': 'Sentences shorter than this are never grade-scored.',
+  'limits.maxNounClusterLength': 'Word-count limit `noun-cluster-candidate` reports.',
+  'limits.maxSentencesPerProceduralStep':
+    'Sentence-count limit `list-instruction-structure` reports per numbered step.',
+
   dictionary: 'The controlled-language word lists.',
   'dictionary.approved': 'Terms whose permitted sense the semantic evaluators may check.',
-  'dictionary.preferred': 'Term mappings `preferred-terminology` reports.',
+  'dictionary.approved[].term': 'The approved term.',
+  'dictionary.approved[].partsOfSpeech': 'Optional. Parts of speech the approval covers.',
+  'dictionary.approved[].senses': 'Optional. Senses the approval covers.',
   'dictionary.unapproved': 'Terms `unapproved-vocabulary` reports, with their alternatives.',
-  limits: 'The numeric thresholds. Grade levels, cluster length, step count.',
-  metadata: 'Identity, declared authority, licence, and the conformance claim.',
+  'dictionary.unapproved[].term': 'The unapproved term.',
+  'dictionary.unapproved[].alternatives': 'Terms the diagnostic suggests instead.',
+  'dictionary.unapproved[].note': 'Optional context shown with the diagnostic.',
+  'dictionary.unapproved[].safeSubstitution':
+    'True only if `alternatives[0]` cannot change technical meaning. Gates autofix.',
+  'dictionary.unapproved[].partOfSpeech': 'Optional. The part of speech this entry covers.',
+  'dictionary.preferred': 'Term mappings `preferred-terminology` reports.',
+  'dictionary.preferred[].from': 'The discouraged term.',
+  'dictionary.preferred[].to': 'The preferred term.',
+  'dictionary.preferred[].safeSubstitution': 'True only if the substitution is always safe.',
+  'dictionary.preferred[].note': 'Optional context shown with the diagnostic.',
+
+  contractions: 'The contraction expansions `no-contractions` offers.',
+  'contractions[].from': 'The contraction.',
+  'contractions[].to': 'The expansion.',
+  'contractions[].safeSubstitution': 'True only if the expansion is always safe to autofix.',
+  'contractions[].note': 'Optional context shown with the diagnostic.',
+
+  approvedTechnicalTerms: 'Literal names protected from matching, rewriting, and the heuristics.',
+
   rules: 'Per-rule authority and defaults.',
-  'rules[].enabled': 'Whether the rule runs at all.',
-  'rules[].options': 'Default options, below anything the user configures.',
   'rules[].ruleId': 'Which registered rule the entry applies to.',
-  'rules[].severity': 'Default severity, below anything the user configures.',
-  'rules[].sourceRef': 'The citation a deterministic diagnostic reports.',
   'rules[].status': 'The authority a deterministic diagnostic reports.',
+  'rules[].sourceRef': 'The citation a deterministic diagnostic reports.',
+  'rules[].enabled': 'Whether the rule runs at all.',
+  'rules[].severity': 'Default severity, below anything the user configures.',
+  'rules[].options': 'Default options, below anything the user configures.',
 };
 
 /**
@@ -40,40 +86,84 @@ const DESCRIPTIONS: Readonly<Record<string, string>> = {
  *
  * Zod's `def` layout is not part of its public contract, so this walks it defensively: a missing or
  * renamed key yields `undefined` and the caller stops, rather than throwing somewhere less obvious.
- * `controlSurfaceFields()` returning a short or empty list is what surfaces that, via the guard
- * assertion in the test.
+ * `controlSurfaceFields()` returning a short list is what surfaces that, via the guard test.
  */
 function readProperty(value: unknown, key: string): unknown {
   if (typeof value !== 'object' || value === null) return undefined;
   return Reflect.get(value, key);
 }
 
-function shapeKeys(value: unknown): string[] {
-  const shape = readProperty(value, 'shape');
-  if (typeof shape !== 'object' || shape === null) return [];
-  return Object.keys(shape);
-}
-
-/** `z.array(x).default([])` wraps the element type more than once; reach the element schema. */
-function unwrapArray(value: unknown): unknown {
-  let current = value;
+/** Strip `optional`/`default`/`nullable` wrappers to reach the schema they wrap. */
+function unwrapToCore(schema: unknown): unknown {
+  let current = schema;
 
   for (let depth = 0; depth < 8; depth += 1) {
-    const def = readProperty(current, 'def');
-    if (def === undefined) return current;
-
-    const element = readProperty(def, 'element');
-    if (readProperty(def, 'type') === 'array' && element !== undefined) {
-      current = element;
-      continue;
-    }
-
-    const inner = readProperty(def, 'innerType');
+    const inner = readProperty(readProperty(current, 'def'), 'innerType');
     if (inner === undefined) return current;
     current = inner;
   }
 
   return current;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** The schema's field map, if it is (or wraps) a `z.object(...)`; `undefined` for anything else. */
+function objectShape(schema: unknown): Record<string, unknown> | undefined {
+  const shape = readProperty(unwrapToCore(schema), 'shape');
+  return isPlainObject(shape) ? shape : undefined;
+}
+
+/** The element schema, if this is (or wraps) a `z.array(...)`; `undefined` for anything else. */
+function arrayElement(schema: unknown): unknown {
+  const core = unwrapToCore(schema);
+  const def = readProperty(core, 'def');
+  return readProperty(def, 'type') === 'array' ? readProperty(def, 'element') : undefined;
+}
+
+const MAX_DEPTH = 6;
+
+/**
+ * Recurse into `schema` and append every reachable field path to `out`.
+ *
+ * An object schema contributes one path per key. An array of objects contributes one path per key
+ * of its element, suffixed `[]` on the array's own path. An array of a scalar (`approvedTerms`,
+ * `alternatives`) is a leaf: its own path is already pushed by the caller, and there is nothing
+ * under it to enumerate. Anything else — string, number, boolean, enum, `z.record` — is a leaf too.
+ */
+function collectFields(schema: unknown, path: string, depth: number, out: string[]): void {
+  if (depth > MAX_DEPTH) return;
+
+  const shape = objectShape(schema);
+  if (shape !== undefined) {
+    for (const [key, child] of Object.entries(shape)) {
+      const childPath = `${path}.${key}`;
+      out.push(childPath);
+      collectFields(child, childPath, depth + 1, out);
+    }
+    return;
+  }
+
+  const element = arrayElement(schema);
+  if (element === undefined) return;
+
+  const elementShape = objectShape(element);
+  if (elementShape === undefined) return; // array of a scalar: `path` is already the leaf.
+
+  const arrayPath = `${path}[]`;
+  for (const [key, child] of Object.entries(elementShape)) {
+    const childPath = `${arrayPath}.${key}`;
+    out.push(childPath);
+    collectFields(child, childPath, depth + 1, out);
+  }
+}
+
+// A raw `|` inside a description would split the markdown table into phantom columns, so it is
+// escaped defensively here rather than trusted to stay out of DESCRIPTIONS by convention alone.
+function escapeTableCell(text: string): string {
+  return text.replaceAll('|', '\\|');
 }
 
 /** Every field a pack author can set, in the notation the documentation uses. */
@@ -82,14 +172,7 @@ export function controlSurfaceFields(): string[] {
 
   for (const [key, value] of Object.entries(rulePackSchema.shape)) {
     fields.push(key);
-
-    // One level down for the two containers whose members the documentation names individually.
-    // Anything deeper is described by the schema excerpt on the page, not by this table.
-    if (key !== 'dictionary' && key !== 'rules') continue;
-
-    const inner = key === 'rules' ? unwrapArray(value) : value;
-    const prefix = key === 'rules' ? 'rules[]' : key;
-    for (const child of shapeKeys(inner)) fields.push(`${prefix}.${child}`);
+    collectFields(value, key, 1, fields);
   }
 
   return fields.toSorted();
@@ -108,7 +191,10 @@ export function renderControlSurfaceTable(): string {
     );
   }
 
-  const cells = fields.map((field) => ({ field: `\`${field}\``, what: DESCRIPTIONS[field] ?? '' }));
+  const cells = fields.map((field) => ({
+    field: `\`${field}\``,
+    what: escapeTableCell(DESCRIPTIONS[field] ?? ''),
+  }));
   const fieldWidth = Math.max(...cells.map((c) => c.field.length), 'Field'.length);
   const whatWidth = Math.max(...cells.map((c) => c.what.length), 'What it controls'.length);
 

@@ -17,9 +17,9 @@
 ```
 
 Or select and tune individual rules. Per-rule options are **nested under the preset key**, not
-written as `"preset-ste-ai/<rule-id>"`: textlint resolves anything beginning with `preset-` as a
-package name, so a slashed key is looked up as a package called `preset-ste-ai/<rule-id>`, is not
-found, and the whole configuration silently loads no rules at all.
+written as `"preset-ste-ai/<rule-id>"`. textlint resolves anything beginning with `preset-` as a
+package name. A slashed key is therefore looked up as a package called `preset-ste-ai/<rule-id>`.
+That package is not found, and the whole configuration silently loads no rules at all.
 
 ```json
 {
@@ -48,9 +48,10 @@ shape-valid is not the same as resolvable, which is what broke in
 
 ### Severity
 
-Each diagnostic carries the severity of its category (see [diagnostic-policy.md](diagnostic-policy.md))
-and the adapter maps that onto textlint's own severity levels, so `error`, `warning` and `info`
-findings are distinguishable in textlint output and to `--max-warnings`.
+Each diagnostic carries the severity of its category (see
+[diagnostic-policy.md](diagnostic-policy.md)). The adapter maps that severity onto textlint's own
+severity levels. As a result, `error`, `warning`, and `info` findings are distinguishable in
+textlint output and to `--max-warnings`.
 
 A per-rule `severity` overrides the category default for that rule:
 
@@ -69,10 +70,10 @@ To move a whole category, set it in the shared configuration file instead:
 Several settings apply to the whole document and would otherwise have to be repeated on every rule.
 They are read once from a shared file, resolved in this order (first hit wins):
 
-1. `$STE_AI_CONFIG` — an explicit path;
-2. `.ste-ai.json`, `.ste-ai.jsonc` or `ste-ai.config.json` in the textlint config base directory;
-3. the same names in `process.cwd()`;
-4. built-in defaults — bundled provisional pack, semantic analysis **off**.
+1. `$STE_AI_CONFIG` — an explicit path.
+2. `.ste-ai.json`, `.ste-ai.jsonc`, or `ste-ai.config.json` in the textlint config base directory.
+3. The same names in `process.cwd()`.
+4. Built-in defaults: bundled provisional pack, semantic analysis **off**.
 
 `.ste-ai.json`:
 
@@ -163,20 +164,20 @@ Invalid ste-ai configuration:
   diagnostics.severity: Unrecognized key: "style-preference"
 ```
 
-Unknown keys used to be dropped instead. That is the worst available outcome for a policy file: the
-config parsed, the setting was discarded, and the operator's own file read as evidence of a policy
-the linter had never applied. A misspelt diagnostic category applied no severity, a mistyped
-`semantic` key left the timeout or threshold at its default, and nothing said so.
+Unknown keys used to be dropped instead. That is the worst available outcome for a policy file. The
+config parsed, and the setting was discarded. The operator's own file then read as evidence of a
+policy the linter had never applied. A misspelt diagnostic category applied no severity. A mistyped
+`semantic` key left the timeout or threshold at its default. Nothing said so.
 
-The one deliberate exception is `rules.<id>`, which accepts arbitrary keys: each rule declares its
-own option schema, and the rule — not this file — is the only thing that can judge its own options.
-Options that no rule recognises are therefore still dropped quietly, and an option that a rule
-recognises but rejects produces a `rule-options-invalid` notice and skips that rule.
+The one deliberate exception is `rules.<id>`, which accepts arbitrary keys. Each rule declares its
+own option schema. Only the rule itself, not this file, can judge whether its own options are
+valid. Options that no rule recognises are therefore still dropped quietly. If a rule recognises an
+option but rejects it, the run gets a `rule-options-invalid` notice, and that rule is skipped.
 
 Rule _ids_ are checked even though their options are not. A `rules` key naming no rule the preset
-exports produces a `warning`-level `unknown-rule-id` run notice (`detail: { ruleId }`) and the run
-continues, so a configuration written for a newer version of this package degrades instead of
-failing:
+exports produces a `warning`-level `unknown-rule-id` run notice (`detail: { ruleId }`). The run
+continues. A configuration written for a newer version of this package therefore degrades instead
+of failing:
 
 ```
 Configuration names rule "sentance-length-procedural", which is not a known rule,
@@ -186,10 +187,10 @@ so those options were not applied
 ### Protected patterns are screened before they run
 
 Every `extraProtectedPatterns` entry is checked once per run, before any of them is matched against
-a document. An entry that fails the check does not run, and each failure produces an
-`invalid-protected-pattern` run notice at `error` level — reported in `--json`, in the CLI's text
-output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the document start.
-`detail.reason` names the specific ground:
+a document. An entry that fails the check does not run. Each failure produces an
+`invalid-protected-pattern` run notice at `error` level. That notice is reported in `--json`, in
+the CLI's text output, and in `AnalysisResult.notices`. It is also reported by the textlint
+adapter, anchored at the document start. `detail.reason` names the specific ground:
 
 | `detail.reason`         | Refused because                                                                                   | Example      |
 | ----------------------- | ------------------------------------------------------------------------------------------------- | ------------ |
@@ -199,32 +200,32 @@ output, in `AnalysisResult.notices`, and by the textlint adapter anchored at the
 | `analysis-inconclusive` | ReDoS analysis could not determine whether the expression is safe                                 | —            |
 | `matches-only-empty`    | every possible match is zero-length, so nothing is ever protected                                 | `^`          |
 
-A refused entry is never silently ignored, because the consequence is not local: the literals it
-named are matched as ordinary words by every vocabulary rule, **and** they are no longer masked out
-of the passages sent to the semantic service. Silence there would look exactly like a clean run.
+A refused entry is never silently ignored, because the consequence is not local. The literals it
+named are matched as ordinary words by every vocabulary rule. They are also no longer masked out of
+the passages sent to the semantic service. Silence there would look exactly like a clean run.
 
-`invalid-syntax` and `source-too-long` are gates checked before analysis. Valid sources are parsed by
-`@eslint-community/regexpp`; `recheck` classifies their ReDoS complexity; and
-`regexp-ast-analysis` determines whether every possible match is empty. An inconclusive ReDoS result
-is refused rather than run. This package does not maintain a second regular-expression parser or a
-fallback set of hand-written complexity rules.
+`invalid-syntax` and `source-too-long` are gates checked before analysis. Valid sources are parsed
+by `@eslint-community/regexpp`. `recheck` classifies their ReDoS complexity. `regexp-ast-analysis`
+determines whether every possible match is empty. An inconclusive ReDoS result is refused rather
+than run. This package does not maintain a second regular-expression parser or a fallback set of
+hand-written complexity rules.
 
 ### Option precedence
 
 For a rule's options, lowest first:
 
-1. `rules.<id>` in the shared file;
-2. `rules.<id>` inside a `shared` object in the rule's textlint options;
+1. `rules.<id>` in the shared file.
+2. `rules.<id>` inside a `shared` object in the rule's textlint options.
 3. the rule's own textlint options.
 
-Layers are merged key by key, so a lower layer's `enabled: false` is not lost when a higher layer sets
-an unrelated key.
+Layers are merged key by key. A lower layer's `enabled: false` is therefore not lost when a higher
+layer sets an unrelated key.
 
 ### Inline suppression is not one of these layers
 
-`suppressions` is read only from the shared file; there is no per-rule or per-textlint-options form
+`suppressions` is read only from the shared file. There is no per-rule or per-textlint-options form
 of it. Inline `ste-ai-ignore-*` directives are applied after every rule has run, to the diagnostics
-the run produced, so they cannot change a rule's options and a rule cannot see them.
+the run produced. They cannot change a rule's options, and a rule cannot see them.
 
 A suppressed finding is withheld from `diagnostics` but recorded in `AnalysisResult.suppressions`,
 in `--json`, and in a `suppressions-applied` notice. See
@@ -235,10 +236,10 @@ in `--json`, and in a `suppressions-applied` notice. See
 This is the default. With `semantic.enabled` false, no network call is made at all — proven by
 `test/integration/semantic-service.test.ts`, which asserts the fake server received zero requests.
 
-Passages that would have needed adjudication are reported as `review-required`, and a
+Passages that would have needed adjudication are reported as `review-required`. A
 `semantic-disabled` run notice records how many there were. Nothing is silently treated as compliant.
 
-To be explicit in CI:
+To be explicit in continuous integration (CI):
 
 ```bash
 npx ste-ai lint docs/**/*.md --deterministic-only
@@ -246,31 +247,29 @@ npx ste-ai lint docs/**/*.md --deterministic-only
 
 ## Per-rule options
 
-| Rule                           | Options                                                                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `sentence-length-procedural`   | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                             |
-| `sentence-length-descriptive`  | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                             |
-| `unapproved-vocabulary`        | `additional` (`{term: [alternatives]}`), `allow`, `adjudicateSense`                                                               |
-| `preferred-terminology`        | `additional` (`{from: to}`), `allow`                                                                                              |
-| `no-contractions`              | `allow`                                                                                                                           |
-| `punctuation-constraints`      | `forbidSemicolon`, `forbidSlashBetweenWords`, `forbidExclamation`, `forbidEllipsis`, `forbidParenthesesInProcedural`, `maxCommas` |
-| `no-repeated-words`            | `allow` (default `["had","that"]`)                                                                                                |
-| `abbreviation-introduction`    | `minLength`, `maxLength`, `wellKnown` (replaces), `additionalWellKnown` (adds)                                                    |
-| `number-unit-format`           | `unitSpacing` (`required`\|`forbidden`\|`off`), `noSpaceUnits`, `forbidDecimalComma`                                              |
-| `list-instruction-structure`   | `checkTerminalPunctuation`, `checkInitialCapital`, `maxSentencesPerStep`                                                          |
-| `one-instruction-per-sentence` | `conjunctions`, `adjudicate`                                                                                                      |
-| `passive-voice-candidate`      | `requireByAgent`, `adjudicate`                                                                                                    |
-| `noun-cluster-candidate`       | `maxClusterLength`, `adjudicate`                                                                                                  |
-| `ambiguous-pronoun-candidate`  | `minAntecedents`, `adjudicate`                                                                                                    |
+Each rule validates its options against its own Zod schema before it runs. The schema is the
+source of truth for option names, types, and defaults — not this file. Find every rule's schema
+with:
 
-Setting `adjudicate: false` on a candidate rule makes it report `review-required` locally instead of
-producing a semantic candidate.
+```bash
+grep -rn '[Oo]ptionsSchema = z.object' src/deterministic/rules/*.ts
+```
 
-`abbreviation-introduction` requires `minLength` to be less than or equal to `maxLength`; the two
-bounds become the length range of the abbreviation-shaped token it looks for, and an inverted pair
-describes no token at all. An inverted pair is rejected when the options are validated, so the rule
-is skipped with a `rule-options-invalid` notice naming it and the rest of the run still reports.
-Options that fail validation never abort a run — every rule's options are validated before it runs,
+Each schema's own name matches its rule id (`abbreviationOptionsSchema` for
+`abbreviation-introduction`, `passiveOptionsSchema` for `passive-voice-candidate`, and so on). The
+one exception: `sentence-length.ts` exports a single `optionsSchema`, shared by both
+`sentence-length-procedural` and `sentence-length-descriptive`.
+
+Every candidate rule's schema (`passive-voice-candidate`, `noun-cluster-candidate`,
+`ambiguous-pronoun-candidate`, and `one-instruction-per-sentence`) includes an `adjudicate` field.
+Setting `adjudicate: false` makes the rule report `review-required` locally instead of producing a
+semantic candidate.
+
+`abbreviation-introduction` requires `minLength` to be less than or equal to `maxLength`. The two
+bounds become the length range of the abbreviation-shaped token it looks for. An inverted pair
+describes no token at all. An inverted pair is rejected when the options are validated. The rule is
+then skipped with a `rule-options-invalid` notice naming it, and the rest of the run still reports.
+Options that fail validation never abort a run. Every rule's options are validated before it runs,
 and a rule whose options are invalid is skipped this way.
 
 ## CLI
@@ -290,12 +289,21 @@ npx ste-ai rules --json
 npx ste-ai evaluators
 ```
 
-Exit codes: `0` clean, `1` errors present (or review-required with `--fail-on-review`), `2` usage
-error, `3` any `error`-level run notice — the run has less protection, or fewer of its configured
-rules ran, than the operator's configuration asked for, not that the document itself has a finding.
-Current examples: a semantic-service failure under the `error` policy, a refused
-`extraProtectedPatterns` entry (see "Protected patterns are screened before they run" above), or a
-rule skipped over invalid options (`rule-options-invalid`, just above).
+Exit codes:
+
+- `0` — clean.
+- `1` — errors present. This also includes review-required findings when `--fail-on-review` is set.
+- `2` — usage error.
+- `3` — any `error`-level run notice. This means one of two things. The run had less protection
+  than the operator's configuration asked for. Alternatively, fewer of its configured rules ran
+  than the operator asked for. It does not mean the document itself has a finding.
+
+Current examples of an `error`-level run notice:
+
+- A semantic-service failure under the `error` policy.
+- A refused `extraProtectedPatterns` entry. See the "Protected patterns are screened before they
+  run" section above.
+- A rule skipped over invalid options (`rule-options-invalid`, described above).
 
 ## Programmatic API
 
@@ -322,5 +330,5 @@ console.log(full.traces); // per-request prompt version, model id, content hash,
 console.log(full.pack.metadata.conformanceClaim); // 'none' for the bundled pack
 ```
 
-`AnalysisResult.document` is the `AnalysedDocument`: protected regions, blocks, sentences, words and
-`positionAt()` for converting an offset to line/column.
+`AnalysisResult.document` is the `AnalysedDocument`. It exposes protected regions, blocks,
+sentences, words and `positionAt()` for converting an offset to a line and column position.

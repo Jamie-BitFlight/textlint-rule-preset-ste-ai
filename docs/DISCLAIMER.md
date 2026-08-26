@@ -9,6 +9,8 @@ ASD-STE100 Simplified Technical English is published by the ASD Simplified Techn
 Maintenance Group (STEMG). Its specification text and its Dictionary are proprietary. The official
 site states, verbatim:
 
+<!-- ste-ai-ignore-next-line punctuation-constraints -- verbatim quotation, not our prose -->
+
 > Simplified Technical English, ASD-STE100, is a Copyright and a Trademark of ASD, Brussels,
 > Belgium. All rights reserved. European Union Trade Mark No. 017966390.
 

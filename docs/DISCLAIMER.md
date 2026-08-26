@@ -64,8 +64,10 @@ run-level notice is emitted. **A service failure is never converted into complia
 If you hold a licence that permits it, an authorised rule pack can supply normative limits. It can
 also supply a controlled dictionary and per-rule authority, through the documented import boundary —
 see [`rule-pack-import.md`](./rule-pack-import.md). Doing so changes the `ruleStatus` on diagnostics
-to whatever the pack declares. Whether that constitutes conformance is a determination for you and
-your licensor. This package makes no such determination and adds no conformance wording of its own.
+to the pack's declared authority, but only once you name that pack's id in `trustedRulePackIds`; an
+untrusted pack cannot self-promote to `normative` and is capped at `supplementary` instead. Whether a
+verified `normative` status constitutes conformance is a determination for you and your licensor.
+This package makes no such determination and adds no conformance wording of its own.
 
 ## Trademarks
 

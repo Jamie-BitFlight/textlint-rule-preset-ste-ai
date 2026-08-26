@@ -1,0 +1,13 @@
+{
+  "plugins": {
+    "@textlint/markdown": true,
+    "@textlint/text": true
+  },
+  "rules": {
+    "preset-ste-ai": {
+      "abbreviation-introduction": {
+        "additionalWellKnown": ["ASD", "MIT", "SHA", "CRLF", "CI", "README"]
+      }
+    }
+  }
+}

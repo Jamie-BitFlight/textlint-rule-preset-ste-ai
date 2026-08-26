@@ -1,0 +1,7 @@
+{
+  "rules": {
+    "abbreviation-introduction": {
+      "additionalWellKnown": ["ASD", "MIT", "SHA", "CRLF"]
+    }
+  }
+}

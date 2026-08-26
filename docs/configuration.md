@@ -38,8 +38,13 @@ found, and the whole configuration silently loads no rules at all.
 }
 ```
 
-`examples/.textlintrc.json` is a complete working file in this shape, and
-`test/e2e/example-config.test.ts` checks that it stays valid.
+[`examples/`](../examples/) has a complete working file in this shape, plus a sample document to
+run it against — see [`examples/README.md`](../examples/README.md) to try it. Two separate checks
+keep it honest: `test/e2e/example-config.test.ts` validates its JSON shape (only known rule ids,
+plugins declared as real dependencies), and `scripts/ci/check-textlint-configs-resolve.sh` runs it
+through the real `textlint` CLI's own module resolution and asserts it reports real findings —
+shape-valid is not the same as resolvable, which is what broke in
+[PR #86](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/pull/86).
 
 ### Severity
 

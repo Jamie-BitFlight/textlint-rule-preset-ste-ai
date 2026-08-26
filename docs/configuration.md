@@ -242,25 +242,32 @@ npx ste-ai lint docs/**/*.md --deterministic-only
 
 ## Per-rule options
 
-| Rule                           | Options                                                                                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sentence-length-procedural`   | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                                       |
-| `sentence-length-descriptive`  | `maxGradeLevel`, `floorWords`, `includeHeadings`, `includeTableCells`                                                                       |
-| `unapproved-vocabulary`        | `additional` (`{term: [alternatives]}`), `allow`, `adjudicateSense`                                                                         |
-| `preferred-terminology`        | `additional` (`{from: to}`), `allow`                                                                                                        |
-| `no-contractions`              | `allow`                                                                                                                                     |
-| `punctuation-constraints`      | `forbidSemicolon`<br>`forbidSlashBetweenWords`<br>`forbidExclamation`<br>`forbidEllipsis`<br>`forbidParenthesesInProcedural`<br>`maxCommas` |
-| `no-repeated-words`            | `allow` (default `["had","that"]`)                                                                                                          |
-| `abbreviation-introduction`    | `minLength`, `maxLength`, `wellKnown` (replaces), `additionalWellKnown` (adds)                                                              |
-| `number-unit-format`           | `unitSpacing` (`required`\|`forbidden`\|`off`), `noSpaceUnits`, `forbidDecimalComma`                                                        |
-| `list-instruction-structure`   | `checkTerminalPunctuation`, `checkInitialCapital`, `maxSentencesPerStep`                                                                    |
-| `one-instruction-per-sentence` | `conjunctions`, `adjudicate`                                                                                                                |
-| `passive-voice-candidate`      | `requireByAgent`, `adjudicate`                                                                                                              |
-| `noun-cluster-candidate`       | `maxClusterLength`, `adjudicate`                                                                                                            |
-| `ambiguous-pronoun-candidate`  | `minAntecedents`, `adjudicate`                                                                                                              |
+Each rule validates its options against its own Zod schema before it runs. The table below names
+that schema and where it lives, not the option list itself. The schema is the source of truth.
+Copying its field names into prose here would drift when the schema changes. This file would not
+change with it. Read the schema for the authoritative option names, types, and defaults.
 
-Setting `adjudicate: false` on a candidate rule makes it report `review-required` locally instead of
-producing a semantic candidate.
+| Rule                           | Options schema                | Defined in                                       |
+| ------------------------------ | ----------------------------- | ------------------------------------------------ |
+| `sentence-length-procedural`   | `optionsSchema`               | `src/deterministic/rules/sentence-length.ts:7`   |
+| `sentence-length-descriptive`  | `optionsSchema`               | `src/deterministic/rules/sentence-length.ts:7`   |
+| `unapproved-vocabulary`        | `unapprovedOptionsSchema`     | `src/deterministic/rules/vocabulary.ts:16`       |
+| `preferred-terminology`        | `preferredOptionsSchema`      | `src/deterministic/rules/vocabulary.ts:137`      |
+| `no-contractions`              | `contractionOptionsSchema`    | `src/deterministic/rules/vocabulary.ts:218`      |
+| `punctuation-constraints`      | `punctuationOptionsSchema`    | `src/deterministic/rules/mechanics.ts:10`        |
+| `no-repeated-words`            | `repeatedOptionsSchema`       | `src/deterministic/rules/mechanics.ts:139`       |
+| `abbreviation-introduction`    | `abbreviationOptionsSchema`   | `src/deterministic/rules/mechanics.ts:263`       |
+| `number-unit-format`           | `numberUnitOptionsSchema`     | `src/deterministic/rules/mechanics.ts:360`       |
+| `list-instruction-structure`   | `listOptionsSchema`           | `src/deterministic/rules/structure-rules.ts:15`  |
+| `one-instruction-per-sentence` | `oneInstructionOptionsSchema` | `src/deterministic/rules/structure-rules.ts:130` |
+| `passive-voice-candidate`      | `passiveOptionsSchema`        | `src/deterministic/rules/candidate-rules.ts:203` |
+| `noun-cluster-candidate`       | `nounClusterOptionsSchema`    | `src/deterministic/rules/candidate-rules.ts:297` |
+| `ambiguous-pronoun-candidate`  | `pronounOptionsSchema`        | `src/deterministic/rules/candidate-rules.ts:432` |
+
+Every candidate rule's schema (`passive-voice-candidate`, `noun-cluster-candidate`,
+`ambiguous-pronoun-candidate`, and `one-instruction-per-sentence`) includes an `adjudicate` field.
+Setting `adjudicate: false` makes the rule report `review-required` locally instead of producing a
+semantic candidate.
 
 `abbreviation-introduction` requires `minLength` to be less than or equal to `maxLength`. The two
 bounds become the length range of the abbreviation-shaped token it looks for. An inverted pair

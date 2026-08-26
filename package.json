@@ -103,6 +103,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "semantic-release": "^25.0.9",
     "textlint": "^15.8.0",
+    "textlint-rule-preset-ste-ai": "file:.",
     "textlint-tester": "^15.8.0",
     "typescript": "^7.0.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",

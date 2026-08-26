@@ -315,6 +315,14 @@ vp run verify             # all of the above
 vp run eval:semantic -- --split heldout --endpoint http://127.0.0.1:8080   # needs a model
 ```
 
+The repository lints its own docs with its own preset: `.textlintrc.json` and `.ste-ai.json` at the
+repository root carry the `additionalWellKnown` exceptions this project's own writing needs. Because
+`preset-ste-ai` resolves the same way for `textlint` here as it would for any consumer — as an
+installed package named `textlint-rule-preset-ste-ai` — `package.json` lists this package as its own
+`devDependency` via `"file:."`, and `vp install` links it into `node_modules`. Run `vp pack` first so
+`node_modules/textlint-rule-preset-ste-ai` (the self-link) has a built `dist/` to resolve into, then
+`node_modules/.bin/textlint README.md` runs the real preset against the real docs.
+
 | Document                                                         | Contents                                                       |
 | ---------------------------------------------------------------- | -------------------------------------------------------------- |
 | [`docs/DISCLAIMER.md`](docs/DISCLAIMER.md)                       | why this is not ASD-STE100                                     |

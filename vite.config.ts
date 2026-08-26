@@ -98,7 +98,10 @@ export default defineConfig({
     // Runs from `.vite-hooks/pre-commit` via `vp staged`. `vp check --fix` type-checks the whole
     // project on every invocation regardless of which paths are passed (see `vp check --help`),
     // so source and prose are split: source files pay that cost, prose/config files only format.
+    // `--no-error-on-unmatched-pattern` keeps a commit that only touches `.prettierignore`d paths
+    // (e.g. `.claude/**`, `package-lock.json`) from hard-failing once `vp fmt --write` filters the
+    // staged glob down to zero targets.
     '*.{ts,mjs}': 'vp check --fix',
-    '*.{md,json,yml,yaml}': 'vp fmt --write',
+    '*.{md,json,yml,yaml}': 'vp fmt --write --no-error-on-unmatched-pattern',
   },
 });

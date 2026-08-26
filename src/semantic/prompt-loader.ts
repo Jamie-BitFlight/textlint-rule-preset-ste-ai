@@ -62,6 +62,23 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
     throw new PromptError(`Prompt ${origin} must declare "id" and "version" in <<<META>>>.`);
   }
 
+  // `buildEvaluatorRequest` forwards `system` to the model unrendered -- unlike `user`, it never
+  // goes through `renderTemplate`. Review found `noun-cluster-comprehension.md`'s `<<<SYSTEM>>>`
+  // carrying a `{{length}}` placeholder that `variables` (derived from `user` alone) never saw, so
+  // every real request sent the model the literal text `{{length}}` instead of a rendered number,
+  // undetected because nothing here or in the test corpus looked at `<<<SYSTEM>>>` for this shape.
+  // A `{{...}}` placeholder only makes sense where it is rendered, so one in `<<<SYSTEM>>>` is
+  // rejected outright rather than silently forwarded -- move the value into `<<<USER>>>`, or drop
+  // it and keep the instruction general, the way every sibling prompt's system message already is.
+  const systemPlaceholder = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/.exec(system);
+  if (systemPlaceholder !== null) {
+    throw new PromptError(
+      `Prompt ${origin} has a {{${systemPlaceholder[1] ?? ''}}} placeholder in <<<SYSTEM>>>, but ` +
+        'the system message is sent to the model unrendered -- move it to <<<USER>>>, or remove ' +
+        'it and keep the instruction general.',
+    );
+  }
+
   const variables = [
     ...new Set([...user.matchAll(/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g)].map((m) => m[1] ?? '')),
   ];

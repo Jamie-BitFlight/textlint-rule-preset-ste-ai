@@ -21,6 +21,10 @@ task: <one line>
 …the user template with {{placeholder}} substitutions…
 ```
 
+`<<<SYSTEM>>>` is sent to the model exactly as written. `buildEvaluatorRequest` never renders it.
+A `{{...}}` placeholder there is rejected at load time. Put per-request data in `<<<USER>>>`
+instead. Keep the system message a general instruction, as every other prompt's already is.
+
 `<<<META>>>` carries exactly three keys, and `test/unit/prompt-corpus.test.ts` rejects a fourth.
 
 | Key       | Who reads it                                                       |

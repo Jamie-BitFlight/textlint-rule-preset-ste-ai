@@ -244,4 +244,18 @@ describe('prompt file parsing', () => {
   it('rejects a prompt whose declared id does not match the file it was loaded as', () => {
     expect(() => provider.get('v1', 'not-an-evaluator')).toThrow(/No prompt asset/);
   });
+
+  it('rejects a placeholder in <<<SYSTEM>>>, since that message is sent to the model unrendered', () => {
+    // `noun-cluster-comprehension.md` carried `{{length}}` in <<<SYSTEM>>>; `variables` is derived
+    // from <<<USER>>> alone, so nothing rendered it, and every real request sent the model the
+    // literal text `{{length}}`. Every prompt asset in the repository is checked by
+    // `prompt-corpus.test.ts`'s discovery loop, so this file's own fix is the only proof needed
+    // that this guard fires on real content, not only on a hand-built fixture.
+    expect(() =>
+      parsePromptFile(
+        '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na {{x}} b\n<<<USER>>>\nu',
+        'x',
+      ),
+    ).toThrow(/\{\{x\}\} placeholder in <<<SYSTEM>>>/);
+  });
 });

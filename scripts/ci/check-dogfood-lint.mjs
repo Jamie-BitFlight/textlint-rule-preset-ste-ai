@@ -235,6 +235,12 @@ export function localContext(source, index) {
  * shaped line still inside the block was accepted as real. A line is only treated as a close while
  * a fence is open and it has nothing but whitespace after the marker; any other fence-marker-shaped
  * line while open is ordinary code content and does not affect the open state at all.
+ *
+ * `[^\n]*` captures a trailing `\r` on a CRLF checkout, since `\r` is not `\n`. Review found the
+ * whitespace-only check rejecting that `\r` the same way it rejects real trailing text, so every
+ * closing fence in a CRLF file failed to close and the open range ran to EOF -- silently dropping
+ * every later heading from `nearestHeading`'s view. An optional trailing `\r` is accepted alongside
+ * spaces and tabs, matching how a line actually ends on either line-ending style.
  */
 function fencedCodeRanges(source) {
   const fenceLine = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
@@ -245,7 +251,11 @@ function fencedCodeRanges(source) {
     const rest = match[2];
     if (open === null) {
       open = { char: marker[0], length: marker.length, start: match.index };
-    } else if (marker[0] === open.char && marker.length >= open.length && /^[ \t]*$/.test(rest)) {
+    } else if (
+      marker[0] === open.char &&
+      marker.length >= open.length &&
+      /^[ \t]*\r?$/.test(rest)
+    ) {
       ranges.push({ start: open.start, end: match.index + match[0].length });
       open = null;
     }
@@ -270,10 +280,17 @@ function fencedCodeRanges(source) {
  * real heading, a fenced block containing `# example`, then a violation -- `nearestHeading` returned
  * `"# example"` instead of the real enclosing heading. A heading-shaped match inside a fenced range
  * is now skipped rather than accepted.
+ *
+ * Review also found the regex requiring the `#` to start at column zero, when CommonMark permits up
+ * to three leading spaces on an ATX heading (the same allowance `fencedCodeRanges` already gives a
+ * fence marker). A heading indented by one to three spaces was invisible to this function entirely,
+ * so a finding moved from a heading at column zero to one indented under a list or blockquote kept
+ * the same fingerprint as if it had no enclosing heading at all -- silently defeating the
+ * cross-heading regression guard `findingKey` relies on this function for.
  */
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
-  const heading = /^#{1,6}[ \t]+.*$/gm;
+  const heading = /^ {0,3}#{1,6}[ \t]+.*$/gm;
   let found = '';
   for (const match of source.matchAll(heading)) {
     if (match.index > index) break;
@@ -285,9 +302,10 @@ export function nearestHeading(source, index) {
 
 /**
  * `ruleId`, `message`, a local-context fingerprint, the enclosing heading, and an occurrence
- * ordinal joined into one baseline key, with a separator that cannot appear in the first four
- * fields: `message` is a single-line string, `localContext` and `nearestHeading` both collapse or
- * exclude newlines, and `ordinal` is a decimal integer.
+ * ordinal joined into one baseline key, with a separator that cannot appear in `ruleId`,
+ * `message`, the local-context fingerprint, or the enclosing heading: `message` is a single-line
+ * string, `localContext` and `nearestHeading` both collapse or exclude newlines, and `ordinal` is a
+ * decimal integer.
  *
  * The heading and the ordinal close two different gaps in the same problem: `localContext` alone
  * is not always unique within a file. Review found `fixtures/LICENSES.md` quoting the identical

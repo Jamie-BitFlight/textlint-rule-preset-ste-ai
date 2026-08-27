@@ -14,7 +14,7 @@ import {
 /**
  * Pins the finding-identity guarantees `scripts/ci/check-dogfood-lint.mjs` documents in its own
  * module comment and in `findingKey`'s comment, rather than leaving them provable only by manually
- * re-running the script against a scratch fixture on review. Two rounds of review asked for exactly
+ * re-running the script against a scratch fixture on review. Review has repeatedly asked for exactly
  * this: "pin this mutation case" (paragraph clamp) and "add an executable mutation test for this
  * documented guarantee" (heading anchor).
  *
@@ -134,6 +134,22 @@ describe('nearestHeading', () => {
     expect(nearestHeading(source, source.indexOf('preamble'))).toBe('');
   });
 
+  it('recognizes an ATX heading indented by up to three spaces, per CommonMark', () => {
+    // Review found the regex requiring the `#` at column zero, so a heading indented by one to
+    // three spaces (CommonMark's own allowance, the same one fencedCodeRanges already gives a
+    // fence marker) was invisible to this function -- a finding moved under an indented heading
+    // kept the fingerprint of having no enclosing heading at all.
+    const source = '  ## Indented Heading\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Indented Heading');
+  });
+
+  it('still does not treat a four-space-indented line as an ATX heading', () => {
+    // Four or more leading spaces is CommonMark's indented-code-block threshold, not a heading --
+    // this must stay excluded, not merely widen the accepted indentation without bound.
+    const source = '    ## Too Indented\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('');
+  });
+
   it('ignores a heading-shaped line inside a fenced code block', () => {
     // Review found the raw regex treating `# example` inside a ``` fence as a real heading, so
     // editing only that unrelated code example changed an untouched finding's key -- reported as
@@ -157,6 +173,15 @@ describe('nearestHeading', () => {
       '## Real Heading\n\n```\nsome code\n```not-a-closing-fence\n# example\n```\n\nSome violation text here.\n';
     const index = source.indexOf('Some violation');
     expect(nearestHeading(source, index)).toBe('## Real Heading');
+  });
+
+  it('still closes a fence whose closing marker line ends with a carriage return', () => {
+    // Review found the closing-fence whitespace check rejecting the trailing `\r` a CRLF checkout
+    // leaves in `rest` (the raw regex captures up to `\n`, not the line-ending style), so every
+    // closing fence in a CRLF file failed to close and the open range ran to end of file --
+    // silently dropping every later heading from view, including this one.
+    const source = '```\r\n# not a heading\r\n```\r\n\r\n## Real After Fence\r\n\r\ntext here\r\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real After Fence');
   });
 });
 

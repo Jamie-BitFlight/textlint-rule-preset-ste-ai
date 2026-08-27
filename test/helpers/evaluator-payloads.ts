@@ -3,10 +3,10 @@ import type { CandidatePassage, SemanticEvaluatorId } from '../../src/core/types
 /**
  * Representative payloads, one per evaluator, shared by the prompt suites.
  *
- * These live here rather than in a single test file because two suites need the same fixtures for
- * different reasons: `prompts.test.ts` checks that a request can be built at all, and
+ * These live here rather than in a single test file because more than one suite needs the same
+ * fixtures for different reasons: `prompts.test.ts` checks that a request can be built at all, and
  * `prompt-corpus.test.ts` checks how the result renders. Keeping one copy means a new evaluator is
- * added to one map, and both suites start covering it.
+ * added to one map, and every consumer starts covering it.
  */
 export const EVALUATOR_PAYLOADS: Record<SemanticEvaluatorId, Record<string, unknown>> = {
   'approved-word-sense': {

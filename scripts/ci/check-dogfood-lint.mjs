@@ -240,7 +240,7 @@ export function localContext(source, index) {
  * tied to which section a finding lives in rather than to how many identical findings happen to
  * precede it in document order.
  *
- * Review spent nine consecutive rounds hand-rolling this against one CommonMark construct at a
+ * Review spent round after round hand-rolling this against one CommonMark construct at a
  * time -- a fenced code block, ATX indentation, Setext headings, a block quote around either, an
  * HTML comment, a `<script>`/`<pre>`/`<style>`/`<textarea>` block, an unanchored opener matching an
  * inline mention -- each fix closing one concrete gap and exposing the next, until review found an

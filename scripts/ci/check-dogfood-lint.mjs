@@ -257,9 +257,16 @@ export function localContext(source, index) {
  * example whose backtick-fence info string happened to contain a backtick opened a fence that
  * never legitimately closed, running to EOF and hiding every later heading the same way an
  * unclosed fence always does.
+ *
+ * Review also found this blind to a fence inside a block quote (`> ``` `, used throughout
+ * `docs/design/64-layered-rule-packs/02-authority-trust.md`) -- once `nearestHeading` learned to
+ * recognize a blockquoted ATX heading, a heading-shaped line inside a blockquoted fence read as a
+ * real heading instead of fenced content, the same false-positive class every earlier fix here has
+ * closed for an unquoted fence. The same leading `>` allowance `nearestHeading`'s ATX pattern uses
+ * is accepted here too, ahead of the existing leading-space allowance.
  */
 function fencedCodeRanges(source) {
-  const fenceLine = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
+  const fenceLine = /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})([^\n]*)$/gm;
   const ranges = [];
   let open = null;
   for (const match of source.matchAll(fenceLine)) {

@@ -269,6 +269,15 @@ describe('nearestHeading', () => {
     const source = '## Real Heading\n\n```\n> # Fake\n```\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('ignores a heading-shaped line inside a block-quoted fenced code block', () => {
+    // Review found `fencedCodeRanges` blind to a fence inside a block quote (`> ``` `, used
+    // throughout docs/design/64-layered-rule-packs/02-authority-trust.md) -- once the ATX pattern
+    // learned to recognize a blockquoted heading, a heading-shaped line inside a blockquoted fence
+    // read as a real heading instead of fenced content.
+    const source = '## Real Heading\n\n> ```\n> # example\n> ```\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

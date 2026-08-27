@@ -71,8 +71,8 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   // outright rather than silently forwarded -- move the value into `<<<USER>>>`, or drop it and
   // keep the instruction general, the way every sibling prompt's system message already is.
   //
-  // This guard has now been patched three times for the same underlying mistake: matching a
-  // *shape* of mustache token, rather than the bare character that makes one possible. Each patch
+  // This guard has been patched repeatedly for the same underlying mistake: matching a *shape* of
+  // mustache token, rather than the bare character that makes one possible. Each patch
   // closed the exact case review had just reproduced and left the next one open -- a strict
   // identifier pattern missed `{{ length }}` and `{{length-default}}`; excluding braces from the
   // inner class (`[^{}]*`) missed a nested-brace typo like `{{foo{bar}}}`, which has no substring

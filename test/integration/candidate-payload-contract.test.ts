@@ -156,21 +156,20 @@ function walk(node: t.Node, visit: (node: t.Node) => void): void {
 }
 
 /**
- * A value shape an `evaluatorId` property could actually have: a literal, an alias to a top-level
- * string const, or the one verified `spec.evaluatorId` pass-through. Shared between
- * `derivedProducerIds()`'s key-resolution gate and its value-resolution throw, so a value this
- * test cannot statically resolve is treated identically whichever side notices it first.
+ * The one verified pass-through shape an `evaluatorId` property's *value* can have without being a
+ * literal or an alias: `spec.evaluatorId`, forwarded by `pushCandidate` from its own first
+ * parameter. Kept as its own check (rather than folded into a broader "could this be an
+ * evaluatorId value" test) because the two callers that reuse it want different questions
+ * answered -- see each call site's own comment.
  */
-function valueCouldBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
+function isSpecEvaluatorIdPassthrough(value: t.Expression | t.PatternLike): boolean {
   return (
-    t.isStringLiteral(value) ||
-    t.isIdentifier(value) ||
-    (t.isMemberExpression(value) &&
-      !value.computed &&
-      t.isIdentifier(value.object) &&
-      value.object.name === 'spec' &&
-      t.isIdentifier(value.property) &&
-      value.property.name === 'evaluatorId')
+    t.isMemberExpression(value) &&
+    !value.computed &&
+    t.isIdentifier(value.object) &&
+    value.object.name === 'spec' &&
+    t.isIdentifier(value.property) &&
+    value.property.name === 'evaluatorId'
   );
 }
 
@@ -255,15 +254,33 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
     // computed -- a computed key this test cannot statically read is not safe to silently skip,
     // because it might be exactly the property this test exists to find.
     //
-    // Review then found that reasoning too broad: `walk()` visits every `ObjectExpression` in the
-    // file, not only candidate-spec objects, so an unrelated computed key anywhere -- a lookup
-    // table keyed by a loop variable, an options object keyed by a function parameter -- threw the
-    // same error, breaking valid rule code that has nothing to do with candidate production.
-    // `valueCouldBeEvaluatorId` closes that gap without giving up exhaustiveness: a property whose
-    // *value* cannot possibly be a `SemanticEvaluatorId` (a function call, a number, a nested
-    // object, anything but the three shapes above) cannot be a genuine `evaluatorId: ...`
-    // declaration regardless of what its computed key resolves to, so it is safe to skip without
-    // ever needing to resolve the key at all.
+    // Review then found that reasoning too broad twice over: `walk()` visits every
+    // `ObjectExpression` in the file, not only candidate-spec objects, so an unrelated computed key
+    // anywhere -- a lookup table keyed by a loop variable, an options object keyed by a function
+    // parameter -- threw the same error, breaking valid rule code with nothing to do with candidate
+    // production. A first fix gated the throw on the property's *value* AST node type (a string, an
+    // identifier, or the verified pass-through) -- too loose in the other direction: an unrelated
+    // dictionary with an ordinary string value (`{ [key]: 'ordinary-value' }`) still matched "is a
+    // string literal" and still threw. `computedKeyMightBeEvaluatorId` checks what the value would
+    // actually *mean* instead of merely what shape it has: a string literal only counts when it is
+    // itself a declared evaluator id, and an identifier only counts when it resolves to one -- every
+    // genuine `evaluatorId: ...` value, wherever it appears in this file, is already required to be
+    // exactly one of those (see `addIfDeclared` and `resolveIdentifierAlias` below), so this asks
+    // nothing the value side would not eventually demand anyway, just earlier, before deciding
+    // whether the key is even worth resolving. Restricting *which objects* get scanned in the first
+    // place is not an option here: `structure-rules.ts` and `vocabulary.ts` build a real
+    // `CandidatePassage` inline via `candidates.push({ ..., evaluatorId: '...', ... })`, not through
+    // a top-level spec const or a `pushCandidate(...)` call at all, so any scope narrower than "every
+    // object literal" would silently stop covering those two real, current producers.
+    function computedKeyMightBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
+      if (t.isStringLiteral(value)) return declared.has(value.value);
+      if (t.isIdentifier(value)) {
+        const alias = topLevelStringConsts.get(value.name);
+        return alias !== undefined && declared.has(alias);
+      }
+      return isSpecEvaluatorIdPassthrough(value);
+    }
+
     function resolveKeyAlias(name: string): string {
       const alias = topLevelStringConsts.get(name);
       if (alias === undefined) {
@@ -291,7 +308,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
           ? prop.key.value
           : t.isIdentifier(prop.key)
             ? prop.computed
-              ? valueCouldBeEvaluatorId(prop.value)
+              ? computedKeyMightBeEvaluatorId(prop.value)
                 ? resolveKeyAlias(prop.key.name)
                 : undefined
               : prop.key.name
@@ -312,7 +329,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
           resolveIdentifierAlias(value.name);
           continue;
         }
-        if (valueCouldBeEvaluatorId(value)) {
+        if (isSpecEvaluatorIdPassthrough(value)) {
           continue; // the one verified pass-through: pushCandidate forwarding spec.evaluatorId
         }
         throw new Error(
@@ -381,12 +398,12 @@ it('discovers a producer under a subdirectory of RULES_DIR, not only its immedia
   }
 });
 
-it('does not reject a computed object key unrelated to candidate production', () => {
+it('does not reject a computed object key whose value is not a SemanticEvaluatorId at all', () => {
   // Review found `resolveKeyAlias` called unconditionally for *every* computed Identifier key in
   // *every* object literal `walk()` visits, not only ones that could plausibly be an `evaluatorId`
   // declaration -- so a lookup table keyed by a loop variable, unrelated to candidate production
   // entirely, threw the same "not a same-file top-level string const" error a genuine unresolvable
-  // evaluatorId declaration would. `valueCouldBeEvaluatorId` gates the key resolution on the
+  // evaluatorId declaration would. `computedKeyMightBeEvaluatorId` gates the key resolution on the
   // property's value shape first: a value that cannot possibly be a `SemanticEvaluatorId` (here, a
   // number) makes the key irrelevant regardless of what it resolves to.
   const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
@@ -395,6 +412,29 @@ it('does not reject a computed object key unrelated to candidate production', ()
       join(scratchDir, 'lookup.ts'),
       'function build(key: string) {\n' +
         '  const table = { [key]: 42 };\n' +
+        '  return table;\n' +
+        '}\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject a computed object key whose string value is not a declared evaluator id', () => {
+  // A first fix (above) gated on the value's AST node *type* -- too loose in the other direction:
+  // review reproduced a fresh failure with an ordinary string-valued dictionary, unrelated to
+  // candidate production, still matching "is a string literal" and still throwing at
+  // `resolveKeyAlias` before the real producer in the same file was ever reached.
+  // `computedKeyMightBeEvaluatorId` now checks the string's actual *value* against the declared
+  // evaluator ids, not merely its node type.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      'function build(key: string) {\n' +
+        "  const table = { [key]: 'ordinary-value' };\n" +
         '  return table;\n' +
         '}\n' +
         "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",

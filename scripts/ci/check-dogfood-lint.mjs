@@ -38,7 +38,7 @@
  *     as "new" the moment an unrelated paragraph shifted them down. Nearby source text does not
  *     have that problem, because it moves with the finding rather than the file's other content.
  *   - Even the local-context fingerprint is not always unique: `fixtures/LICENSES.md` quotes the
- *     identical SQLite public-domain licence statement, verbatim, for four separate fixtures. No
+ *     identical SQLite public-domain licence statement, verbatim, across separate fixtures. No
  *     context radius distinguishes those -- the surrounding text really is byte-identical, not
  *     merely similarly shaped. `findingKey` now also folds in each finding's 1-based ordinal
  *     position among findings sharing its `(ruleId, message, context)` triple, assigned in
@@ -64,7 +64,7 @@
  *     `findImprovements` see no change. Reproduced directly: two identical semicolon violations
  *     under two different headings, baselined, then one removed and an identical one added under a
  *     third, previously clean heading -- assert mode reported `dogfood lint holds`. `findingKey` now
- *     also folds in `nearestHeading`, the finding's enclosing section, which the four LICENSES.md
+ *     also folds in `nearestHeading`, the finding's enclosing section, which the LICENSES.md
  *     occurrences turn out to already have one each of, distinct from one another. See
  *     `findingKey`'s own comment for what this closes and what it still, honestly, does not.
  *   - The paragraph clamp closed the neighbouring-block case, but not the case one level down:
@@ -248,7 +248,7 @@ export function nearestHeading(source, index) {
  *
  * The heading and the ordinal close two different gaps in the same problem: `localContext` alone
  * is not always unique within a file. Review found `fixtures/LICENSES.md` quoting the identical
- * SQLite public-domain licence statement verbatim for four separate fixtures -- same rule, same
+ * SQLite public-domain licence statement verbatim across separate fixtures -- same rule, same
  * message, same surrounding text, because the surrounding text really is byte-identical, not
  * merely similarly shaped. No context radius fixes that.
  *
@@ -258,7 +258,7 @@ export function nearestHeading(source, index) {
  * identical one elsewhere in the file regenerates ordinals 1..N for whatever set remains, so
  * `findRegressions` and `findImprovements` both see no change -- confirmed by reproducing exactly
  * that swap between two headings and observing `dogfood lint holds` when a real defect had moved.
- * The four LICENSES.md occurrences turned out to already sit under four distinct headings
+ * The LICENSES.md occurrences turned out to already sit each under its own distinct heading
  * (`sqlite-vacuum-space-reclaim`, `sqlite-cli-description`, `sqlite-cli-dot-commands`,
  * `sqlite-pragma-hard-negative`), so folding in `nearestHeading` gives each one a key the others
  * do not share, and a cross-heading swap now changes two keys' counts instead of zero.

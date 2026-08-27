@@ -222,6 +222,21 @@ export function sentenceBounds(source, index) {
  * `fixtures/LICENSES.md`'s colliding fixtures sit inside one long sentence-free bullet paragraph,
  * so the radius still bounds the key's size there, and `findingKey`'s ordinal still disambiguates
  * repeats within one sentence.
+ *
+ * Honest residual gap: two findings can still share one sentence closely enough that fixing one
+ * changes the other's window (`CONTEXT_RADIUS` on each side is unaware of a neighbouring finding's
+ * own position). Clamping the window at each side's midpoint to the nearest other finding's current
+ * offset was tried and reproducibly does not close this: the moment the nearer finding is the one
+ * that gets fixed, it drops out of that run's finding list entirely, so the surviving finding's
+ * window is no longer clamped against it at all -- the instability moves rather than closes, proven
+ * by re-running the exact "fix the slash, check the semicolon's key" scenario against that clamp.
+ * Nothing here can fully close this without either a real per-file token boundary this fingerprint
+ * has no reason to carry, or fuzzy-matching old keys to new ones across a re-key, which risks the
+ * opposite failure this whole baseline exists to prevent: silently absorbing a genuine new violation
+ * as "probably the same finding, moved." This is the same class of accepted trade-off `findingKey`'s
+ * own comment already documents for two identical occurrences under one heading: a false positive
+ * (an unrelated-looking `--update` demanded for a genuine cleanup), never the false negative this
+ * mechanism exists to catch.
  */
 export function localContext(source, index) {
   const { start: sentStart, end: sentEnd } = sentenceBounds(source, index);

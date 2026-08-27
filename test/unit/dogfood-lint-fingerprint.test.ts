@@ -81,6 +81,22 @@ describe('paragraphBounds / localContext', () => {
     const afterIndex = after.indexOf(violation);
     expect(localContext(after, afterIndex)).toBe(localContext(before, beforeIndex));
   });
+
+  it('recognizes a CRLF blank line as a paragraph boundary', () => {
+    // Review found the blank-line regex requiring a bare `\n\n`, which a CRLF checkout's
+    // `\r\n\r\n` never produces (the `\r` between the two `\n` characters is not `[ \t]`) -- so on
+    // CRLF the whole document read as one paragraph, widening localContext's clamp back to the
+    // unbounded window it exists to prevent. Asserted against `paragraphBounds` directly, with no
+    // sentence-ending punctuation in the filler text: `sentenceBounds`' own period/question/
+    // exclamation-mark clamp would otherwise exclude the filler paragraph on its own and mask a
+    // broken paragraph clamp entirely, the way it did on a first draft of this test.
+    const source =
+      'An unrelated filler paragraph with no sentence-ending punctuation\r\n\r\n' +
+      'Remove the bracket\r\n';
+    const index = source.indexOf('Remove');
+    const { start } = paragraphBounds(source, index);
+    expect(source.slice(start, index)).not.toContain('filler');
+  });
 });
 
 describe('sentenceBounds', () => {
@@ -182,6 +198,24 @@ describe('nearestHeading', () => {
     // silently dropping every later heading from view, including this one.
     const source = '```\r\n# not a heading\r\n```\r\n\r\n## Real After Fence\r\n\r\ntext here\r\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real After Fence');
+  });
+
+  it('does not open a fence for a backtick line whose info string itself contains a backtick', () => {
+    // Per CommonMark, a backtick fence's info string may not contain a backtick -- such a line is
+    // not a fence at all. Review found this unconditionally treated as an opening fence anyway, so
+    // it opened a range that never legitimately closed, running to EOF and hiding every real
+    // heading after it.
+    const source =
+      '## Real Heading\n\n```info with a ` backtick\nsome text\n\n## Should Still Be Found\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Should Still Be Found');
+  });
+
+  it('still fences a tilde block whose info string contains a backtick', () => {
+    // The backtick-in-info-string restriction is specific to backtick fences -- a tilde fence's
+    // info string may contain backticks freely, per CommonMark, and must still fence normally.
+    const source =
+      '## Real Heading\n\n~~~info with a ` backtick\n# not a heading\n~~~\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
 });
 

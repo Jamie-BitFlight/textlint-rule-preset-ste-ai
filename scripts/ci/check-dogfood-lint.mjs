@@ -149,18 +149,26 @@ function discoverMarkdownFiles() {
  * just after the nearest blank line before it, and the offset of the nearest blank line at or
  * after it (or the string bounds, at either end, if there is no such blank line). A blank line is
  * one that is empty once trailing whitespace is stripped.
+ *
+ * The line terminator is `\r?\n`, not a bare `\n`: review found the bare-`\n` pattern never
+ * matching a CRLF blank line (`\r\n\r\n`, since the first line's `\r` sits between the two `\n`
+ * characters and is not `[ \t]`), so on a CRLF checkout this returned the whole document as one
+ * "paragraph" -- widening `localContext`'s clamp back to the unbounded window it exists to
+ * prevent, for the platform where its baseline was never generated.
  */
 export function paragraphBounds(source, index) {
-  const blankLine = /\n[ \t]*\n/g;
+  const blankLine = /(\r?\n)[ \t]*\r?\n/g;
   let start = 0;
   for (const match of source.matchAll(blankLine)) {
-    const boundary = match.index + match[0].length - 1; // keep the second '\n' out of the block
+    const boundary = match.index + match[0].length - 1; // keep the second line terminator's '\n' out
     if (boundary > index) break;
     start = boundary;
   }
   blankLine.lastIndex = index;
   const next = blankLine.exec(source);
-  const end = next === null ? source.length : next.index + 1; // include the first '\n' of the pair
+  // Include the first line terminator of the pair -- its own captured length, not a hard-coded 1,
+  // since it is `\r\n` on a CRLF checkout and `\n` on an LF one.
+  const end = next === null ? source.length : next.index + next[1].length;
   return { start, end };
 }
 
@@ -241,6 +249,14 @@ export function localContext(source, index) {
  * closing fence in a CRLF file failed to close and the open range ran to EOF -- silently dropping
  * every later heading from `nearestHeading`'s view. An optional trailing `\r` is accepted alongside
  * spaces and tabs, matching how a line actually ends on either line-ending style.
+ *
+ * Per CommonMark, a backtick fence's info string may not itself contain a backtick -- a line like
+ * that is not a fence at all, opening or closing, and is ordinary content instead. Only a tilde
+ * fence's info string may contain backticks. Review found this line unconditionally treated as an
+ * opening fence whenever no fence was already open, regardless of its marker character, so a code
+ * example whose backtick-fence info string happened to contain a backtick opened a fence that
+ * never legitimately closed, running to EOF and hiding every later heading the same way an
+ * unclosed fence always does.
  */
 function fencedCodeRanges(source) {
   const fenceLine = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
@@ -250,6 +266,7 @@ function fencedCodeRanges(source) {
     const marker = match[1];
     const rest = match[2];
     if (open === null) {
+      if (marker[0] === '`' && rest.includes('`')) continue;
       open = { char: marker[0], length: marker.length, start: match.index };
     } else if (
       marker[0] === open.char &&

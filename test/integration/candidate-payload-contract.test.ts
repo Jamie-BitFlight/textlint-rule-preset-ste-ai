@@ -313,20 +313,22 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
     // (`['evaluator' + 'Id']`), a MemberExpression, a TemplateLiteral, and so on. Review found the
     // outer ternary below falling through to `undefined` for every such shape, silently skipping
     // the property the same way an unresolved Identifier key used to before `resolveComputedKey`
-    // existed. This mirrors that same gate-then-throw shape: a value that could not plausibly be an
-    // `evaluatorId` makes the key irrelevant regardless of what it resolves to (the same
-    // `computedKeyMightBeEvaluatorId` gate `resolveComputedKey` uses, so an unrelated computed key
-    // elsewhere in the file -- a lookup table keyed by a template literal, say -- still does not
-    // throw); a value that could be one, behind a key shape this test cannot statically read, is not
-    // safe to silently skip, because it might be exactly the property this test exists to find.
+    // existed.
+    //
+    // Unlike `resolveComputedKey`, this always throws rather than gating on
+    // `computedKeyMightBeEvaluatorId(value)` first. That gate exists on `resolveComputedKey` to
+    // protect a common, genuinely ambiguous pattern -- `{ [key]: ... }`, an ordinary lookup table
+    // keyed by an Identifier -- from a false-positive throw on unrelated code. Review found gating
+    // this shape the same way reopened the undeclared/typo'd-id blind spot `addIfDeclared` exists to
+    // close: the gate returns false precisely *because* an id is undeclared, so a newly written but
+    // not-yet-declared producer behind this key shape vanished silently instead of failing. A
+    // BinaryExpression, MemberExpression, or TemplateLiteral key is not the ambiguous pattern the
+    // gate protects: real, unrelated code in this repository's rules never uses one as an object
+    // key, so there is no false-positive risk here to trade against, and always throwing is safe.
     //
     // A numeric or bigint key can never equal the string `"evaluatorId"`, computed or not, so it is
     // excluded before reaching this function -- see the outer ternary.
-    function resolveOtherComputedKey(
-      key: t.Expression | t.PrivateName,
-      value: t.Expression | t.PatternLike,
-    ): string | undefined {
-      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
+    function resolveOtherComputedKey(key: t.Expression | t.PrivateName): string {
       throw new Error(
         `${entry}: an object property's computed key is a ${key.type} node this test cannot ` +
           'statically resolve -- extend derivedProducerIds() to handle this form, or use a ' +
@@ -352,7 +354,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
               : prop.key.name
             : t.isNumericLiteral(prop.key) || t.isBigIntLiteral(prop.key)
               ? undefined
-              : resolveOtherComputedKey(prop.key, prop.value);
+              : resolveOtherComputedKey(prop.key);
         if (keyName !== 'evaluatorId') continue;
 
         if (prop.shorthand) {
@@ -489,15 +491,39 @@ it('still catches an evaluatorId behind a computed key this test cannot statical
   // neither a StringLiteral nor an Identifier -- a BinaryExpression (`['evaluator' + 'Id']`), a
   // MemberExpression, a TemplateLiteral, and so on. `keyName !== 'evaluatorId'` then silently
   // skipped the property instead of resolving or failing, the same silent-vanish gap already closed
-  // for every other unresolvable form in this function. The value must be a declared evaluator id
-  // -- an undeclared one, like `'future-evaluator'` in the sibling test below, fails the same
-  // `computedKeyMightBeEvaluatorId` value gate `resolveComputedKey` already uses, and is correctly
-  // treated as unrelated rather than as evidence of this defect.
+  // for every other unresolvable form in this function.
   const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
   try {
     writeFileSync(
       join(scratchDir, 'future.ts'),
       "pushCandidate({ ['evaluator' + 'Id']: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an object property's computed key is a BinaryExpression node this test cannot/,
+    );
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still catches an undeclared evaluator id behind a computed key this test cannot resolve', () => {
+  // A first fix (above) gated the throw on `computedKeyMightBeEvaluatorId(value)`, mirroring
+  // `resolveComputedKey`'s own gate -- but that gate exists there to protect a *common* pattern
+  // (`{ [key]: ... }`, an ordinary lookup table keyed by an Identifier) from a false-positive throw.
+  // A BinaryExpression, MemberExpression, or TemplateLiteral key is not that pattern: real,
+  // unrelated code in this repository's rules never uses one as an object key (confirmed by
+  // grepping `src/deterministic/rules/` for a computed key with a non-trivial expression -- no
+  // matches), so there is no false-positive risk here to trade against. Gating on the value anyway
+  // reopened the exact undeclared/typo'd-id blind spot the Identifier-key case already closed:
+  // review found this value gate returning false precisely *because* the id was undeclared, so a
+  // newly written but not-yet-declared producer behind this key shape vanished silently instead of
+  // failing the way its declared counterpart (the sibling test above) does. This key shape now
+  // always throws when unresolvable, without consulting the value at all.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "pushCandidate({ ['evaluator' + 'Id']: 'future-evaluator', payload: {} });\n",
     );
     expect(() => derivedProducerIds(scratchDir)).toThrow(
       /an object property's computed key is a BinaryExpression node this test cannot/,

@@ -133,6 +133,20 @@ describe('nearestHeading', () => {
     const source = 'preamble text\n\n# One\n\ntext one\n';
     expect(nearestHeading(source, source.indexOf('preamble'))).toBe('');
   });
+
+  it('ignores a heading-shaped line inside a fenced code block', () => {
+    // Review found the raw regex treating `# example` inside a ``` fence as a real heading, so
+    // editing only that unrelated code example changed an untouched finding's key -- reported as
+    // both a regression and an improvement for a cleanup that never touched the finding at all.
+    const source = '## Real Heading\n\n```\n# example\n```\n\nSome violation text here.\n';
+    const index = source.indexOf('Some violation');
+    expect(nearestHeading(source, index)).toBe('## Real Heading');
+  });
+
+  it('still finds a real heading that follows a closed fence', () => {
+    const source = '```\n# not a heading\n```\n\n## Real After Fence\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real After Fence');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

@@ -12,8 +12,8 @@
  * does not pass yet. A plain gate would have to fail the build on day one, so it never gets added,
  * so cleanup proceeds as an open-ended manual campaign: someone picks a file, fixes it by hand,
  * and review is the only thing standing between that edit and a regression somewhere else. That is
- * how PR #100 went three review rounds -- each round fixed the file the reviewer named, and nothing
- * mechanical said whether the rest of the corpus still held.
+ * how PR #100 went round after round of review -- each round fixed the file the reviewer named,
+ * and nothing mechanical said whether the rest of the corpus still held.
  *
  * What the baseline records, and why it is not a plain per-file count.
  *
@@ -222,6 +222,29 @@ export function localContext(source, index) {
 }
 
 /**
+ * Byte ranges of fenced code blocks (``` or ~~~, three or more, up to three leading spaces),
+ * paired with a same-character closing fence at least as long, per CommonMark. An unclosed fence
+ * runs to the end of the source, since that is what every Markdown renderer already treats the
+ * rest of the file as.
+ */
+function fencedCodeRanges(source) {
+  const fenceLine = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
+  const ranges = [];
+  let open = null;
+  for (const match of source.matchAll(fenceLine)) {
+    const marker = match[1];
+    if (open === null) {
+      open = { char: marker[0], length: marker.length, start: match.index };
+    } else if (marker[0] === open.char && marker.length >= open.length) {
+      ranges.push({ start: open.start, end: match.index + match[0].length });
+      open = null;
+    }
+  }
+  if (open !== null) ranges.push({ start: open.start, end: source.length });
+  return ranges;
+}
+
+/**
  * The nearest Markdown ATX heading (`#` through `######`) at or before `index`, trimmed, or the
  * empty string when `index` sits before the file's first heading.
  *
@@ -229,12 +252,22 @@ export function localContext(source, index) {
  * prose is edited elsewhere in the same section, and unlike `ordinal` (see `findingKey`), it stays
  * tied to which section a finding lives in rather than to how many identical findings happen to
  * precede it in document order.
+ *
+ * Review found the raw regex treating a heading-shaped line inside a fenced code block (`# example`
+ * in a documentation snippet) as a real heading, so editing only that unrelated code example changed
+ * an untouched finding's key -- reported as both a regression and an improvement, and demanding
+ * `--accept-regressions` for a cleanup that never touched the finding at all. Reproduced directly: a
+ * real heading, a fenced block containing `# example`, then a violation -- `nearestHeading` returned
+ * `"# example"` instead of the real enclosing heading. A heading-shaped match inside a fenced range
+ * is now skipped rather than accepted.
  */
 export function nearestHeading(source, index) {
+  const fenced = fencedCodeRanges(source);
   const heading = /^#{1,6}[ \t]+.*$/gm;
   let found = '';
   for (const match of source.matchAll(heading)) {
     if (match.index > index) break;
+    if (fenced.some((range) => match.index >= range.start && match.index < range.end)) continue;
     found = match[0].trim();
   }
   return found;

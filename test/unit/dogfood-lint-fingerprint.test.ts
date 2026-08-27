@@ -187,6 +187,35 @@ describe('cross-heading swap detection (the defect review found in the ordinal-o
   });
 });
 
+describe('findRegressions', () => {
+  it('does not treat a file with no baseline entry as regressing, only main()\'s "added" does', () => {
+    // Review found this defaulting "no entry for this path" and "an entry exists but never
+    // allowed this specific finding" to the same allowed count of 0, so a brand-new dirty file's
+    // findings counted as regressions even though `main()`'s own `added` category exists
+    // specifically to report a file with no baseline entry -- and `--update` then refused to
+    // record that file's debt without `--accept-regressions`, contradicting the assert-mode
+    // message that says plain `--update` records it deliberately.
+    const byFile = new Map([['new.md', new Map([['rule\nmsg\nctx\n#h\n1', 3]])]]);
+    expect(findRegressions(byFile, {})).toEqual([]);
+  });
+
+  it('still flags a new finding in a file that already has a baseline entry', () => {
+    const baseline = { 'tracked.md': { total: 1, findings: { 'rule\nmsg\nctx\n#h\n1': 1 } } };
+    const byFile = new Map([
+      [
+        'tracked.md',
+        new Map([
+          ['rule\nmsg\nctx\n#h\n1', 1],
+          ['rule\nother\nctx\n#h\n1', 1],
+        ]),
+      ],
+    ]);
+    expect(findRegressions(byFile, baseline)).toEqual([
+      { path: 'tracked.md', ruleId: 'rule', message: 'other', before: 0, after: 1 },
+    ]);
+  });
+});
+
 describe('findImprovements', () => {
   it('flags a file whose findings shrank but did not reach zero, not only a fully-cleaned one', () => {
     // README.md claimed only two shrink cases required `--update`: a file with no baseline entry,

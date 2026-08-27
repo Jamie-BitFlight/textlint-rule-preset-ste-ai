@@ -384,12 +384,24 @@ function toBaselineShape(byFile) {
 
 /**
  * Every (file, findingKey) pair whose current count exceeds what `baseline` allows for it. Covers
- * both a brand-new finding (baseline count 0) and an existing one that got more frequent.
+ * both a brand-new finding in an already-baselined file (allowed count 0) and an existing one that
+ * got more frequent.
+ *
+ * A file with no baseline entry at all is not covered here -- `main()`'s `added` list already
+ * reports it, and recording its current debt for the first time is creation, not growth, the same
+ * principle `regressionsToGuard` already applies one level up when the whole baseline file is
+ * missing (see its own comment). Review found this function treating "no entry for this path" and
+ * "an entry exists but never allowed this specific finding" identically, both defaulting to an
+ * allowed count of 0 -- so a brand-new dirty file's findings counted as regressions even though
+ * assert mode's own `added` category already exists specifically to name this file's debt, and
+ * `--update` refused to record it without `--accept-regressions`, contradicting the assert-mode
+ * message that says plain `--update` records it deliberately.
  */
 export function findRegressions(byFile, baseline) {
   const regressions = [];
   for (const [path, findings] of byFile) {
-    const allowed = baseline[path]?.findings ?? {};
+    if (baseline[path] === undefined) continue;
+    const allowed = baseline[path].findings;
     for (const [key, count] of findings) {
       const before = allowed[key] ?? 0;
       if (count > before) {

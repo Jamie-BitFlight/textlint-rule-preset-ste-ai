@@ -6,6 +6,7 @@ import {
   localContext,
   nearestHeading,
   paragraphBounds,
+  regressionsToGuard,
   sentenceBounds,
 } from '../../scripts/ci/check-dogfood-lint.mjs';
 
@@ -86,6 +87,23 @@ describe('sentenceBounds', () => {
     const source = '## heading\n\nRemove the bracket now and verify it afterward too\n';
     const index = source.indexOf('Remove');
     expect(sentenceBounds(source, index)).toEqual(paragraphBounds(source, index));
+  });
+});
+
+describe('regressionsToGuard', () => {
+  it('does not treat a missing baseline as a regression against every current finding', () => {
+    // Review found `--update` comparing the whole dirty corpus against `{}` whenever no baseline
+    // file existed yet, so first-time creation always failed without `--accept-regressions` --
+    // contradicting the assert-mode message that says plain `--update` creates the file.
+    const byFile = new Map([['a.md', new Map([['rule\nmsg\nctx\n#h\n1', 3]])]]);
+    expect(regressionsToGuard(byFile, false, {})).toEqual([]);
+  });
+
+  it('still guards against regressions once a baseline exists', () => {
+    const key = 'rule\nmsg\nctx\n#h\n1';
+    const byFile = new Map([['a.md', new Map([[key, 3]])]]);
+    const existing = { 'a.md': { total: 1, findings: { [key]: 1 } } };
+    expect(regressionsToGuard(byFile, true, existing)).not.toEqual([]);
   });
 });
 

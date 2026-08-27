@@ -48,6 +48,12 @@ export function findRegressions(
   baseline: Baseline,
 ): Regression[];
 
+export function regressionsToGuard(
+  byFile: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  baselineExists: boolean,
+  existing: Baseline,
+): Regression[];
+
 export function findImprovements(
   byFile: ReadonlyMap<string, ReadonlyMap<string, number>>,
   baseline: Baseline,

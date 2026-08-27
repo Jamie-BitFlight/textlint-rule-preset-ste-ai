@@ -75,6 +75,12 @@
  *     `localContext` now clamps to the sentence the finding sits in (see `sentenceBounds`), inside
  *     the existing paragraph clamp, so an edit to a different sentence in the same paragraph no
  *     longer reaches it.
+ *   - `--update` refused to create a first baseline at all: with no file on disk, it compared every
+ *     current finding against `{}`, so the entire dirty corpus counted as a regression and the run
+ *     failed without `--accept-regressions` -- contradicting the assert-mode message telling a
+ *     contributor to run `--update` to create the missing file. `--update` now only guards against
+ *     regressions when a baseline already exists (see `regressionsToGuard`); creating one for the
+ *     first time needs no flag beyond `--update` itself.
  *
  * This file is machine-written and not meant to be hand-edited, the same way
  * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
@@ -424,6 +430,19 @@ function printRegressions(regressions) {
   }
 }
 
+/**
+ * Regressions `--update` must refuse to write without `--accept-regressions`.
+ *
+ * Review found `--update` comparing every current finding against `{}` whenever the baseline file
+ * did not exist yet, so it classified the entire dirty corpus as regressions and refused to run --
+ * contradicting the assert-mode message (below) that says `--update` alone creates the file. A
+ * missing baseline has no prior state to regress from: writing one for the first time is creation,
+ * not growth, so it needs no guard at all.
+ */
+export function regressionsToGuard(byFile, baselineExists, existing) {
+  return baselineExists ? findRegressions(byFile, existing) : [];
+}
+
 function main() {
   const update = process.argv.includes('--update');
   const acceptRegressions = process.argv.includes('--accept-regressions');
@@ -431,10 +450,9 @@ function main() {
   if (byFile === undefined) return;
 
   if (update) {
-    const existing = existsSync(BASELINE_PATH)
-      ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8'))
-      : {};
-    const regressions = findRegressions(byFile, existing);
+    const baselineExists = existsSync(BASELINE_PATH);
+    const existing = baselineExists ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : {};
+    const regressions = regressionsToGuard(byFile, baselineExists, existing);
 
     if (regressions.length > 0 && !acceptRegressions) {
       console.error(

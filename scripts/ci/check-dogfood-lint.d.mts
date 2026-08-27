@@ -11,6 +11,7 @@ export interface ParagraphBounds {
   readonly end: number;
 }
 
+export function toForwardSlashes(path: string): string;
 export function paragraphBounds(source: string, index: number): ParagraphBounds;
 export function sentenceBounds(source: string, index: number): ParagraphBounds;
 export function localContext(source: string, index: number): string;

@@ -175,8 +175,8 @@ interval before merging. Never merge in the same action as un-drafting. This hol
 that looks obviously safe.
 
 **Independent review is required before every merge.** It does not depend on the external reviewer
-being available. Two routes satisfy the requirement equally: the automated external reviewer, or a
-local subagent review. Merging with neither is never acceptable.
+being available. The routes below satisfy the requirement equally: the automated external
+reviewer, or a local subagent review. Merging with neither is never acceptable.
 
 The external reviewer fails in more than one way, and one of them is quiet. It declines when the account is over its usage limit. It then replies with a usage-limit message
 instead of a review. That failure is visible. It can also simply stay silent, which is easy to

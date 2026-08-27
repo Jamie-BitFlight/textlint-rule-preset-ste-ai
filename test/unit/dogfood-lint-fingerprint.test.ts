@@ -8,6 +8,7 @@ import {
   paragraphBounds,
   regressionsToGuard,
   sentenceBounds,
+  toForwardSlashes,
 } from '../../scripts/ci/check-dogfood-lint.mjs';
 
 /**
@@ -21,6 +22,20 @@ import {
  * of the script to find the underlying defect, so reverting the fix these tests guard makes the
  * corresponding test fail -- not merely assert something that happens to already be true.
  */
+
+describe('toForwardSlashes', () => {
+  it('converts a Windows-style relative path to forward slashes', () => {
+    // `path.relative()` returns backslash-separated paths on Windows, but `discoverMarkdownFiles()`
+    // (via `git ls-files`) and the committed baseline both always use forward slashes -- a baseline
+    // key built from the raw `relative()` result would never match either on Windows, so every
+    // nested dirty file would look new and every existing nested baseline entry would look stale.
+    expect(toForwardSlashes('docs\\architecture.md')).toBe('docs/architecture.md');
+  });
+
+  it('leaves an already-forward-slash path unchanged', () => {
+    expect(toForwardSlashes('docs/architecture.md')).toBe('docs/architecture.md');
+  });
+});
 
 describe('paragraphBounds / localContext', () => {
   it('excludes a preceding heading from a finding under it', () => {

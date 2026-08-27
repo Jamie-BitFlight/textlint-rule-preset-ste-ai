@@ -258,10 +258,9 @@ export function nearestHeading(source, index) {
  * identical one elsewhere in the file regenerates ordinals 1..N for whatever set remains, so
  * `findRegressions` and `findImprovements` both see no change -- confirmed by reproducing exactly
  * that swap between two headings and observing `dogfood lint holds` when a real defect had moved.
- * The LICENSES.md occurrences turned out to already sit each under its own distinct heading
- * (`sqlite-vacuum-space-reclaim`, `sqlite-cli-description`, `sqlite-cli-dot-commands`,
- * `sqlite-pragma-hard-negative`), so folding in `nearestHeading` gives each one a key the others
- * do not share, and a cross-heading swap now changes two keys' counts instead of zero.
+ * The LICENSES.md occurrences turned out to already sit each under its own distinct heading, so
+ * folding in `nearestHeading` gives each one a key the others do not share, and a cross-heading
+ * swap now changes two keys' counts instead of zero.
  *
  * `ordinal` still does real work within `nearestHeading`'s scope: two identical occurrences under
  * the very same heading are indistinguishable by any content- or structure-based fingerprint, so
@@ -300,6 +299,18 @@ export function splitFindingKey(key) {
 }
 
 /**
+ * A repo-relative path, forward-slash-separated regardless of the host OS.
+ *
+ * `path.relative()` returns backslash-separated paths on Windows, but `discoverMarkdownFiles()`
+ * (via `git ls-files`) and the committed baseline both always use forward slashes -- on Windows a
+ * baseline key built from the raw `relative()` result would never match either, so every nested
+ * dirty file would look new and every existing nested baseline entry would look stale.
+ */
+export function toForwardSlashes(path) {
+  return path.replaceAll('\\', '/');
+}
+
+/**
  * Run the preset over every tracked `*.md` file and return, per file, how many times each distinct
  * finding (by `findingKey`) appears at error severity.
  *
@@ -335,7 +346,7 @@ function lint() {
 
   const byFile = new Map();
   for (const file of JSON.parse(stdout)) {
-    const path = relative(REPO_ROOT, file.filePath);
+    const path = toForwardSlashes(relative(REPO_ROOT, file.filePath));
     const errorMessages = file.messages.filter((message) => message.severity === 2);
     if (errorMessages.length === 0) continue;
     // Read once per file with at least one error, not once per message.

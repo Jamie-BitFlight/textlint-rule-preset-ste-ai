@@ -6,6 +6,8 @@
  * own declarations.
  */
 
+import type { TxtDocumentNode } from '@textlint/ast-node-types';
+
 export interface ParagraphBounds {
   readonly start: number;
   readonly end: number;
@@ -15,7 +17,7 @@ export function toForwardSlashes(path: string): string;
 export function paragraphBounds(source: string, index: number): ParagraphBounds;
 export function sentenceBounds(source: string, index: number): ParagraphBounds;
 export function localContext(source: string, index: number): string;
-export function nearestHeading(source: string, index: number): string;
+export function nearestHeading(source: string, index: number, ast?: TxtDocumentNode): string;
 export function findingKey(
   ruleId: string,
   message: string,

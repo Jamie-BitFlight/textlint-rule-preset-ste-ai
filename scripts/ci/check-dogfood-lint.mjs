@@ -118,6 +118,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from '@textlint/markdown-to-ast';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 const BASELINE_PATH = resolve(REPO_ROOT, 'scripts/ci/dogfood-lint-baseline.json');
@@ -230,185 +231,51 @@ export function localContext(source, index) {
 }
 
 /**
- * Byte ranges of fenced code blocks (``` or ~~~, three or more, up to three leading spaces),
- * paired with a same-character closing fence at least as long, per CommonMark. An unclosed fence
- * runs to the end of the source, since that is what every Markdown renderer already treats the
- * rest of the file as.
- *
- * An opening fence may carry an info string after the marker (` ```js `); a closing fence may not
- * -- CommonMark requires only trailing spaces or tabs there. Review found this treating both the
- * same way, so a code line that happens to start with the same marker followed by other text (a
- * fenced example showing ` ```not-a-closing-fence `) closed the range early. Everything after that
- * false close, up to the *real* closing fence, then read as ordinary prose again, so a heading-
- * shaped line still inside the block was accepted as real. A line is only treated as a close while
- * a fence is open and it has nothing but whitespace after the marker; any other fence-marker-shaped
- * line while open is ordinary code content and does not affect the open state at all.
- *
- * `[^\n]*` captures a trailing `\r` on a CRLF checkout, since `\r` is not `\n`. Review found the
- * whitespace-only check rejecting that `\r` the same way it rejects real trailing text, so every
- * closing fence in a CRLF file failed to close and the open range ran to EOF -- silently dropping
- * every later heading from `nearestHeading`'s view. An optional trailing `\r` is accepted alongside
- * spaces and tabs, matching how a line actually ends on either line-ending style.
- *
- * Per CommonMark, a backtick fence's info string may not itself contain a backtick -- a line like
- * that is not a fence at all, opening or closing, and is ordinary content instead. Only a tilde
- * fence's info string may contain backticks. Review found this line unconditionally treated as an
- * opening fence whenever no fence was already open, regardless of its marker character, so a code
- * example whose backtick-fence info string happened to contain a backtick opened a fence that
- * never legitimately closed, running to EOF and hiding every later heading the same way an
- * unclosed fence always does.
- *
- * Review also found this blind to a fence inside a block quote (`> ``` `, used throughout
- * `docs/design/64-layered-rule-packs/02-authority-trust.md`) -- once `nearestHeading` learned to
- * recognize a blockquoted ATX heading, a heading-shaped line inside a blockquoted fence read as a
- * real heading instead of fenced content, the same false-positive class every earlier fix here has
- * closed for an unquoted fence. The same leading `>` allowance `nearestHeading`'s ATX pattern uses
- * is accepted here too, ahead of the existing leading-space allowance.
- */
-function fencedCodeRanges(source) {
-  const fenceLine = /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})([^\n]*)$/gm;
-  const ranges = [];
-  let open = null;
-  for (const match of source.matchAll(fenceLine)) {
-    const marker = match[1];
-    const rest = match[2];
-    if (open === null) {
-      if (marker[0] === '`' && rest.includes('`')) continue;
-      open = { char: marker[0], length: marker.length, start: match.index };
-    } else if (
-      marker[0] === open.char &&
-      marker.length >= open.length &&
-      /^[ \t]*\r?$/.test(rest)
-    ) {
-      ranges.push({ start: open.start, end: match.index + match[0].length });
-      open = null;
-    }
-  }
-  if (open !== null) ranges.push({ start: open.start, end: source.length });
-  return ranges;
-}
-
-/**
- * The nearest Markdown ATX heading (`#` through `######`) at or before `index`, trimmed, or the
- * empty string when `index` sits before the file's first heading.
+ * The nearest Markdown heading (ATX or Setext, in a block quote or not, in a list or not) at or
+ * before `index`, in the same `"# Text"` / bare-text shape the file's own ATX / Setext headings
+ * respectively use, or the empty string when `index` sits before the first one.
  *
  * This is a structural anchor: unlike `localContext`, it does not shrink or shift when unrelated
  * prose is edited elsewhere in the same section, and unlike `ordinal` (see `findingKey`), it stays
  * tied to which section a finding lives in rather than to how many identical findings happen to
  * precede it in document order.
  *
- * Review found the raw regex treating a heading-shaped line inside a fenced code block (`# example`
- * in a documentation snippet) as a real heading, so editing only that unrelated code example changed
- * an untouched finding's key -- reported as both a regression and an improvement, and demanding
- * `--accept-regressions` for a cleanup that never touched the finding at all. Reproduced directly: a
- * real heading, a fenced block containing `# example`, then a violation -- `nearestHeading` returned
- * `"# example"` instead of the real enclosing heading. A heading-shaped match inside a fenced range
- * is now skipped rather than accepted.
+ * Review spent nine consecutive rounds hand-rolling this against one CommonMark construct at a
+ * time -- a fenced code block, ATX indentation, Setext headings, a block quote around either, an
+ * HTML comment, a `<script>`/`<pre>`/`<style>`/`<textarea>` block, an unanchored opener matching an
+ * inline mention -- each fix closing one concrete gap and exposing the next, until review found an
+ * arbitrary block-level HTML tag (`<div>`) and a fenced block nested inside a list both still
+ * silently readable as real headings, and asked, correctly, for this to stop being reimplemented
+ * one regex at a time. A regex answering "which Markdown block contains this byte offset" can only
+ * ever cover the constructs someone thought to test; a real parser answers it for every construct
+ * it understands, including whichever one the next review round would otherwise have found. This
+ * repository already depends on `@textlint/markdown-to-ast` for exactly this reason --
+ * `src/reader/markdown-reader.ts` reads every rule's own input through it instead of a regex-driven
+ * reader -- so parsing the same file through the same parser here removes the exclusion logic
+ * instead of extending it again: nothing outside this function ever called the fence/HTML-block
+ * range helpers this replaced, so they are gone, not merely unused.
  *
- * Review also found the regex requiring the `#` to start at column zero, when CommonMark permits up
- * to three leading spaces on an ATX heading (the same allowance `fencedCodeRanges` already gives a
- * fence marker). A heading indented by one to three spaces was invisible to this function entirely,
- * so a finding moved from a heading at column zero to one indented under a list or blockquote kept
- * the same fingerprint as if it had no enclosing heading at all -- silently defeating the
- * cross-heading regression guard `findingKey` relies on this function for.
- *
- * Review also found this recognizing only ATX headings (`# Text`), when CommonMark also permits
- * Setext headings (a text line followed by an `=`- or `-`-only underline). A finding moved between
- * two differently named Setext sections kept the same enclosing-heading component (whatever ATX
- * heading precedes both, or none), silently defeating the same cross-heading guard. Both forms are
- * now collected and merged by position before picking the nearest one at or before `index`.
- *
- * Review also found the ATX pattern requiring the (up to 3) leading spaces to reach the `#`
- * directly, when CommonMark also permits an ATX heading inside a block quote (`> # Alpha`, or
- * nested, `> > # Alpha`). A finding moved from one blockquoted heading's section to a differently
- * named one kept the same empty-heading key, silently defeating the same cross-heading guard. Any
- * number of leading `>` markers (each optionally followed by a space, per CommonMark) is now
- * accepted before the existing leading-space allowance; the returned heading text excludes the
- * blockquote markers themselves, keeping the same `"# Text"` shape a non-blockquoted ATX heading
- * already returns.
- *
- * Review then found the Setext pattern still missing the same blockquote allowance the ATX one
- * just gained (`> Alpha` / `> =====`): its text line rejected a leading `>` outright (the same
- * character class that excludes `#`), so a blockquoted Setext heading fell all the way back to no
- * heading at all instead of the enclosing one. The same leading-`>` allowance is now applied to
- * both the text line and the underline line, and the text-line guard also excludes a raw `>`,
- * since one is only ever expected there already consumed by the new prefix group.
- *
- * Review also found a heading-shaped line inside a multiline HTML comment (`<!--\n# example\n-->`)
- * accepted as a real heading: CommonMark's HTML-comment block runs from `<!--` to the next `-->`
- * regardless of blank lines, and the Markdown parser emits no heading node for anything inside it,
- * but this script's line-by-line regexes had no notion of that block at all. A first fix added
- * `htmlCommentRanges`, closing only the comment case.
- *
- * Review then found the same gap in the sibling HTML block CommonMark treats identically -- a
- * `<script>`, `<pre>`, `<style>`, or `<textarea>` element also runs from its open tag to its close
- * tag regardless of blank lines, with no heading node emitted for anything inside it either.
- * Rather than patch each tag name in as its own future finding, `htmlBlockRanges` now covers both
- * forms in one pass: an HTML comment closes at the next `-->`, and one of these four tags closes at
- * its own matching close tag (case-insensitive, since HTML tag names are). Either form left
- * unclosed runs to the end of the source, the same precedent `fencedCodeRanges` already sets. Other
- * CommonMark HTML block forms (a processing instruction, a doctype, CDATA, an arbitrary block-level
- * tag terminated by a blank line) are not covered -- no concrete finding has shown one of those
- * forms containing a heading-shaped line, in this corpus or in review, so there is nothing yet to
- * fix rather than to anticipate.
- *
- * Review then found the opener unanchored to line position, so an inline mention of `<script>` --
- * inside a backtick code span, or in ordinary prose -- opened a block the same way a genuine one
- * at the start of a line does. An inline mention with no matching close anywhere later in the
- * document then excluded everything through EOF, the same over-exclusion an unclosed block already
- * causes legitimately, but for text that was never a block-level HTML element at all per
- * CommonMark's own rule that this construct must begin a line (up to three leading spaces, the
- * same allowance every other block-detector in this file already gives). The opener now requires
- * that position; the closing search is unaffected, since CommonMark itself does not require the
- * close token to open its own line either -- only the open token does.
+ * `ast` is an optional third parameter so a caller looking up many indices into the same source
+ * (see `lint()` below) parses once and passes the result, rather than once per finding: parsing a
+ * real ~40KB file in this corpus measured near 60ms, and this function used to run once per error
+ * message.
  */
-function htmlBlockRanges(source) {
-  const opener = /^[ \t]{0,3}<!--|^[ \t]{0,3}<(script|pre|style|textarea)(?=[\s>]|$)/gim;
-  const ranges = [];
-  let match;
-  while ((match = opener.exec(source)) !== null) {
-    const start = match.index;
-    const tag = match[1];
-    let end;
-    if (tag === undefined) {
-      const close = source.indexOf('-->', start + match[0].length);
-      end = close === -1 ? -1 : close + 3;
-    } else {
-      const closer = new RegExp(`</${tag}\\s*>`, 'gi');
-      closer.lastIndex = start + match[0].length;
-      const closeMatch = closer.exec(source);
-      end = closeMatch === null ? -1 : closeMatch.index + closeMatch[0].length;
+export function nearestHeading(source, index, ast = parse(source)) {
+  const headers = [];
+  const collect = (node) => {
+    if (node.type === 'Header') headers.push(node);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) collect(child);
     }
-    if (end === -1) {
-      ranges.push({ start, end: source.length });
-      break;
-    }
-    ranges.push({ start, end });
-    opener.lastIndex = end;
-  }
-  return ranges;
-}
-
-export function nearestHeading(source, index) {
-  const fenced = fencedCodeRanges(source);
-  const htmlBlocks = htmlBlockRanges(source);
-  const atx = /^(?:[ \t]{0,3}>[ \t]?)*([ \t]{0,3}#{1,6}[ \t]+.*)$/gm;
-  const setext =
-    /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}([^\s#>][^\n]*)\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(=+|-+)[ \t]*$/gm;
-  const matches = [];
-  for (const match of source.matchAll(atx)) {
-    matches.push({ index: match.index, text: match[1].trim() });
-  }
-  for (const match of source.matchAll(setext)) {
-    matches.push({ index: match.index, text: match[1].trim() });
-  }
-  matches.sort((a, b) => a.index - b.index);
-  const excluded = [...fenced, ...htmlBlocks];
+  };
+  collect(ast);
   let found = '';
-  for (const match of matches) {
-    if (match.index > index) break;
-    if (excluded.some((range) => match.index >= range.start && match.index < range.end)) continue;
-    found = match.text;
+  let bestStart = -1;
+  for (const header of headers) {
+    if (header.range[0] <= index && header.range[0] > bestStart) {
+      bestStart = header.range[0];
+      found = source.slice(header.range[0], header.range[1]).split('\n')[0].trim();
+    }
   }
   return found;
 }
@@ -523,8 +390,10 @@ function lint() {
     const path = toForwardSlashes(relative(REPO_ROOT, file.filePath));
     const errorMessages = file.messages.filter((message) => message.severity === 2);
     if (errorMessages.length === 0) continue;
-    // Read once per file with at least one error, not once per message.
+    // Read and parse once per file with at least one error, not once per message: `nearestHeading`
+    // takes the parsed AST so it does not reparse the same source on every call in the loop below.
     const source = readFileSync(file.filePath, 'utf8');
+    const ast = parse(source);
     // textlint reports messages in document order already; sorting by index makes that explicit
     // and correct even if that ever changes, since ordinal assignment depends on it.
     const ordered = [...errorMessages].toSorted((a, b) => a.index - b.index);
@@ -532,7 +401,7 @@ function lint() {
     const findings = new Map();
     for (const message of ordered) {
       const context = localContext(source, message.index);
-      const heading = nearestHeading(source, message.index);
+      const heading = nearestHeading(source, message.index, ast);
       const groupKey = [message.ruleId, message.message, context, heading].join(
         FINDING_KEY_SEPARATOR,
       );

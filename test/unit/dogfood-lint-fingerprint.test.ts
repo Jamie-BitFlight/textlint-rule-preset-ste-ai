@@ -1,3 +1,4 @@
+import { parse } from '@textlint/markdown-to-ast';
 import { describe, expect, it } from 'vite-plus/test';
 import {
   findImprovements,
@@ -377,6 +378,34 @@ describe('nearestHeading', () => {
   it('still recognizes an HTML block tag indented by up to three spaces', () => {
     const source = '## Real Heading\n\n   <script>\n# example\n   </script>\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('ignores a heading-shaped line inside an arbitrary block-level HTML tag', () => {
+    // Review found a `<div>` (or any block-level tag outside the fixed script/pre/style/textarea
+    // list) still invisible to this function, and asked for headings to be derived from real
+    // Markdown structure instead of extending the regex for one more tag name. This function now
+    // parses the source with `@textlint/markdown-to-ast` -- the same real parser
+    // `src/reader/markdown-reader.ts` reads every rule's input through -- and only counts a node the
+    // parser itself emits as a `Header`, so this and every other CommonMark HTML block form are
+    // excluded for free, not by name.
+    const source = '## Real Heading\n\n<div>\n# example\n</div>\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('ignores a heading-shaped line inside a fenced code block nested in a list item', () => {
+    // The other finding that ended the regex-patching approach: a fence indented under a list
+    // item's own marker was invisible to the old fence-detecting regex, which only recognized a
+    // block-quote or plain-indentation prefix.
+    const source = '## Real Heading\n\n- ```\n  # example\n  ```\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('parses once per call by default and reuses a pre-parsed AST when given one', () => {
+    // The `ast` parameter exists purely for the hot call site in `lint()` to avoid reparsing the
+    // same source once per finding; both call shapes must agree.
+    const source = '## Real Heading\n\ntext here\n';
+    const index = source.indexOf('text here');
+    expect(nearestHeading(source, index)).toBe(nearestHeading(source, index, parse(source)));
   });
 });
 

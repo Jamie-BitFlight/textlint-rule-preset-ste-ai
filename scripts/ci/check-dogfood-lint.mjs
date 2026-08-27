@@ -274,7 +274,7 @@ export function localContext(source, index) {
  * (see `lint()` below) parses once and passes the result, rather than once per finding: this
  * function used to run once per error message, reparsing the same file's full text every time.
  */
-export function nearestHeading(source, index, ast = parse(source)) {
+function collectHeaders(ast) {
   const headers = [];
   const collect = (node) => {
     if (node.type === 'Header') headers.push(node);
@@ -283,15 +283,55 @@ export function nearestHeading(source, index, ast = parse(source)) {
     }
   };
   collect(ast);
+  return headers;
+}
+
+function headerText(source, header) {
+  return source.slice(header.range[0], header.range[1]).split('\n')[0].trim();
+}
+
+export function nearestHeading(source, index, ast = parse(source)) {
   let found = '';
   let bestStart = -1;
-  for (const header of headers) {
+  for (const header of collectHeaders(ast)) {
     if (header.range[0] <= index && header.range[0] > bestStart) {
       bestStart = header.range[0];
-      found = source.slice(header.range[0], header.range[1]).split('\n')[0].trim();
+      found = headerText(source, header);
     }
   }
   return found;
+}
+
+/**
+ * `nearestHeading`'s own text alone collides whenever two different sections reuse the same
+ * immediate heading (`# Alpha` / `## Examples` and `# Beta` / `## Examples`): review reproduced
+ * moving an identical violation from one such section to the other and found `context`, `heading`
+ * and `ordinal` all unchanged, so both `findRegressions` and `findImprovements` missed the swap.
+ * This builds the full ancestor chain instead of the single nearest heading, using each header's
+ * own `depth` (the parsed heading level) to maintain a nesting stack: a heading pops any open
+ * heading at the same or a shallower depth before it is pushed, the same rule a document outline
+ * uses. `# Alpha > ## Examples` and `# Beta > ## Examples` now differ from their first ancestor
+ * onward, and headers are read in the document order `nearestHeading` also relies on, so this walks
+ * the same `ast` once rather than reparsing.
+ *
+ * Joined with `>` rather than `FINDING_KEY_SEPARATOR` (a newline no heading text can contain, since
+ * `nearestHeading` already trims each one to its first line): a real heading containing the literal
+ * three-character sequence ` > ` at exactly the point two ancestor levels join could in principle
+ * still collide with a different two-level path built from the same joined string. No heading in
+ * this corpus does that; `ordinal` still catches two genuinely identical occurrences under the
+ * exact same full path, the same residual gap `findingKey`'s own comment already documents for one
+ * heading.
+ */
+export function headingPath(source, index, ast = parse(source)) {
+  const stack = [];
+  for (const header of collectHeaders(ast)) {
+    if (header.range[0] > index) continue;
+    while (stack.length > 0 && stack.at(-1).depth >= header.depth) {
+      stack.pop();
+    }
+    stack.push(header);
+  }
+  return stack.map((header) => headerText(source, header)).join(' > ');
 }
 
 /**
@@ -415,7 +455,7 @@ function lint() {
     const findings = new Map();
     for (const message of ordered) {
       const context = localContext(source, message.index);
-      const heading = nearestHeading(source, message.index, ast);
+      const heading = headingPath(source, message.index, ast);
       const groupKey = [message.ruleId, message.message, context, heading].join(
         FINDING_KEY_SEPARATOR,
       );

@@ -4,6 +4,7 @@ import {
   findImprovements,
   findingKey,
   findRegressions,
+  headingPath,
   localContext,
   nearestHeading,
   paragraphBounds,
@@ -409,6 +410,43 @@ describe('nearestHeading', () => {
   });
 });
 
+describe('headingPath', () => {
+  it('joins the full ancestor chain, not just the nearest heading', () => {
+    const source = '# Alpha\n\n## Examples\n\ntext here\n';
+    expect(headingPath(source, source.indexOf('text here'))).toBe('# Alpha > ## Examples');
+  });
+
+  it('gives two sections that reuse the same immediate heading distinct paths', () => {
+    // Review reproduced this exact collision: `nearestHeading` alone returns `## Examples` for
+    // both `# Alpha`'s and `# Beta`'s child section, so moving an identical violation between them
+    // left `context`, `heading` and `ordinal` all unchanged -- both `findRegressions` and
+    // `findImprovements` missed the swap.
+    const source =
+      '# Alpha\n\n## Examples\n\ntext under alpha\n\n# Beta\n\n## Examples\n\ntext under beta\n';
+    const alphaPath = headingPath(source, source.indexOf('text under alpha'));
+    const betaPath = headingPath(source, source.indexOf('text under beta'));
+    expect(alphaPath).toBe('# Alpha > ## Examples');
+    expect(betaPath).toBe('# Beta > ## Examples');
+    expect(alphaPath).not.toBe(betaPath);
+  });
+
+  it('pops a shallower sibling heading before pushing the next one, not just deeper ones', () => {
+    const source = '# One\n\n## Two\n\n# Three\n\ntext here\n';
+    expect(headingPath(source, source.indexOf('text here'))).toBe('# Three');
+  });
+
+  it('returns the empty string before the first heading', () => {
+    const source = 'preamble\n\n# One\n\ntext\n';
+    expect(headingPath(source, source.indexOf('preamble'))).toBe('');
+  });
+
+  it('parses once per call by default and reuses a pre-parsed AST when given one', () => {
+    const source = '# Alpha\n\n## Examples\n\ntext here\n';
+    const index = source.indexOf('text here');
+    expect(headingPath(source, index)).toBe(headingPath(source, index, parse(source)));
+  });
+});
+
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */
 function keysFor(
   source: string,
@@ -420,7 +458,7 @@ function keysFor(
   const keys: string[] = [];
   for (const index of indices) {
     const context = localContext(source, index);
-    const heading = nearestHeading(source, index);
+    const heading = headingPath(source, index);
     const groupKey = [ruleId, message, context, heading].join('\n');
     const ordinal = (groupOrdinal.get(groupKey) ?? 0) + 1;
     groupOrdinal.set(groupKey, ordinal);
@@ -471,6 +509,30 @@ describe('cross-heading swap detection (the defect review found in the ordinal-o
     // whatever set remains, so neither side notices anything moved. With `nearestHeading` folded
     // into the key, the swap must show up as both a regression (the new heading-c occurrence) and
     // an improvement (heading-a's occurrence is gone).
+    expect(findRegressions(byFile, baseline)).not.toEqual([]);
+    expect(findImprovements(byFile, baseline)).not.toEqual([]);
+  });
+
+  it('catches an occurrence moved between two sections that reuse the same immediate heading', () => {
+    // Review found `nearestHeading` alone is not enough: `# Alpha`'s and `# Beta`'s child sections
+    // both being called `## Examples` gave a moved violation the identical key, so this exact swap
+    // -- unlike the two tests above -- was invisible before `headingPath` replaced `nearestHeading`
+    // at the `lint()` call site.
+    const before = `# Alpha\n\n## Examples\n\n${violation}\n\n# Beta\n\n## Examples\n\nclean.\n`;
+    const beforeKeys = keysFor(before, ruleId, message, [before.indexOf(violation)]);
+    const baseline = {
+      'swap.md': {
+        total: beforeKeys.length,
+        findings: Object.fromEntries(beforeKeys.map((key) => [key, 1])),
+      },
+    };
+
+    // The violation moves from Alpha's Examples section to Beta's, which shares the same
+    // immediate heading text.
+    const after = `# Alpha\n\n## Examples\n\nclean now.\n\n# Beta\n\n## Examples\n\n${violation}\n`;
+    const afterKeys = keysFor(after, ruleId, message, [after.indexOf(violation)]);
+    const byFile = new Map([['swap.md', new Map(afterKeys.map((key) => [key, 1]))]]);
+
     expect(findRegressions(byFile, baseline)).not.toEqual([]);
     expect(findImprovements(byFile, baseline)).not.toEqual([]);
   });

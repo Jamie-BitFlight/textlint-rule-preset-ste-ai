@@ -18,6 +18,7 @@ export function paragraphBounds(source: string, index: number): ParagraphBounds;
 export function sentenceBounds(source: string, index: number): ParagraphBounds;
 export function localContext(source: string, index: number): string;
 export function nearestHeading(source: string, index: number, ast?: TxtDocumentNode): string;
+export function headingPath(source: string, index: number, ast?: TxtDocumentNode): string;
 export function findingKey(
   ruleId: string,
   message: string,

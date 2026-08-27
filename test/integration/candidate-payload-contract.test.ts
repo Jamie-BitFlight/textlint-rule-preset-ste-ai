@@ -159,7 +159,7 @@ function walk(node: t.Node, visit: (node: t.Node) => void): void {
  * The one verified pass-through shape an `evaluatorId` property's *value* can have without being a
  * literal or an alias: `spec.evaluatorId`, forwarded by `pushCandidate` from its own first
  * parameter. Kept as its own check (rather than folded into a broader "could this be an
- * evaluatorId value" test) because the two callers that reuse it want different questions
+ * evaluatorId value" test) because each call site that reuses it wants a different question
  * answered -- see each call site's own comment.
  */
 function isSpecEvaluatorIdPassthrough(value: t.Expression | t.PatternLike): boolean {
@@ -284,7 +284,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
     // `structure-rules.ts` and `vocabulary.ts` build a real `CandidatePassage` inline via
     // `candidates.push({ ..., evaluatorId: '...', ... })`, not through a top-level spec const or a
     // `pushCandidate(...)` call at all, so any scope narrower than "every object literal" would
-    // silently stop covering those two real, current producers.
+    // silently stop covering those real, current producers.
     function computedKeyMightBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
       if (t.isStringLiteral(value)) return declared.has(value.value);
       if (t.isIdentifier(value)) {

@@ -102,8 +102,9 @@ the shape of its neighbours exactly:
 - Approved alternatives supplied by the active rule pack: - near
 ```
 
-`prompt-corpus.test.ts` renders every evaluator with multi-entry arrays. It rejects both shapes. A
-single-entry array hides the defect. That is why the shared fixtures carry a multi-entry variant.
+`prompt-corpus.test.ts` renders every evaluator with multi-entry arrays. It rejects the stranded
+mid-line shape and the outer-list-wrapped shape shown above. A single-entry array hides the defect.
+That is why the shared fixtures carry a multi-entry variant.
 
 ## What every prompt must say
 
@@ -149,7 +150,7 @@ contract test above.
 ```bash
 vp check                                          # format, lint, types
 vp test --run test/unit/prompt-corpus.test.ts test/unit/prompts.test.ts
-vp pack                                           # builds dist/, which the next two steps need
+vp pack                                           # builds dist/, which check-dogfood-lint.mjs and the direct-lint command below both need
 node scripts/ci/check-dogfood-lint.mjs            # the prompt files are linted by this preset too
 ```
 

@@ -326,11 +326,19 @@ function fencedCodeRanges(source) {
  * accepted before the existing leading-space allowance; the returned heading text excludes the
  * blockquote markers themselves, keeping the same `"# Text"` shape a non-blockquoted ATX heading
  * already returns.
+ *
+ * Review then found the Setext pattern still missing the same blockquote allowance the ATX one
+ * just gained (`> Alpha` / `> =====`): its text line rejected a leading `>` outright (the same
+ * character class that excludes `#`), so a blockquoted Setext heading fell all the way back to no
+ * heading at all instead of the enclosing one. The same leading-`>` allowance is now applied to
+ * both the text line and the underline line, and the text-line guard also excludes a raw `>`,
+ * since one is only ever expected there already consumed by the new prefix group.
  */
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
   const atx = /^(?:[ \t]{0,3}>[ \t]?)*([ \t]{0,3}#{1,6}[ \t]+.*)$/gm;
-  const setext = /^ {0,3}([^\s#][^\n]*)\n {0,3}(=+|-+)[ \t]*$/gm;
+  const setext =
+    /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}([^\s#>][^\n]*)\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(=+|-+)[ \t]*$/gm;
   const matches = [];
   for (const match of source.matchAll(atx)) {
     matches.push({ index: match.index, text: match[1].trim() });

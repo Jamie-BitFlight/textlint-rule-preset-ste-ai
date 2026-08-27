@@ -278,6 +278,25 @@ describe('nearestHeading', () => {
     const source = '## Real Heading\n\n> ```\n> # example\n> ```\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('recognizes a Setext heading inside a block quote', () => {
+    // Review found the Setext pattern still rejecting the same leading `>` the ATX pattern had
+    // just been given -- its text-line guard excluded `>` the same way it excludes `#`, so a
+    // blockquoted Setext heading (`> Alpha` / `> =====`) fell all the way back to no heading at
+    // all instead of the enclosing one.
+    const source = '> Alpha\n> =====\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('Alpha');
+  });
+
+  it('recognizes a Setext heading inside a nested block quote', () => {
+    const source = '> > Nested Alpha\n> > ========\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('Nested Alpha');
+  });
+
+  it('ignores a blockquoted-Setext-heading-shaped pair inside a fenced code block', () => {
+    const source = '## Real Heading\n\n```\n> Fake\n> =====\n```\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

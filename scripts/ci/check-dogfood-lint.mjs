@@ -337,30 +337,51 @@ function fencedCodeRanges(source) {
  * Review also found a heading-shaped line inside a multiline HTML comment (`<!--\n# example\n-->`)
  * accepted as a real heading: CommonMark's HTML-comment block runs from `<!--` to the next `-->`
  * regardless of blank lines, and the Markdown parser emits no heading node for anything inside it,
- * but this script's line-by-line regexes had no notion of that block at all. `htmlCommentRanges`
- * closes it the same way `fencedCodeRanges` closes the fenced-code case: a heading-shaped match
- * inside either range is skipped.
+ * but this script's line-by-line regexes had no notion of that block at all. A first fix added
+ * `htmlCommentRanges`, closing only the comment case.
+ *
+ * Review then found the same gap in the sibling HTML block CommonMark treats identically -- a
+ * `<script>`, `<pre>`, `<style>`, or `<textarea>` element also runs from its open tag to its close
+ * tag regardless of blank lines, with no heading node emitted for anything inside it either.
+ * Rather than patch each tag name in as its own future finding, `htmlBlockRanges` now covers both
+ * forms in one pass: an HTML comment closes at the next `-->`, and one of these four tags closes at
+ * its own matching close tag (case-insensitive, since HTML tag names are). Either form left
+ * unclosed runs to the end of the source, the same precedent `fencedCodeRanges` already sets. Other
+ * CommonMark HTML block forms (a processing instruction, a doctype, CDATA, an arbitrary block-level
+ * tag terminated by a blank line) are not covered -- no concrete finding has shown one of those
+ * forms containing a heading-shaped line, in this corpus or in review, so there is nothing yet to
+ * fix rather than to anticipate.
  */
-function htmlCommentRanges(source) {
+function htmlBlockRanges(source) {
+  const opener = /<!--|<(script|pre|style|textarea)(?=[\s>]|$)/gi;
   const ranges = [];
-  let searchFrom = 0;
-  for (;;) {
-    const start = source.indexOf('<!--', searchFrom);
-    if (start === -1) break;
-    const close = source.indexOf('-->', start + 4);
-    if (close === -1) {
+  let match;
+  while ((match = opener.exec(source)) !== null) {
+    const start = match.index;
+    const tag = match[1];
+    let end;
+    if (tag === undefined) {
+      const close = source.indexOf('-->', start + 4);
+      end = close === -1 ? -1 : close + 3;
+    } else {
+      const closer = new RegExp(`</${tag}\\s*>`, 'gi');
+      closer.lastIndex = start + match[0].length;
+      const closeMatch = closer.exec(source);
+      end = closeMatch === null ? -1 : closeMatch.index + closeMatch[0].length;
+    }
+    if (end === -1) {
       ranges.push({ start, end: source.length });
       break;
     }
-    ranges.push({ start, end: close + 3 });
-    searchFrom = close + 3;
+    ranges.push({ start, end });
+    opener.lastIndex = end;
   }
   return ranges;
 }
 
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
-  const htmlComments = htmlCommentRanges(source);
+  const htmlBlocks = htmlBlockRanges(source);
   const atx = /^(?:[ \t]{0,3}>[ \t]?)*([ \t]{0,3}#{1,6}[ \t]+.*)$/gm;
   const setext =
     /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}([^\s#>][^\n]*)\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(=+|-+)[ \t]*$/gm;
@@ -372,7 +393,7 @@ export function nearestHeading(source, index) {
     matches.push({ index: match.index, text: match[1].trim() });
   }
   matches.sort((a, b) => a.index - b.index);
-  const excluded = [...fenced, ...htmlComments];
+  const excluded = [...fenced, ...htmlBlocks];
   let found = '';
   for (const match of matches) {
     if (match.index > index) break;

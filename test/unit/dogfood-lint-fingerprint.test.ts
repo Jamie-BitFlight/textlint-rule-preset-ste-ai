@@ -315,6 +315,44 @@ describe('nearestHeading', () => {
     const source = '## Real Heading\n\n<!--\nunclosed\n\n## Should be hidden\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('ignores a heading-shaped line inside a script block', () => {
+    // Review found the same gap as the HTML-comment case in a sibling CommonMark HTML block form:
+    // a <script>, <pre>, <style>, or <textarea> element also runs from its open tag to its close
+    // tag regardless of blank lines, with no heading node emitted for anything inside it.
+    const source = '## Real Heading\n\n<script>\n# example\n</script>\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it.each(['pre', 'style', 'textarea'])(
+    'ignores a heading-shaped line inside a %s block',
+    (tag) => {
+      const source = `## Real Heading\n\n<${tag}>\n# example\n</${tag}>\n\ntext here\n`;
+      expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+    },
+  );
+
+  it('matches an HTML block tag case-insensitively', () => {
+    const source = '## Real Heading\n\n<SCRIPT>\n# example\n</Script>\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('does not treat a tag name that merely starts with a block tag name as one', () => {
+    // `<scripting>` must not be mistaken for `<script`.
+    const source = '## Real Heading\n\n<scripting>\n\n## Should still be found\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Should still be found');
+  });
+
+  it('treats an unclosed script block as running to end of file, hiding a later heading', () => {
+    const source = '## Real Heading\n\n<script>\nunclosed\n\n## Should be hidden\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('recognizes an HTML block tag carrying attributes', () => {
+    const source =
+      '## Real Heading\n\n<script type="text/javascript">\n# example\n</script>\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

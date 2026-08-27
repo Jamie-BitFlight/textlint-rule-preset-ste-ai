@@ -276,6 +276,19 @@ describe('prompt file parsing', () => {
     }
   });
 
+  it('rejects a mustache token containing a nested brace, not only a flat one', () => {
+    // `[^{}]*` between the braces excluded further braces on the reasoning that a nested-brace
+    // token could not be a placeholder -- but review found `{{foo{bar}}}` has no substring matching
+    // `\{\{[^{}]*\}\}` at all (the lone `{` before "bar" breaks the inner run before a second `{{`
+    // ever appears), so it parsed as ordinary prose and reached the model verbatim, unrendered.
+    expect(() =>
+      parsePromptFile(
+        '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na {{foo{bar}}} b\n<<<USER>>>\nu',
+        'x',
+      ),
+    ).toThrow(/mustache-shaped token/);
+  });
+
   it('every prompt states it performs exactly one classification task', () => {
     // `docs/prompt-authoring.md`'s "What every prompt must say" list leads with "One bounded
     // classification task," but nothing in this file asserted it -- a future prompt broadened into

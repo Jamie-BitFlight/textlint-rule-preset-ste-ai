@@ -184,6 +184,37 @@ describe('request construction', () => {
     expect(a).not.toBe(c);
   });
 
+  // `docs/prompt-authoring.md`'s "Changing a prompt is a cache invalidation" section originally
+  // claimed, unconditionally, that an in-place edit -- even a whitespace-only one -- invalidates
+  // cached verdicts. Review reproduced a counterexample: `contentHash` (see `evaluators.ts`) is
+  // computed from the *rendered* `system`/`user` strings plus `version`/`model`/`temperature`, not
+  // the raw file bytes, so a `<<<META>>>`-only edit (a `task:` line, meant purely for a human
+  // reader) never touches any of those and the hash is unchanged. The doc now scopes the claim to
+  // edits that change what gets rendered; this pins that scope so it cannot silently widen back.
+  it('a <<<META>>> edit alone does not change the parsed system/user text', () => {
+    const source = [
+      '<<<META>>>',
+      'id: one-instruction-per-sentence',
+      'version: v1',
+      'task: original description',
+      '<<<SYSTEM>>>',
+      'Do the thing.',
+      '<<<USER>>>',
+      'Passage: {{passage}}',
+      '',
+    ].join('\n');
+    const metaEdited = source.replace(
+      'task: original description',
+      'task: a rewritten description',
+    );
+
+    const original = parsePromptFile(source, 'original');
+    const edited = parsePromptFile(metaEdited, 'edited');
+
+    expect(edited.system).toBe(original.system);
+    expect(edited.user).toBe(original.user);
+  });
+
   it('golden: the rendered user message for one-instruction-per-sentence is stable', () => {
     const request = buildEvaluatorRequest(
       candidateFor('one-instruction-per-sentence', PAYLOADS['one-instruction-per-sentence']),

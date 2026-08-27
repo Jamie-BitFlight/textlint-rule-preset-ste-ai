@@ -168,7 +168,13 @@ on a stale entry. So progress must be recorded, not left implicit.
 
 ## Changing a prompt is a cache invalidation
 
-The prompt version is recorded in every trace. It is also folded into the content hash. An edit in
-place invalidates cached verdicts instead of serving stale ones. That is the intended behaviour. It
-also means that a whitespace-only edit re-runs adjudication for every affected candidate. Edits to
-`v1` are for defects. A change to what the model is asked belongs in a new version directory.
+The prompt version is recorded in every trace. `buildEvaluatorRequest` folds it into the content
+hash. The hash also covers the model and the temperature. It also covers the rendered
+`<<<SYSTEM>>>`/`<<<USER>>>` text. It does not cover the file's raw bytes. An edit that changes any
+of those re-runs adjudication for every affected candidate instead of serving a stale verdict. That
+is the intended behaviour.
+
+A `<<<META>>>`-only edit never touches the rendered text. `task:` exists purely for a human reader.
+Whitespace `parsePromptFile` trims away before hashing works the same way. Neither edit changes the
+hash. Neither edit touches the cache. Edits to `v1` are for defects. A change to what the model is
+asked belongs in a new version directory.

@@ -274,7 +274,7 @@ describe('prompt file parsing', () => {
   });
 
   it('rejects every mustache-adjacent malformation review found, not only a well-formed placeholder', () => {
-    // This guard was patched three times chasing a *shape* of mustache token instead of the bare
+    // This guard was patched repeatedly chasing a *shape* of mustache token instead of the bare
     // character that makes one possible, and each patch closed exactly the case just reproduced and
     // left the next one open: a strict identifier pattern missed a space or a hyphen inside the
     // braces; excluding braces from the inner match class missed a nested-brace typo, which has no

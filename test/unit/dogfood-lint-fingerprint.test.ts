@@ -188,15 +188,19 @@ describe('cross-heading swap detection (the defect review found in the ordinal-o
 });
 
 describe('findRegressions', () => {
-  it('does not treat a file with no baseline entry as regressing, only main()\'s "added" does', () => {
-    // Review found this defaulting "no entry for this path" and "an entry exists but never
-    // allowed this specific finding" to the same allowed count of 0, so a brand-new dirty file's
-    // findings counted as regressions even though `main()`'s own `added` category exists
-    // specifically to report a file with no baseline entry -- and `--update` then refused to
-    // record that file's debt without `--accept-regressions`, contradicting the assert-mode
-    // message that says plain `--update` records it deliberately.
+  it('flags a brand-new file with no baseline entry, the same as any other new debt', () => {
+    // A prior fix treated "no entry for this path at all" as exempt, the same "no prior state to
+    // regress from" principle `regressionsToGuard` applies when the *whole* baseline file is
+    // missing. Review found that too broad: it let an ordinary `--update` for an unrelated cleanup
+    // silently also record a brand-new dirty file's debt into a baseline that already exists, with
+    // no `--accept-regressions` confirmation at all -- exactly what the module's own contract
+    // ("New and renamed files cannot add debt") and this whole guard exist to prevent. Only the
+    // true bootstrap case (the entire baseline file absent) gets the free pass, and that lives
+    // entirely in `regressionsToGuard`'s own `baselineExists` gate, not here.
     const byFile = new Map([['new.md', new Map([['rule\nmsg\nctx\n#h\n1', 3]])]]);
-    expect(findRegressions(byFile, {})).toEqual([]);
+    expect(findRegressions(byFile, {})).toEqual([
+      { path: 'new.md', ruleId: 'rule', message: 'msg', before: 0, after: 3 },
+    ]);
   });
 
   it('still flags a new finding in a file that already has a baseline entry', () => {

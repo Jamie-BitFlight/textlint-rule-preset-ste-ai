@@ -72,8 +72,8 @@ jobs:
 
   # Separate job, deliberately outside the `verify` matrix. This lints every markdown file the
   # repository authors with the preset the repository ships, which takes minutes; running it once
-  # per Node version would triple that cost to prove the same thing three times. It does not depend
-  # on the Node version under test, only on the preset behaving as built.
+  # per Node version in that matrix would multiply that cost to prove the same thing repeatedly. It
+  # does not depend on the Node version under test, only on the preset behaving as built.
   dogfood:
     name: Lint this repository's own prose with its own preset
     runs-on: ubuntu-latest

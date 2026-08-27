@@ -384,24 +384,25 @@ function toBaselineShape(byFile) {
 
 /**
  * Every (file, findingKey) pair whose current count exceeds what `baseline` allows for it. Covers
- * both a brand-new finding in an already-baselined file (allowed count 0) and an existing one that
- * got more frequent.
+ * a brand-new finding (baseline count 0, whether because the file has no baseline entry at all or
+ * because an existing entry never allowed this specific finding) and an existing one that got more
+ * frequent.
  *
- * A file with no baseline entry at all is not covered here -- `main()`'s `added` list already
- * reports it, and recording its current debt for the first time is creation, not growth, the same
- * principle `regressionsToGuard` already applies one level up when the whole baseline file is
- * missing (see its own comment). Review found this function treating "no entry for this path" and
- * "an entry exists but never allowed this specific finding" identically, both defaulting to an
- * allowed count of 0 -- so a brand-new dirty file's findings counted as regressions even though
- * assert mode's own `added` category already exists specifically to name this file's debt, and
- * `--update` refused to record it without `--accept-regressions`, contradicting the assert-mode
- * message that says plain `--update` records it deliberately.
+ * A file with no baseline entry at all is deliberately covered here too, not exempted: the
+ * module's own contract above states new and renamed files cannot add debt, and only
+ * `--accept-regressions` records it deliberately. Review first found this function silently
+ * absorbing a brand-new file's debt into a baseline that already exists (treating "no prior
+ * baseline entry" the same as the true bootstrap case, where the whole baseline file is missing --
+ * see `regressionsToGuard`'s own comment for why that one case really is exempt), which let an
+ * ordinary `--update` for an unrelated cleanup silently also record a new dirty file's debt with no
+ * `--accept-regressions` confirmation at all -- exactly the "record new debt without deliberate
+ * confirmation" defect this whole guard exists to prevent. `main()`'s `added` list separately names
+ * the file so the contributor sees it either way.
  */
 export function findRegressions(byFile, baseline) {
   const regressions = [];
   for (const [path, findings] of byFile) {
-    if (baseline[path] === undefined) continue;
-    const allowed = baseline[path].findings;
+    const allowed = baseline[path]?.findings ?? {};
     for (const [key, count] of findings) {
       const before = allowed[key] ?? 0;
       if (count > before) {
@@ -512,7 +513,7 @@ function main() {
   if (added.length > 0) {
     console.error('These files are not clean and are not in the baseline:');
     for (const line of added) console.error('  ' + line);
-    console.error('Fix them, or record the debt deliberately with --update.');
+    console.error('Fix them, or record the debt deliberately with --update --accept-regressions.');
   }
   if (regressions.length > 0) {
     console.error('These findings got worse:');

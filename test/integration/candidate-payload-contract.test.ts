@@ -524,10 +524,10 @@ describe('real candidates satisfy their evaluator payload contract', () => {
       const template = provider.get(config.promptVersion, evaluatorId);
 
       // What each template variable *should* resolve to, read directly off the real candidate --
-      // the same three shared fields plus `mode` that `buildEvaluatorRequest` special-cases, or the
-      // payload otherwise. This does not call `buildEvaluatorRequest`; it is the independent source
-      // of truth the rendered request is checked against below, so a bug in that function's own
-      // resolution logic cannot hide by also being read here.
+      // the same shared candidate-level fields that `buildEvaluatorRequest` special-cases below, or
+      // the payload otherwise. This does not call `buildEvaluatorRequest`; it is the independent
+      // source of truth the rendered request is checked against below, so a bug in that function's
+      // own resolution logic cannot hide by also being read here.
       function realValueFor(variable: string): unknown {
         if (variable === 'ruleId') return candidate.ruleId;
         if (variable === 'passage') return candidate.passage;

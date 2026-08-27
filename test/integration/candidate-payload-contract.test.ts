@@ -155,6 +155,25 @@ function walk(node: t.Node, visit: (node: t.Node) => void): void {
   }
 }
 
+/**
+ * A value shape an `evaluatorId` property could actually have: a literal, an alias to a top-level
+ * string const, or the one verified `spec.evaluatorId` pass-through. Shared between
+ * `derivedProducerIds()`'s key-resolution gate and its value-resolution throw, so a value this
+ * test cannot statically resolve is treated identically whichever side notices it first.
+ */
+function valueCouldBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
+  return (
+    t.isStringLiteral(value) ||
+    t.isIdentifier(value) ||
+    (t.isMemberExpression(value) &&
+      !value.computed &&
+      t.isIdentifier(value.object) &&
+      value.object.name === 'spec' &&
+      t.isIdentifier(value.property) &&
+      value.property.name === 'evaluatorId')
+  );
+}
+
 function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvaluatorId> {
   // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
   // without an unsafe assertion: the value returned by a successful lookup is already that type.
@@ -168,8 +187,8 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
   // the loop skipped it outright, and the derived set silently omitted whatever it declared, the
   // same class of silent gap the fixes above already closed for parseable-but-unresolvable syntax.
   // A recursive listing still emits each intermediate directory name as its own entry (confirmed:
-  // `readdirSync(dir, { recursive: true })` on a fixture with `sub/nested.ts` returns
-  // `['sub', 'nested.ts', 'sub/nested.ts']`), which the existing `.ts` filter already excludes.
+  // `readdirSync(dir, { recursive: true })` on a fixture holding only `sub/nested.ts` returns
+  // `['sub', 'sub/nested.ts']`), which the existing `.ts` filter already excludes.
   //
   // `dir` defaults to `RULES_DIR` so every existing call site is unaffected; the parameter exists
   // so `'discovers a producer under a subdirectory'` below can point this at a scratch fixture
@@ -235,6 +254,16 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
     // here does not necessarily name `evaluatorId` at all, so this only throws when the key *is*
     // computed -- a computed key this test cannot statically read is not safe to silently skip,
     // because it might be exactly the property this test exists to find.
+    //
+    // Review then found that reasoning too broad: `walk()` visits every `ObjectExpression` in the
+    // file, not only candidate-spec objects, so an unrelated computed key anywhere -- a lookup
+    // table keyed by a loop variable, an options object keyed by a function parameter -- threw the
+    // same error, breaking valid rule code that has nothing to do with candidate production.
+    // `valueCouldBeEvaluatorId` closes that gap without giving up exhaustiveness: a property whose
+    // *value* cannot possibly be a `SemanticEvaluatorId` (a function call, a number, a nested
+    // object, anything but the three shapes above) cannot be a genuine `evaluatorId: ...`
+    // declaration regardless of what its computed key resolves to, so it is safe to skip without
+    // ever needing to resolve the key at all.
     function resolveKeyAlias(name: string): string {
       const alias = topLevelStringConsts.get(name);
       if (alias === undefined) {
@@ -262,7 +291,9 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
           ? prop.key.value
           : t.isIdentifier(prop.key)
             ? prop.computed
-              ? resolveKeyAlias(prop.key.name)
+              ? valueCouldBeEvaluatorId(prop.value)
+                ? resolveKeyAlias(prop.key.name)
+                : undefined
               : prop.key.name
             : undefined;
         if (keyName !== 'evaluatorId') continue;
@@ -281,14 +312,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
           resolveIdentifierAlias(value.name);
           continue;
         }
-        if (
-          t.isMemberExpression(value) &&
-          !value.computed &&
-          t.isIdentifier(value.object) &&
-          value.object.name === 'spec' &&
-          t.isIdentifier(value.property) &&
-          value.property.name === 'evaluatorId'
-        ) {
+        if (valueCouldBeEvaluatorId(value)) {
           continue; // the one verified pass-through: pushCandidate forwarding spec.evaluatorId
         }
         throw new Error(
@@ -350,6 +374,30 @@ it('discovers a producer under a subdirectory of RULES_DIR, not only its immedia
     writeFileSync(
       join(scratchDir, 'sub', 'nested.ts'),
       "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject a computed object key unrelated to candidate production', () => {
+  // Review found `resolveKeyAlias` called unconditionally for *every* computed Identifier key in
+  // *every* object literal `walk()` visits, not only ones that could plausibly be an `evaluatorId`
+  // declaration -- so a lookup table keyed by a loop variable, unrelated to candidate production
+  // entirely, threw the same "not a same-file top-level string const" error a genuine unresolvable
+  // evaluatorId declaration would. `valueCouldBeEvaluatorId` gates the key resolution on the
+  // property's value shape first: a value that cannot possibly be a `SemanticEvaluatorId` (here, a
+  // number) makes the key irrelevant regardless of what it resolves to.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      'function build(key: string) {\n' +
+        '  const table = { [key]: 42 };\n' +
+        '  return table;\n' +
+        '}\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
     );
     expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
   } finally {

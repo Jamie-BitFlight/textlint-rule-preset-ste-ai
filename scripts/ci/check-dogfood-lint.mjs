@@ -333,9 +333,34 @@ function fencedCodeRanges(source) {
  * heading at all instead of the enclosing one. The same leading-`>` allowance is now applied to
  * both the text line and the underline line, and the text-line guard also excludes a raw `>`,
  * since one is only ever expected there already consumed by the new prefix group.
+ *
+ * Review also found a heading-shaped line inside a multiline HTML comment (`<!--\n# example\n-->`)
+ * accepted as a real heading: CommonMark's HTML-comment block runs from `<!--` to the next `-->`
+ * regardless of blank lines, and the Markdown parser emits no heading node for anything inside it,
+ * but this script's line-by-line regexes had no notion of that block at all. `htmlCommentRanges`
+ * closes it the same way `fencedCodeRanges` closes the fenced-code case: a heading-shaped match
+ * inside either range is skipped.
  */
+function htmlCommentRanges(source) {
+  const ranges = [];
+  let searchFrom = 0;
+  for (;;) {
+    const start = source.indexOf('<!--', searchFrom);
+    if (start === -1) break;
+    const close = source.indexOf('-->', start + 4);
+    if (close === -1) {
+      ranges.push({ start, end: source.length });
+      break;
+    }
+    ranges.push({ start, end: close + 3 });
+    searchFrom = close + 3;
+  }
+  return ranges;
+}
+
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
+  const htmlComments = htmlCommentRanges(source);
   const atx = /^(?:[ \t]{0,3}>[ \t]?)*([ \t]{0,3}#{1,6}[ \t]+.*)$/gm;
   const setext =
     /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}([^\s#>][^\n]*)\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(=+|-+)[ \t]*$/gm;
@@ -347,10 +372,11 @@ export function nearestHeading(source, index) {
     matches.push({ index: match.index, text: match[1].trim() });
   }
   matches.sort((a, b) => a.index - b.index);
+  const excluded = [...fenced, ...htmlComments];
   let found = '';
   for (const match of matches) {
     if (match.index > index) break;
-    if (fenced.some((range) => match.index >= range.start && match.index < range.end)) continue;
+    if (excluded.some((range) => match.index >= range.start && match.index < range.end)) continue;
     found = match.text;
   }
   return found;

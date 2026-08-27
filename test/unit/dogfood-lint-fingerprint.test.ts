@@ -297,6 +297,24 @@ describe('nearestHeading', () => {
     const source = '## Real Heading\n\n```\n> Fake\n> =====\n```\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('ignores a heading-shaped line inside a multiline HTML comment', () => {
+    // Review found a heading-shaped line inside an HTML comment accepted as real -- CommonMark's
+    // HTML-comment block runs from `<!--` to the next `-->` regardless of blank lines, and the
+    // Markdown parser emits no heading node for anything inside it.
+    const source = '## Real Heading\n\n<!--\n# example\n-->\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('does not let a single-line HTML comment exclude a real heading right after it', () => {
+    const source = '<!-- marker -->\n\n## Real Heading\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('treats an unclosed HTML comment as running to end of file, hiding a later heading', () => {
+    const source = '## Real Heading\n\n<!--\nunclosed\n\n## Should be hidden\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

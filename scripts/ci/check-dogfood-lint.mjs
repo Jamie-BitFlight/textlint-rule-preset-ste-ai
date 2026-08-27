@@ -310,14 +310,23 @@ function fencedCodeRanges(source) {
  * two differently named Setext sections kept the same enclosing-heading component (whatever ATX
  * heading precedes both, or none), silently defeating the same cross-heading guard. Both forms are
  * now collected and merged by position before picking the nearest one at or before `index`.
+ *
+ * Review also found the ATX pattern requiring the (up to 3) leading spaces to reach the `#`
+ * directly, when CommonMark also permits an ATX heading inside a block quote (`> # Alpha`, or
+ * nested, `> > # Alpha`). A finding moved from one blockquoted heading's section to a differently
+ * named one kept the same empty-heading key, silently defeating the same cross-heading guard. Any
+ * number of leading `>` markers (each optionally followed by a space, per CommonMark) is now
+ * accepted before the existing leading-space allowance; the returned heading text excludes the
+ * blockquote markers themselves, keeping the same `"# Text"` shape a non-blockquoted ATX heading
+ * already returns.
  */
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
-  const atx = /^ {0,3}#{1,6}[ \t]+.*$/gm;
+  const atx = /^(?:[ \t]{0,3}>[ \t]?)*([ \t]{0,3}#{1,6}[ \t]+.*)$/gm;
   const setext = /^ {0,3}([^\s#][^\n]*)\n {0,3}(=+|-+)[ \t]*$/gm;
   const matches = [];
   for (const match of source.matchAll(atx)) {
-    matches.push({ index: match.index, text: match[0].trim() });
+    matches.push({ index: match.index, text: match[1].trim() });
   }
   for (const match of source.matchAll(setext)) {
     matches.push({ index: match.index, text: match[1].trim() });

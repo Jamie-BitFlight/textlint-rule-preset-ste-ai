@@ -245,6 +245,30 @@ describe('nearestHeading', () => {
     const source = '## Real Heading\n\n```\nFake Title\n----------\n```\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('recognizes an ATX heading inside a block quote', () => {
+    // Review found the ATX pattern requiring the leading spaces to reach the `#` directly, so a
+    // heading inside a block quote (`> # Alpha`) was invisible to this function. A finding moved
+    // from one blockquoted heading's section to a differently named one kept the same empty-heading
+    // key regardless, silently defeating the cross-heading regression guard.
+    const source = '> # Alpha\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('# Alpha');
+  });
+
+  it('recognizes an ATX heading inside a nested block quote', () => {
+    const source = '> > # Nested\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('# Nested');
+  });
+
+  it('does not treat ordinary quoted prose as a heading', () => {
+    const source = '## Real Heading\n\n> just a quote, not a heading\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('ignores a blockquoted-heading-shaped line inside a fenced code block', () => {
+    const source = '## Real Heading\n\n```\n> # Fake\n```\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

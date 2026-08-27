@@ -309,6 +309,31 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
       );
     }
 
+    // A computed key that is neither a StringLiteral nor an Identifier -- a BinaryExpression
+    // (`['evaluator' + 'Id']`), a MemberExpression, a TemplateLiteral, and so on. Review found the
+    // outer ternary below falling through to `undefined` for every such shape, silently skipping
+    // the property the same way an unresolved Identifier key used to before `resolveComputedKey`
+    // existed. This mirrors that same gate-then-throw shape: a value that could not plausibly be an
+    // `evaluatorId` makes the key irrelevant regardless of what it resolves to (the same
+    // `computedKeyMightBeEvaluatorId` gate `resolveComputedKey` uses, so an unrelated computed key
+    // elsewhere in the file -- a lookup table keyed by a template literal, say -- still does not
+    // throw); a value that could be one, behind a key shape this test cannot statically read, is not
+    // safe to silently skip, because it might be exactly the property this test exists to find.
+    //
+    // A numeric or bigint key can never equal the string `"evaluatorId"`, computed or not, so it is
+    // excluded before reaching this function -- see the outer ternary.
+    function resolveOtherComputedKey(
+      key: t.Expression | t.PrivateName,
+      value: t.Expression | t.PatternLike,
+    ): string | undefined {
+      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
+      throw new Error(
+        `${entry}: an object property's computed key is a ${key.type} node this test cannot ` +
+          'statically resolve -- extend derivedProducerIds() to handle this form, or use a ' +
+          'literal, a top-level const, or a non-computed key.',
+      );
+    }
+
     walk(ast.program, (node) => {
       if (!t.isObjectExpression(node)) return;
       for (const prop of node.properties) {
@@ -325,7 +350,9 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
             ? prop.computed
               ? resolveComputedKey(prop.key.name, prop.value)
               : prop.key.name
-            : undefined;
+            : t.isNumericLiteral(prop.key) || t.isBigIntLiteral(prop.key)
+              ? undefined
+              : resolveOtherComputedKey(prop.key, prop.value);
         if (keyName !== 'evaluatorId') continue;
 
         if (prop.shorthand) {
@@ -452,6 +479,29 @@ it('does not reject a computed object key whose string value is not a declared e
         "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
     );
     expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still catches an evaluatorId behind a computed key this test cannot statically resolve', () => {
+  // The final branch of the keyName ternary fell through to `undefined` for a computed key that is
+  // neither a StringLiteral nor an Identifier -- a BinaryExpression (`['evaluator' + 'Id']`), a
+  // MemberExpression, a TemplateLiteral, and so on. `keyName !== 'evaluatorId'` then silently
+  // skipped the property instead of resolving or failing, the same silent-vanish gap already closed
+  // for every other unresolvable form in this function. The value must be a declared evaluator id
+  // -- an undeclared one, like `'future-evaluator'` in the sibling test below, fails the same
+  // `computedKeyMightBeEvaluatorId` value gate `resolveComputedKey` already uses, and is correctly
+  // treated as unrelated rather than as evidence of this defect.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "pushCandidate({ ['evaluator' + 'Id']: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an object property's computed key is a BinaryExpression node this test cannot/,
+    );
   } finally {
     rmSync(scratchDir, { recursive: true, force: true });
   }

@@ -226,16 +226,26 @@ export function localContext(source, index) {
  * paired with a same-character closing fence at least as long, per CommonMark. An unclosed fence
  * runs to the end of the source, since that is what every Markdown renderer already treats the
  * rest of the file as.
+ *
+ * An opening fence may carry an info string after the marker (` ```js `); a closing fence may not
+ * -- CommonMark requires only trailing spaces or tabs there. Review found this treating both the
+ * same way, so a code line that happens to start with the same marker followed by other text (a
+ * fenced example showing ` ```not-a-closing-fence `) closed the range early. Everything after that
+ * false close, up to the *real* closing fence, then read as ordinary prose again, so a heading-
+ * shaped line still inside the block was accepted as real. A line is only treated as a close while
+ * a fence is open and it has nothing but whitespace after the marker; any other fence-marker-shaped
+ * line while open is ordinary code content and does not affect the open state at all.
  */
 function fencedCodeRanges(source) {
-  const fenceLine = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
+  const fenceLine = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
   const ranges = [];
   let open = null;
   for (const match of source.matchAll(fenceLine)) {
     const marker = match[1];
+    const rest = match[2];
     if (open === null) {
       open = { char: marker[0], length: marker.length, start: match.index };
-    } else if (marker[0] === open.char && marker.length >= open.length) {
+    } else if (marker[0] === open.char && marker.length >= open.length && /^[ \t]*$/.test(rest)) {
       ranges.push({ start: open.start, end: match.index + match[0].length });
       open = null;
     }

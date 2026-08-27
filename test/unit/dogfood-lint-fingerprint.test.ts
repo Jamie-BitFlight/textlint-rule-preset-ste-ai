@@ -147,6 +147,17 @@ describe('nearestHeading', () => {
     const source = '```\n# not a heading\n```\n\n## Real After Fence\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real After Fence');
   });
+
+  it('treats a fence-marker-shaped code line with trailing text as still inside the block', () => {
+    // Review found the closing-fence check accepting an info string the way an opening fence does,
+    // so a fenced example showing a fake closing fence (` ```not-a-closing-fence `) ended the range
+    // early. A heading-shaped line between that fake closer and the real one then read as a real
+    // heading instead of fenced content.
+    const source =
+      '## Real Heading\n\n```\nsome code\n```not-a-closing-fence\n# example\n```\n\nSome violation text here.\n';
+    const index = source.indexOf('Some violation');
+    expect(nearestHeading(source, index)).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

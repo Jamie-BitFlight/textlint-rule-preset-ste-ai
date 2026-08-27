@@ -259,6 +259,19 @@ describe('prompt file parsing', () => {
     ).toThrow(/<<<META>>> line that is not a "key: value" pair: "owner Jamie"/);
   });
 
+  it('rejects a <<<META>>> key repeated more than once', () => {
+    // A repeated key (two `task:` lines) silently overwrote the first value instead of being
+    // rejected, so `prompt-corpus.test.ts`'s "no fewer and no more" claim was never actually
+    // exercised against ambiguous, ordering-dependent metadata: `Object.keys(meta)` still equalled
+    // exactly the allowed set regardless of which `task:` line won.
+    expect(() =>
+      parsePromptFile(
+        '<<<META>>>\nid: a\nversion: v1\ntask: first\ntask: second\n<<<SYSTEM>>>\ns\n<<<USER>>>\nu',
+        'x',
+      ),
+    ).toThrow(/<<<META>>> key "task" more than once/);
+  });
+
   it('rejects a placeholder in <<<SYSTEM>>>, since that message is sent to the model unrendered', () => {
     // `noun-cluster-comprehension.md` carried `{{length}}` in <<<SYSTEM>>>; `variables` is derived
     // from <<<USER>>> alone, so nothing rendered it, and every real request sent the model the

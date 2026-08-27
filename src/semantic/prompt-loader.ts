@@ -56,6 +56,11 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   // actually exercised this parser against a malformed line at all: `owner Jamie` (no colon) never
   // reached `meta`, so `Object.keys(meta)` stayed exactly the allowed set regardless, and the
   // corpus test's claim to be exhaustive was untested on the one input it exists to catch.
+  //
+  // Review then found a second way the same corpus test's "no fewer and no more" claim went
+  // untested: a repeated key (two `task:` lines) silently overwrote the first value instead of
+  // being rejected, so `Object.keys(meta)` still equalled exactly the allowed set even though the
+  // file carried ambiguous, ordering-dependent metadata. Duplicate keys are now rejected outright.
   const meta: Record<string, string> = {};
   for (const line of metaBlock.split('\n')) {
     const trimmed = line.trim();
@@ -66,7 +71,11 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
         `Prompt ${origin} has a <<<META>>> line that is not a "key: value" pair: "${trimmed}".`,
       );
     }
-    meta[match[1]] = (match[2] ?? '').trim();
+    const key = match[1];
+    if (key in meta) {
+      throw new PromptError(`Prompt ${origin} has <<<META>>> key "${key}" more than once.`);
+    }
+    meta[key] = (match[2] ?? '').trim();
   }
   const id = meta['id'];
   const version = meta['version'];

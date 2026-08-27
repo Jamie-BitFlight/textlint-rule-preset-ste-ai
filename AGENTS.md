@@ -178,7 +178,7 @@ that looks obviously safe.
 being available. Two routes satisfy the requirement equally: the automated external reviewer, or a
 local subagent review. Merging with neither is never acceptable.
 
-The external reviewer fails in two ways, and one of them is quiet. It declines when the account is over its usage limit. It then replies with a usage-limit message
+The external reviewer fails in more than one way, and one of them is quiet. It declines when the account is over its usage limit. It then replies with a usage-limit message
 instead of a review. That failure is visible. It can also simply stay silent, which is easy to
 read as approval. Treat both as "no
 review has happened." Check for a real review. Do not check only for the absence of complaints.

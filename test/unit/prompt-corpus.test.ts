@@ -50,7 +50,7 @@ const promptFiles = discoverPromptFiles();
  *
  * `formatValue` renders an array as `- one\n- two`. Substituted into the middle of a line, only the
  * first entry stays with its label and every later entry is stranded at the start of its own line,
- * where it is indistinguishable from a neighbouring field. Two shapes are rejected:
+ * where it is indistinguishable from a neighbouring field. The shapes below are rejected:
  *
  *  - a label followed by an inline list marker (`Permitted senses: - to shut`), and
  *  - a list item whose nearest preceding non-item line is not a label ending in `:` — which is what

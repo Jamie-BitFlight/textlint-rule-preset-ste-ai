@@ -351,9 +351,19 @@ function fencedCodeRanges(source) {
  * tag terminated by a blank line) are not covered -- no concrete finding has shown one of those
  * forms containing a heading-shaped line, in this corpus or in review, so there is nothing yet to
  * fix rather than to anticipate.
+ *
+ * Review then found the opener unanchored to line position, so an inline mention of `<script>` --
+ * inside a backtick code span, or in ordinary prose -- opened a block the same way a genuine one
+ * at the start of a line does. An inline mention with no matching close anywhere later in the
+ * document then excluded everything through EOF, the same over-exclusion an unclosed block already
+ * causes legitimately, but for text that was never a block-level HTML element at all per
+ * CommonMark's own rule that this construct must begin a line (up to three leading spaces, the
+ * same allowance every other block-detector in this file already gives). The opener now requires
+ * that position; the closing search is unaffected, since CommonMark itself does not require the
+ * close token to open its own line either -- only the open token does.
  */
 function htmlBlockRanges(source) {
-  const opener = /<!--|<(script|pre|style|textarea)(?=[\s>]|$)/gi;
+  const opener = /^[ \t]{0,3}<!--|^[ \t]{0,3}<(script|pre|style|textarea)(?=[\s>]|$)/gim;
   const ranges = [];
   let match;
   while ((match = opener.exec(source)) !== null) {
@@ -361,7 +371,7 @@ function htmlBlockRanges(source) {
     const tag = match[1];
     let end;
     if (tag === undefined) {
-      const close = source.indexOf('-->', start + 4);
+      const close = source.indexOf('-->', start + match[0].length);
       end = close === -1 ? -1 : close + 3;
     } else {
       const closer = new RegExp(`</${tag}\\s*>`, 'gi');

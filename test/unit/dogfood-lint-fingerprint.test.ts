@@ -353,6 +353,31 @@ describe('nearestHeading', () => {
       '## Real Heading\n\n<script type="text/javascript">\n# example\n</script>\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('does not treat an inline mid-line mention of a block tag as opening an HTML block', () => {
+    // Review found the opener unanchored to line position, so `<script>` inside a backtick code
+    // span -- not a block-level HTML element per CommonMark, which requires the construct to begin
+    // a line -- opened a block anyway. With no closing tag anywhere later in the document, this
+    // excluded everything through EOF, hiding a real heading that should have been found.
+    const source =
+      '## First\n\n' +
+      'Some prose mentioning `<script>` inline, with no closing tag anywhere.\n\n' +
+      '## Second\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Second');
+  });
+
+  it('does not treat an inline mid-line mention of an HTML comment opener as opening one', () => {
+    const source =
+      '## First\n\n' +
+      'Some prose mentioning `<!-- example` inline, with no closing token anywhere.\n\n' +
+      '## Second\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Second');
+  });
+
+  it('still recognizes an HTML block tag indented by up to three spaces', () => {
+    const source = '## Real Heading\n\n   <script>\n# example\n   </script>\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

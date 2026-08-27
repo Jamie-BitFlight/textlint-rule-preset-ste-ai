@@ -245,6 +245,20 @@ describe('prompt file parsing', () => {
     expect(() => provider.get('v1', 'not-an-evaluator')).toThrow(/No prompt asset/);
   });
 
+  it('rejects a <<<META>>> line that is not a "key: value" pair', () => {
+    // A line matching neither shape was silently dropped instead of rejected, so
+    // `prompt-corpus.test.ts`'s "carries exactly the allowed metadata keys" claim was never
+    // actually exercised against a malformed line: `owner Jamie` (no colon) never reached `meta`
+    // at all, so `Object.keys(meta)` stayed exactly the allowed set regardless of what garbage
+    // sat alongside it.
+    expect(() =>
+      parsePromptFile(
+        '<<<META>>>\nid: a\nversion: v1\ntask: t\nowner Jamie\n<<<SYSTEM>>>\ns\n<<<USER>>>\nu',
+        'x',
+      ),
+    ).toThrow(/<<<META>>> line that is not a "key: value" pair: "owner Jamie"/);
+  });
+
   it('rejects a placeholder in <<<SYSTEM>>>, since that message is sent to the model unrendered', () => {
     // `noun-cluster-comprehension.md` carried `{{length}}` in <<<SYSTEM>>>; `variables` is derived
     // from <<<USER>>> alone, so nothing rendered it, and every real request sent the model the

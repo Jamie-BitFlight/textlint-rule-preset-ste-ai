@@ -51,10 +51,22 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   const system = text.slice(systemIndex + '<<<SYSTEM>>>'.length, userIndex).trim();
   const user = text.slice(userIndex + '<<<USER>>>'.length).trim();
 
+  // Review found a line that matches neither shape silently dropped instead of rejected, so
+  // `test/unit/prompt-corpus.test.ts`'s "carries exactly the allowed metadata keys" check never
+  // actually exercised this parser against a malformed line at all: `owner Jamie` (no colon) never
+  // reached `meta`, so `Object.keys(meta)` stayed exactly the allowed set regardless, and the
+  // corpus test's claim to be exhaustive was untested on the one input it exists to catch.
   const meta: Record<string, string> = {};
   for (const line of metaBlock.split('\n')) {
-    const match = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(line.trim());
-    if (match?.[1] !== undefined) meta[match[1]] = (match[2] ?? '').trim();
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+    const match = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(trimmed);
+    if (match?.[1] === undefined) {
+      throw new PromptError(
+        `Prompt ${origin} has a <<<META>>> line that is not a "key: value" pair: "${trimmed}".`,
+      );
+    }
+    meta[match[1]] = (match[2] ?? '').trim();
   }
   const id = meta['id'];
   const version = meta['version'];

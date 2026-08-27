@@ -81,7 +81,7 @@ const RULES_DIR = resolve(
  * Every `evaluatorId` a deterministic rule actually assigns, derived from
  * `src/deterministic/rules/*.ts` source text rather than hand-maintained.
  *
- * Four fixes preceded this one, each a hand-written text pattern closing the gap the last one
+ * Several fixes preceded this one, each a hand-written text pattern closing the gap the last one
  * left open, and each review round finding the next gap the same way: a hand-maintained exemption
  * list that was never re-checked against source; a literal-only regex that missed an identifier
  * alias; a colon-anchored regex that never matched shorthand properties at all; a shorthand
@@ -261,17 +261,30 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
     // production. A first fix gated the throw on the property's *value* AST node type (a string, an
     // identifier, or the verified pass-through) -- too loose in the other direction: an unrelated
     // dictionary with an ordinary string value (`{ [key]: 'ordinary-value' }`) still matched "is a
-    // string literal" and still threw. `computedKeyMightBeEvaluatorId` checks what the value would
-    // actually *mean* instead of merely what shape it has: a string literal only counts when it is
-    // itself a declared evaluator id, and an identifier only counts when it resolves to one -- every
-    // genuine `evaluatorId: ...` value, wherever it appears in this file, is already required to be
-    // exactly one of those (see `addIfDeclared` and `resolveIdentifierAlias` below), so this asks
-    // nothing the value side would not eventually demand anyway, just earlier, before deciding
-    // whether the key is even worth resolving. Restricting *which objects* get scanned in the first
-    // place is not an option here: `structure-rules.ts` and `vocabulary.ts` build a real
-    // `CandidatePassage` inline via `candidates.push({ ..., evaluatorId: '...', ... })`, not through
-    // a top-level spec const or a `pushCandidate(...)` call at all, so any scope narrower than "every
-    // object literal" would silently stop covering those two real, current producers.
+    // string literal" and still threw.
+    //
+    // A second fix checked what the value would actually *mean* instead of merely what shape it
+    // has (a string literal only counts when it is itself a declared evaluator id) -- which then
+    // reopened the exact blind spot `addIfDeclared` exists to close, for the one form this narrower
+    // gate runs before: `{ [EVALUATOR_ID_KEY]: 'future-evaluator' }`, where `EVALUATOR_ID_KEY` *is*
+    // a resolvable same-file top-level const, but `'future-evaluator'` is not yet a declared
+    // evaluator id -- undeclared for the same reason a typo would be. Gating on the value before
+    // ever trying to resolve the key meant a genuinely resolvable, genuinely `evaluatorId`-naming
+    // key got silently skipped instead of resolved and validated, because its *value* did not
+    // pass the declared-id check first.
+    //
+    // `computedKeyMightBeEvaluatorId` now exists only to decide whether an *unresolvable* key is
+    // worth failing loudly over -- resolving a key that *does* name a known top-level const is
+    // always attempted regardless of its value, since resolving it is cheap, cannot itself be
+    // wrong, and lets the existing value-side checks (`addIfDeclared`, `resolveIdentifierAlias`)
+    // do their own job on whatever it resolves to, the same way they already do for a plain
+    // non-computed `evaluatorId: ...` key.
+    //
+    // Restricting *which objects* get scanned in the first place is not an option here:
+    // `structure-rules.ts` and `vocabulary.ts` build a real `CandidatePassage` inline via
+    // `candidates.push({ ..., evaluatorId: '...', ... })`, not through a top-level spec const or a
+    // `pushCandidate(...)` call at all, so any scope narrower than "every object literal" would
+    // silently stop covering those two real, current producers.
     function computedKeyMightBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
       if (t.isStringLiteral(value)) return declared.has(value.value);
       if (t.isIdentifier(value)) {
@@ -281,17 +294,19 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
       return isSpecEvaluatorIdPassthrough(value);
     }
 
-    function resolveKeyAlias(name: string): string {
+    function resolveComputedKey(
+      name: string,
+      value: t.Expression | t.PatternLike,
+    ): string | undefined {
       const alias = topLevelStringConsts.get(name);
-      if (alias === undefined) {
-        throw new Error(
-          `${entry}: an object property's computed key is the identifier "${name}", which is ` +
-            'not a same-file top-level string const this test can resolve -- extend ' +
-            'derivedProducerIds() to handle this form, or use a literal, a top-level const, or ' +
-            'a non-computed key.',
-        );
-      }
-      return alias;
+      if (alias !== undefined) return alias;
+      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
+      throw new Error(
+        `${entry}: an object property's computed key is the identifier "${name}", which is ` +
+          'not a same-file top-level string const this test can resolve -- extend ' +
+          'derivedProducerIds() to handle this form, or use a literal, a top-level const, or ' +
+          'a non-computed key.',
+      );
     }
 
     walk(ast.program, (node) => {
@@ -308,9 +323,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
           ? prop.key.value
           : t.isIdentifier(prop.key)
             ? prop.computed
-              ? computedKeyMightBeEvaluatorId(prop.value)
-                ? resolveKeyAlias(prop.key.name)
-                : undefined
+              ? resolveComputedKey(prop.key.name, prop.value)
               : prop.key.name
             : undefined;
         if (keyName !== 'evaluatorId') continue;
@@ -425,10 +438,9 @@ it('does not reject a computed object key whose value is not a SemanticEvaluator
 it('does not reject a computed object key whose string value is not a declared evaluator id', () => {
   // A first fix (above) gated on the value's AST node *type* -- too loose in the other direction:
   // review reproduced a fresh failure with an ordinary string-valued dictionary, unrelated to
-  // candidate production, still matching "is a string literal" and still throwing at
-  // `resolveKeyAlias` before the real producer in the same file was ever reached.
-  // `computedKeyMightBeEvaluatorId` now checks the string's actual *value* against the declared
-  // evaluator ids, not merely its node type.
+  // candidate production, still matching "is a string literal" and still throwing before the real
+  // producer in the same file was ever reached. `computedKeyMightBeEvaluatorId` now checks the
+  // string's actual *value* against the declared evaluator ids, not merely its node type.
   const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
   try {
     writeFileSync(
@@ -440,6 +452,29 @@ it('does not reject a computed object key whose string value is not a declared e
         "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
     );
     expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still catches an undeclared evaluator id behind a resolvable computed key', () => {
+  // Gating the computed-key resolution on the value's declared-ness (above) reopened the exact
+  // blind spot `addIfDeclared` exists to close, for the one form that gate runs before: a computed
+  // key that *is* a resolvable same-file top-level const (`EVALUATOR_ID_KEY`), whose value is a
+  // typo'd or not-yet-declared evaluator id. Because the value alone failed the declared-id check,
+  // the key was never resolved at all, and the property was silently skipped rather than resolved
+  // and validated. A resolvable key must always be resolved regardless of its value; only an
+  // *unresolvable* key needs the value-based gate, to decide whether skipping it silently is safe.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "const EVALUATOR_ID_KEY = 'evaluatorId';\n" +
+        "pushCandidate({ [EVALUATOR_ID_KEY]: 'future-evaluator', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an "evaluatorId" property is assigned the literal "future-evaluator", which is not a declared/,
+    );
   } finally {
     rmSync(scratchDir, { recursive: true, force: true });
   }

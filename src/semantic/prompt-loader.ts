@@ -96,9 +96,35 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
     );
   }
 
+  const PLACEHOLDER = /\{\{[A-Za-z][A-Za-z0-9_]*\}\}/g;
+
   const variables = [
     ...new Set([...user.matchAll(/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g)].map((m) => m[1] ?? '')),
   ];
+
+  // Review reproduced this against the real `buildEvaluatorRequest` flow, not only a hand-built
+  // fixture: `<<<USER>>>` carrying `{{ passage }}` (a stray space) instead of `{{passage}}` derives
+  // no variable (the strict grammar above doesn't match it), so `buildEvaluatorRequest` never
+  // supplies a value for it, `renderTemplate`'s identical strict regex never matches it either, and
+  // the model receives the literal text `Passage: {{ passage }}` in place of the real passage --
+  // silently, because `renderTemplate`'s "unused supplied value" guard only ever sees the *keys it
+  // was given*, and nothing was given for a placeholder that was never derived in the first place.
+  //
+  // Same lesson as the `<<<SYSTEM>>>` guard above, applied where legitimate placeholders exist
+  // rather than nowhere: strip every well-formed `{{name}}` placeholder out of `user`, and treat any
+  // `{` or `}` character still left over as a malformed mustache-like token, whatever shape it
+  // takes -- spaced, hyphenated, nested, or missing a closing brace.
+  const withoutPlaceholders = user.replace(PLACEHOLDER, '');
+  const strayBraceIndex = withoutPlaceholders.search(/[{}]/);
+  if (strayBraceIndex !== -1) {
+    const near = withoutPlaceholders.slice(Math.max(0, strayBraceIndex - 20), strayBraceIndex + 20);
+    throw new PromptError(
+      `Prompt ${origin} has a "{" or "}" character in <<<USER>>> that is not part of a ` +
+        `well-formed {{placeholder}} (near "${near}") -- fix the placeholder name, or remove the ` +
+        'stray character.',
+    );
+  }
+
   return { id, version, system, user, meta, variables };
 }
 

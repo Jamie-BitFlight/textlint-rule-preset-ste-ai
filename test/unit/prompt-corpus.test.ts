@@ -15,9 +15,9 @@ import { discoverPromptFiles } from '../helpers/prompt-corpus.js';
  *
  * Every check discovers its inputs rather than listing them, for the reason
  * `scripts/ci/check-textlint-configs-resolve.sh` gives: a check that names the files it guards
- * stops guarding the moment someone adds a file. Review found each of these three defects one file
- * at a time, and each fix was applied only to the file the reviewer had named. Discovery is what
- * converts "fix the two files that were pointed at" into "the corpus holds or the build fails".
+ * stops guarding the moment someone adds a file. Review found each of these defects one file at a
+ * time, and each fix was applied only to the file the reviewer had named. Discovery is what
+ * converts "fix the files that were pointed at" into "the corpus holds or the build fails".
  */
 
 /**

@@ -289,6 +289,38 @@ describe('prompt file parsing', () => {
     }
   });
 
+  it('rejects a malformed placeholder in <<<USER>>>, since it would otherwise reach the model literally', () => {
+    // Review reproduced this against the real `buildEvaluatorRequest` flow: `{{ passage }}` (a
+    // stray space) derives no variable, so nothing supplies a value for it and `renderTemplate`'s
+    // identical strict regex never matches it either -- the model received the literal text
+    // `Passage: {{ passage }}` in place of the real passage, with no error anywhere, because
+    // `renderTemplate`'s "unused supplied value" guard only sees keys it was actually given, and
+    // nothing was given for a placeholder `variables` never derived in the first place.
+    for (const token of ['{{ passage }}', '{{passage-text}}', '{{passage}', '{{passage']) {
+      expect(
+        () =>
+          parsePromptFile(
+            `<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\ns\n<<<USER>>>\na ${token} b`,
+            'x',
+          ),
+        token,
+      ).toThrow(/"\{" or "\}" character in <<<USER>>>/);
+    }
+  });
+
+  it('still accepts a well-formed <<<USER>>> placeholder alongside literal prose', () => {
+    // The <<<USER>>> guard strips every well-formed `{{name}}` placeholder before checking for a
+    // stray brace, so a real template -- one or more good placeholders, no malformed one -- must not
+    // throw. Every real prompt asset is exercised the same way by prompt-corpus.test.ts's discovery
+    // loop; this fixture pins the guard's non-firing case directly.
+    expect(() =>
+      parsePromptFile(
+        '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\ns\n<<<USER>>>\nPassage: {{passage}}\nWord: {{word}}',
+        'x',
+      ),
+    ).not.toThrow();
+  });
+
   it('every prompt states it performs exactly one classification task', () => {
     // `docs/prompt-authoring.md`'s "What every prompt must say" list leads with "One bounded
     // classification task," but nothing in this file asserted it -- a future prompt broadened into

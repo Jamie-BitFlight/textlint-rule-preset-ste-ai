@@ -271,9 +271,8 @@ export function localContext(source, index) {
  * range helpers this replaced, so they are gone, not merely unused.
  *
  * `ast` is an optional third parameter so a caller looking up many indices into the same source
- * (see `lint()` below) parses once and passes the result, rather than once per finding: parsing a
- * real ~40KB file in this corpus measured near 60ms, and this function used to run once per error
- * message.
+ * (see `lint()` below) parses once and passes the result, rather than once per finding: this
+ * function used to run once per error message, reparsing the same file's full text every time.
  */
 export function nearestHeading(source, index, ast = parse(source)) {
   const headers = [];

@@ -309,26 +309,59 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
       );
     }
 
+    // Folds a computed key expression down to the literal string it would evaluate to, for the
+    // forms this test can reason about without running the code: a template literal with no
+    // interpolation, a same-file top-level const, and string concatenation of any combination of
+    // those. Every other shape -- a member expression, a function call, a template literal with an
+    // interpolation -- returns `undefined`: genuinely unresolvable, not merely inconvenient to
+    // resolve.
+    function resolveStaticString(node: t.Expression | t.PatternLike): string | undefined {
+      if (t.isStringLiteral(node)) return node.value;
+      if (t.isTemplateLiteral(node) && node.expressions.length === 0) {
+        return node.quasis.map((quasi) => quasi.value.cooked ?? '').join('');
+      }
+      if (t.isIdentifier(node)) return topLevelStringConsts.get(node.name);
+      if (t.isBinaryExpression(node) && node.operator === '+' && !t.isPrivateName(node.left)) {
+        const left = resolveStaticString(node.left);
+        const right = resolveStaticString(node.right);
+        if (left !== undefined && right !== undefined) return left + right;
+      }
+      return undefined;
+    }
+
     // A computed key that is neither a StringLiteral nor an Identifier -- a BinaryExpression
     // (`['evaluator' + 'Id']`), a MemberExpression, a TemplateLiteral, and so on. Review found the
     // outer ternary below falling through to `undefined` for every such shape, silently skipping
     // the property the same way an unresolved Identifier key used to before `resolveComputedKey`
     // existed.
     //
-    // Unlike `resolveComputedKey`, this always throws rather than gating on
-    // `computedKeyMightBeEvaluatorId(value)` first. That gate exists on `resolveComputedKey` to
-    // protect a common, genuinely ambiguous pattern -- `{ [key]: ... }`, an ordinary lookup table
-    // keyed by an Identifier -- from a false-positive throw on unrelated code. Review found gating
-    // this shape the same way reopened the undeclared/typo'd-id blind spot `addIfDeclared` exists to
-    // close: the gate returns false precisely *because* an id is undeclared, so a newly written but
-    // not-yet-declared producer behind this key shape vanished silently instead of failing. A
-    // BinaryExpression, MemberExpression, or TemplateLiteral key is not the ambiguous pattern the
-    // gate protects: real, unrelated code in this repository's rules never uses one as an object
-    // key, so there is no false-positive risk here to trade against, and always throwing is safe.
+    // A first fix always threw for this shape rather than gating on
+    // `computedKeyMightBeEvaluatorId(value)` first, reasoning that real, unrelated code in this
+    // repository's rules never uses one of these shapes as an object key (confirmed by grepping
+    // `src/deterministic/rules/` -- no matches at the time). Review found that reasoning did not
+    // generalize: nothing stops a *future* unrelated object literal from using one of these shapes,
+    // and unconditionally throwing broke the contract suite for any such property regardless of its
+    // value, the same over-eager failure mode `computedKeyMightBeEvaluatorId` already exists to
+    // avoid for Identifier keys.
     //
-    // A numeric or bigint key can never equal the string `"evaluatorId"`, computed or not, so it is
-    // excluded before reaching this function -- see the outer ternary.
-    function resolveOtherComputedKey(key: t.Expression | t.PrivateName): string {
+    // The actual fix is to resolve rather than guess: `resolveStaticString` above statically folds
+    // the common resolvable shapes -- string concatenation, a same-file const, a plain template
+    // literal -- down to the literal string the key evaluates to, so `{ ['evaluator' + 'Id']: ... }`
+    // now resolves to exactly `"evaluatorId"` and flows through the same downstream value checks
+    // (`addIfDeclared`) an ordinary literal key already does, closing the undeclared-value blind spot
+    // without throwing on an unrelated key at all. Only a key this cannot statically fold -- a member
+    // expression, a function call -- falls back to the same gate-then-throw shape
+    // `resolveComputedKey` uses for an unresolvable Identifier key, accepting the same
+    // previously-reviewed tradeoff for the residual, genuinely ambiguous case.
+    function resolveOtherComputedKey(
+      key: t.Expression | t.PrivateName,
+      value: t.Expression | t.PatternLike,
+    ): string | undefined {
+      if (!t.isPrivateName(key)) {
+        const resolved = resolveStaticString(key);
+        if (resolved !== undefined) return resolved;
+      }
+      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
       throw new Error(
         `${entry}: an object property's computed key is a ${key.type} node this test cannot ` +
           'statically resolve -- extend derivedProducerIds() to handle this form, or use a ' +
@@ -354,7 +387,7 @@ function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvalua
               : prop.key.name
             : t.isNumericLiteral(prop.key) || t.isBigIntLiteral(prop.key)
               ? undefined
-              : resolveOtherComputedKey(prop.key);
+              : resolveOtherComputedKey(prop.key, prop.value);
         if (keyName !== 'evaluatorId') continue;
 
         if (prop.shorthand) {
@@ -486,39 +519,39 @@ it('does not reject a computed object key whose string value is not a declared e
   }
 });
 
-it('still catches an evaluatorId behind a computed key this test cannot statically resolve', () => {
+it('resolves a computed key built from string concatenation, not just guesses at it', () => {
   // The final branch of the keyName ternary fell through to `undefined` for a computed key that is
   // neither a StringLiteral nor an Identifier -- a BinaryExpression (`['evaluator' + 'Id']`), a
   // MemberExpression, a TemplateLiteral, and so on. `keyName !== 'evaluatorId'` then silently
   // skipped the property instead of resolving or failing, the same silent-vanish gap already closed
   // for every other unresolvable form in this function.
+  //
+  // An intermediate fix always threw for this shape instead -- simpler, but wrong in the opposite
+  // direction (see the two tests below). `resolveStaticString` actually folds the concatenation to
+  // `"evaluatorId"`, so this now resolves and validates exactly like a literal `evaluatorId` key
+  // would, with no throw at all for a *declared* id.
   const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
   try {
     writeFileSync(
       join(scratchDir, 'future.ts'),
       "pushCandidate({ ['evaluator' + 'Id']: 'passive-voice-adjudication', payload: {} });\n",
     );
-    expect(() => derivedProducerIds(scratchDir)).toThrow(
-      /an object property's computed key is a BinaryExpression node this test cannot/,
-    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
   } finally {
     rmSync(scratchDir, { recursive: true, force: true });
   }
 });
 
-it('still catches an undeclared evaluator id behind a computed key this test cannot resolve', () => {
-  // A first fix (above) gated the throw on `computedKeyMightBeEvaluatorId(value)`, mirroring
-  // `resolveComputedKey`'s own gate -- but that gate exists there to protect a *common* pattern
-  // (`{ [key]: ... }`, an ordinary lookup table keyed by an Identifier) from a false-positive throw.
-  // A BinaryExpression, MemberExpression, or TemplateLiteral key is not that pattern: real,
-  // unrelated code in this repository's rules never uses one as an object key (confirmed by
-  // grepping `src/deterministic/rules/` for a computed key with a non-trivial expression -- no
-  // matches), so there is no false-positive risk here to trade against. Gating on the value anyway
-  // reopened the exact undeclared/typo'd-id blind spot the Identifier-key case already closed:
-  // review found this value gate returning false precisely *because* the id was undeclared, so a
-  // newly written but not-yet-declared producer behind this key shape vanished silently instead of
-  // failing the way its declared counterpart (the sibling test above) does. This key shape now
-  // always throws when unresolvable, without consulting the value at all.
+it('still catches an undeclared evaluator id behind a statically resolvable expression key', () => {
+  // An intermediate fix gated the throw on `computedKeyMightBeEvaluatorId(value)`, mirroring
+  // `resolveComputedKey`'s own gate -- but that gate returns false precisely *because* an id is
+  // undeclared, so a newly written but not-yet-declared producer behind this key shape vanished
+  // silently instead of failing the way its declared counterpart (the test above) does. A second
+  // fix always threw for this shape instead, without consulting the value -- safe for this specific
+  // case, but too broad the other way (see the test below). `resolveStaticString` closes this gap
+  // properly: the concatenation resolves to exactly `"evaluatorId"`, so the property flows into the
+  // same `addIfDeclared` check an ordinary literal key already gets, which is what actually throws
+  // here now -- not the "cannot statically resolve" error the key-shape itself used to produce.
   const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
   try {
     writeFileSync(
@@ -526,7 +559,49 @@ it('still catches an undeclared evaluator id behind a computed key this test can
       "pushCandidate({ ['evaluator' + 'Id']: 'future-evaluator', payload: {} });\n",
     );
     expect(() => derivedProducerIds(scratchDir)).toThrow(
-      /an object property's computed key is a BinaryExpression node this test cannot/,
+      /an "evaluatorId" property is assigned the literal "future-evaluator", which is not a declared/,
+    );
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject an unrelated object whose computed key happens to be a BinaryExpression', () => {
+  // Review found the "always throw for this key shape" fix over-corrected: `walk()` visits every
+  // `ObjectExpression` in the file, so an unrelated object using this shape for something with
+  // nothing to do with candidate production -- `{ ['ordinary' + 'key']: 42 }` -- broke the contract
+  // suite before it ever reached the real producer in the same file. `resolveStaticString` resolves
+  // this to `"ordinarykey"`, which is not `"evaluatorId"`, so the property is correctly skipped with
+  // no throw at all -- proof the key is unrelated, not a guess that it probably is.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      "const table = { ['ordinary' + 'key']: 42 };\n" +
+        'function use() { return table; }\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still fails loudly for a computed key this cannot statically fold at all', () => {
+  // A member expression key (`[NS.KEY]`) is not one of `resolveStaticString`'s resolvable forms --
+  // its value depends on `NS`'s own definition, which this test does not trace. This residual,
+  // genuinely unresolvable case falls back to the same gate-then-throw shape `resolveComputedKey`
+  // uses for an unresolvable Identifier key: a value that could plausibly be an `evaluatorId` is not
+  // safe to silently skip.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "const NS = { KEY: 'evaluatorId' };\n" +
+        "pushCandidate({ [NS.KEY]: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an object property's computed key is a MemberExpression node this test cannot/,
     );
   } finally {
     rmSync(scratchDir, { recursive: true, force: true });

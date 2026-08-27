@@ -304,15 +304,30 @@ function fencedCodeRanges(source) {
  * so a finding moved from a heading at column zero to one indented under a list or blockquote kept
  * the same fingerprint as if it had no enclosing heading at all -- silently defeating the
  * cross-heading regression guard `findingKey` relies on this function for.
+ *
+ * Review also found this recognizing only ATX headings (`# Text`), when CommonMark also permits
+ * Setext headings (a text line followed by an `=`- or `-`-only underline). A finding moved between
+ * two differently named Setext sections kept the same enclosing-heading component (whatever ATX
+ * heading precedes both, or none), silently defeating the same cross-heading guard. Both forms are
+ * now collected and merged by position before picking the nearest one at or before `index`.
  */
 export function nearestHeading(source, index) {
   const fenced = fencedCodeRanges(source);
-  const heading = /^ {0,3}#{1,6}[ \t]+.*$/gm;
+  const atx = /^ {0,3}#{1,6}[ \t]+.*$/gm;
+  const setext = /^ {0,3}([^\s#][^\n]*)\n {0,3}(=+|-+)[ \t]*$/gm;
+  const matches = [];
+  for (const match of source.matchAll(atx)) {
+    matches.push({ index: match.index, text: match[0].trim() });
+  }
+  for (const match of source.matchAll(setext)) {
+    matches.push({ index: match.index, text: match[1].trim() });
+  }
+  matches.sort((a, b) => a.index - b.index);
   let found = '';
-  for (const match of source.matchAll(heading)) {
+  for (const match of matches) {
     if (match.index > index) break;
     if (fenced.some((range) => match.index >= range.start && match.index < range.end)) continue;
-    found = match[0].trim();
+    found = match.text;
   }
   return found;
 }

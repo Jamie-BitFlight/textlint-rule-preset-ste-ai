@@ -217,6 +217,34 @@ describe('nearestHeading', () => {
       '## Real Heading\n\n~~~info with a ` backtick\n# not a heading\n~~~\n\ntext here\n';
     expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
   });
+
+  it('recognizes a Setext heading, not only ATX ones', () => {
+    // Review found this recognizing only ATX headings (`# Text`); CommonMark also permits a Setext
+    // heading -- a text line followed by an `=`- or `-`-only underline. A finding moved between two
+    // differently named Setext sections kept the same enclosing-heading component regardless,
+    // silently defeating the cross-heading regression guard `findingKey` relies on this for.
+    const source = 'Section Title\n=============\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('Section Title');
+  });
+
+  it('does not treat a thematic break as a Setext heading when nothing precedes it', () => {
+    // A `---` line not preceded by a non-blank text line is a thematic break, not a Setext heading
+    // underline -- there is no heading text for it to belong to.
+    const source = '## Real Heading\n\n---\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('does not treat an ATX heading followed by a dashes line as a Setext pair', () => {
+    // The ATX heading line is already a complete heading; the `---` right after it must not be
+    // reinterpreted as a Setext underline turning the ATX line's own text into a duplicate heading.
+    const source = '## Real Heading\n---\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
+
+  it('ignores a Setext-heading-shaped pair inside a fenced code block', () => {
+    const source = '## Real Heading\n\n```\nFake Title\n----------\n```\n\ntext here\n';
+    expect(nearestHeading(source, source.indexOf('text here'))).toBe('## Real Heading');
+  });
 });
 
 /** Builds the same per-finding key `lint()` builds, for a hand-built list of (index) occurrences. */

@@ -82,9 +82,10 @@
  *     regressions when a baseline already exists (see `regressionsToGuard`); creating one for the
  *     first time needs no flag beyond `--update` itself.
  *
- * This file is machine-written and not meant to be hand-edited, the same way
- * `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both exist so a change that affects
- * their subject is a reviewable diff, not so a human composes them by hand.
+ * `scripts/ci/dogfood-lint-baseline.json` -- not this script -- is machine-written and not meant to
+ * be hand-edited, the same way `fixtures/provenance.lock.json` is (see `docs/fixtures.md`): both
+ * exist so a change that affects their subject is a reviewable diff, not so a human composes them
+ * by hand.
  *
  * From these rules:
  *

@@ -8,7 +8,7 @@ someone's document. A prompt edit is a behaviour change, and it is reviewed as o
 
 ## What the loader derives, and what you write
 
-`src/semantic/prompt-loader.ts` parses each file into three sections.
+`src/semantic/prompt-loader.ts` parses each file into the sections below.
 
 ```
 <<<META>>>
@@ -42,9 +42,9 @@ No code read the line. So it drifted. One file separated the names with spaces, 
 file left a placeholder out. A hand-written copy of a derived value is not a convenience. It is a
 second answer to a question that already has one.
 
-## The three declarations that must agree
+## The declarations that must agree
 
-A payload key is named in three places, and all three must say the same thing:
+A payload key is named in each of the places below, and all of them must say the same thing:
 
 1. The evaluator's candidate-producing code path builds it into the candidate payload (see "Adding
    an evaluator" below).

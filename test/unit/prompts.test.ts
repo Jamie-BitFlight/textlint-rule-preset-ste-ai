@@ -256,37 +256,37 @@ describe('prompt file parsing', () => {
         '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na {{x}} b\n<<<USER>>>\nu',
         'x',
       ),
-    ).toThrow(/mustache-shaped token "\{\{x\}\}" in <<<SYSTEM>>>/);
+    ).toThrow(/"\{" or "\}" character in <<<SYSTEM>>>/);
   });
 
-  it('rejects a malformed mustache token in <<<SYSTEM>>>, not only a well-formed placeholder name', () => {
-    // The first version of this guard reused `renderTemplate`'s strict identifier pattern
-    // (`[A-Za-z][A-Za-z0-9_]*`), so `{{ length }}` (a space inside the braces) and
-    // `{{length-default}}` (a hyphen) did not match it and parsed as ordinary prose -- the same
-    // silent-forwarding defect this guard exists to catch, just spelled slightly differently.
-    for (const malformed of ['{{ length }}', '{{length-default}}']) {
+  it('rejects every mustache-adjacent malformation review found, not only a well-formed placeholder', () => {
+    // This guard was patched three times chasing a *shape* of mustache token instead of the bare
+    // character that makes one possible, and each patch closed exactly the case just reproduced and
+    // left the next one open: a strict identifier pattern missed a space or a hyphen inside the
+    // braces; excluding braces from the inner match class missed a nested-brace typo, which has no
+    // substring matching that pattern at all; and even a non-greedy `[\s\S]*?\}\}` still requires a
+    // *complete* closing `}}`, so a truncated typo with one or zero closing braces has no `}}`
+    // anywhere to match. The guard no longer matches a shape at all -- it rejects the bare `{` or
+    // `}` character, so every one of these malformations, flat, nested, or truncated, throws the
+    // same way for the same reason.
+    const malformed = [
+      '{{ length }}', // space inside the braces
+      '{{length-default}}', // hyphen inside the braces
+      '{{foo{bar}}}', // nested brace: no substring matches a flat `\{\{[^{}]*\}\}` or `\{\{.*?\}\}`
+      '{{length}', // truncated: only one closing brace
+      '{{length', // truncated: no closing brace at all
+      'length}}', // truncated: no opening brace at all
+    ];
+    for (const token of malformed) {
       expect(
         () =>
           parsePromptFile(
-            `<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na ${malformed} b\n<<<USER>>>\nu`,
+            `<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na ${token} b\n<<<USER>>>\nu`,
             'x',
           ),
-        malformed,
-      ).toThrow(/mustache-shaped token/);
+        token,
+      ).toThrow(/"\{" or "\}" character in <<<SYSTEM>>>/);
     }
-  });
-
-  it('rejects a mustache token containing a nested brace, not only a flat one', () => {
-    // `[^{}]*` between the braces excluded further braces on the reasoning that a nested-brace
-    // token could not be a placeholder -- but review found `{{foo{bar}}}` has no substring matching
-    // `\{\{[^{}]*\}\}` at all (the lone `{` before "bar" breaks the inner run before a second `{{`
-    // ever appears), so it parsed as ordinary prose and reached the model verbatim, unrendered.
-    expect(() =>
-      parsePromptFile(
-        '<<<META>>>\nid: a\nversion: v1\n<<<SYSTEM>>>\na {{foo{bar}}} b\n<<<USER>>>\nu',
-        'x',
-      ),
-    ).toThrow(/mustache-shaped token/);
   });
 
   it('every prompt states it performs exactly one classification task', () => {

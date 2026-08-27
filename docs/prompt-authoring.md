@@ -22,10 +22,12 @@ task: <one line>
 ```
 
 `<<<SYSTEM>>>` is sent to the model exactly as written. `buildEvaluatorRequest` never renders it.
-A `{{...}}` placeholder there is rejected at load time. Put per-request data in `<<<USER>>>`
-instead. Keep the system message a general instruction, as every other prompt's already is.
+A literal `{` or `}` character there is rejected at load time, mustache-shaped or not. Put
+per-request data in `<<<USER>>>` instead. Keep the system message a general instruction, as every
+other prompt's already is.
 
-`<<<META>>>` carries exactly three keys, and `test/unit/prompt-corpus.test.ts` rejects a fourth.
+`<<<META>>>` carries only the keys in this table, no fewer and no more. `test/unit/prompt-corpus.test.ts`
+asserts the exact set and rejects any mismatch.
 
 | Key       | Who reads it                                                       |
 | --------- | ------------------------------------------------------------------ |

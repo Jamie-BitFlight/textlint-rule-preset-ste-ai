@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '@babel/parser';
@@ -154,7 +155,7 @@ function walk(node: t.Node, visit: (node: t.Node) => void): void {
   }
 }
 
-function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
+function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvaluatorId> {
   // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
   // without an unsafe assertion: the value returned by a successful lookup is already that type.
   const declared = new Map<string, SemanticEvaluatorId>(
@@ -162,9 +163,20 @@ function derivedProducerIds(): ReadonlySet<SemanticEvaluatorId> {
   );
   const ids = new Set<SemanticEvaluatorId>();
 
-  for (const entry of readdirSync(RULES_DIR)) {
+  // `{ recursive: true }`, not a flat listing: review found a one-level `readdirSync` blind to a
+  // producer under a subdirectory of `RULES_DIR` -- its directory entry does not end in `.ts`, so
+  // the loop skipped it outright, and the derived set silently omitted whatever it declared, the
+  // same class of silent gap the fixes above already closed for parseable-but-unresolvable syntax.
+  // A recursive listing still emits each intermediate directory name as its own entry (confirmed:
+  // `readdirSync(dir, { recursive: true })` on a fixture with `sub/nested.ts` returns
+  // `['sub', 'nested.ts', 'sub/nested.ts']`), which the existing `.ts` filter already excludes.
+  //
+  // `dir` defaults to `RULES_DIR` so every existing call site is unaffected; the parameter exists
+  // so `'discovers a producer under a subdirectory'` below can point this at a scratch fixture
+  // instead of committing a nested file under the real `src/deterministic/rules` tree.
+  for (const entry of readdirSync(dir, { recursive: true, encoding: 'utf8' })) {
     if (!entry.endsWith('.ts')) continue;
-    const filePath = join(RULES_DIR, entry);
+    const filePath = join(dir, entry);
     const text = readFileSync(filePath, 'utf8');
     const ast = parse(text, { sourceType: 'module', plugins: ['typescript'] });
 
@@ -326,6 +338,24 @@ it(
     ).not.toBe('function');
   },
 );
+
+it('discovers a producer under a subdirectory of RULES_DIR, not only its immediate children', () => {
+  // Review found a one-level `readdirSync` blind to a producer file nested under a subdirectory:
+  // its directory entry does not end in `.ts`, so the loop skipped it outright, and the derived set
+  // silently omitted whatever it declared -- the same class of silent gap the AST-resolution fixes
+  // above already closed for parseable-but-unresolvable syntax, just one level up in file discovery.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    mkdirSync(join(scratchDir, 'sub'), { recursive: true });
+    writeFileSync(
+      join(scratchDir, 'sub', 'nested.ts'),
+      "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
 
 describe('real candidates satisfy their evaluator payload contract', () => {
   const derivedProducers = derivedProducerIds();

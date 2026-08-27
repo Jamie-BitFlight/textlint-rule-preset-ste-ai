@@ -84,10 +84,10 @@ describe('prompt corpus', () => {
   });
 
   it('carries exactly the allowed metadata keys, no fewer and no more', () => {
-    // `docs/prompt-authoring.md` claims `<<<META>>>` "carries exactly three keys" -- `id` and
+    // `docs/prompt-authoring.md` claims `<<<META>>>` carries only the keys in its table -- `id` and
     // `version` are load-bearing and `parsePromptFile` already throws if either is missing, but
     // `task` had no such check, so a prompt that omitted it silently passed this test, which only
-    // ever rejected an unexpected fourth key, never a missing one.
+    // ever rejected an unexpected extra key, never a missing one.
     for (const file of promptFiles) {
       const { meta } = parsePromptFile(file.text, file.path);
       expect(new Set(Object.keys(meta)), `${file.version}/${file.evaluatorId}`).toEqual(

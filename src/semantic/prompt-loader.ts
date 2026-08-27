@@ -71,26 +71,28 @@ export function parsePromptFile(text: string, origin: string): PromptTemplate {
   // outright rather than silently forwarded -- move the value into `<<<USER>>>`, or drop it and
   // keep the instruction general, the way every sibling prompt's system message already is.
   //
-  // Matches any `{{...}}`-shaped token, not only a well-formed placeholder name: review found the
-  // first version of this guard using `renderTemplate`'s own strict identifier pattern
-  // (`[A-Za-z][A-Za-z0-9_]*`, no spaces or hyphens), which let a malformed token like
-  // `{{ length }}` or `{{length-default}}` parse as ordinary prose and reach the model verbatim --
-  // exactly the defect this guard exists to catch, just spelled slightly differently.
+  // This guard has now been patched three times for the same underlying mistake: matching a
+  // *shape* of mustache token, rather than the bare character that makes one possible. Each patch
+  // closed the exact case review had just reproduced and left the next one open -- a strict
+  // identifier pattern missed `{{ length }}` and `{{length-default}}`; excluding braces from the
+  // inner class (`[^{}]*`) missed a nested-brace typo like `{{foo{bar}}}`, which has no substring
+  // matching that pattern at all; and even the non-greedy `[\s\S]*?\}\}` fix after that still
+  // requires a *complete* closing `}}`, so a truncated typo -- `{{length}` (one closing brace) or
+  // `{{length` (no closing brace at all) -- has no `}}` anywhere to match against and passes
+  // through untouched. Per this repository's own review-cycle guidance: findings that keep
+  // reshaping instead of converging mean the guarded pattern, not its next patch, is wrong.
   //
-  // A later version excluded braces from the inner class (`[^{}]*`) on the reasoning that a token
-  // containing a nested `{` or `}` cannot be a placeholder -- but review found that reasoning is
-  // exactly backwards: a token like `{{foo{bar}}}` has no substring matching `\{\{[^{}]*\}\}` at
-  // all (the lone `{` before "bar" breaks the inner run, and the string never has a second `{{`
-  // after that), so it passed this guard untouched and reached the model verbatim, unrendered,
-  // brace-typo and all. No system message in this corpus ever contains a legitimate literal brace,
-  // so `[\s\S]*?` -- any character, including further braces, matched non-greedily up to the
-  // nearest `}}` -- catches every mustache-shaped opening this guard exists to reject, nested or not.
-  const systemMustache = /\{\{[\s\S]*?\}\}/.exec(system);
-  if (systemMustache !== null) {
+  // No system message in this corpus has any legitimate use for a literal `{` or `}` at all,
+  // mustache-shaped or not (see `test/unit/prompt-corpus.test.ts`'s corpus-wide discovery loop,
+  // which every prompt asset passes through this check). So this rejects the character itself,
+  // not any particular shape a token built from it might or might not complete.
+  const braceIndex = system.search(/[{}]/);
+  if (braceIndex !== -1) {
+    const near = system.slice(Math.max(0, braceIndex - 20), braceIndex + 20);
     throw new PromptError(
-      `Prompt ${origin} has a mustache-shaped token "${systemMustache[0]}" in <<<SYSTEM>>>, but ` +
-        'the system message is sent to the model unrendered -- move it to <<<USER>>>, or remove ' +
-        'it and keep the instruction general.',
+      `Prompt ${origin} has a "{" or "}" character in <<<SYSTEM>>> (near "${near}"), but the ` +
+        'system message is sent to the model unrendered -- move any placeholder to <<<USER>>>, ' +
+        'or remove it and keep the instruction general.',
     );
   }
 

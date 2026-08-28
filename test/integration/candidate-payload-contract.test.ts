@@ -1,0 +1,766 @@
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse } from '@babel/parser';
+import * as t from '@babel/types';
+import { describe, expect, it } from 'vite-plus/test';
+import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
+import { semanticConfigSchema, type SteAiConfigInput } from '../../src/core/config.js';
+import type { CandidatePassage, SemanticEvaluatorId } from '../../src/core/types.js';
+import { buildEvaluatorRequest, evaluatorDefinitions } from '../../src/semantic/evaluators.js';
+import { FilePromptProvider, formatValue } from '../../src/semantic/prompt-loader.js';
+
+/**
+ * `test/unit/prompt-corpus.test.ts` checks the declared contract: `payloadKeys` against what the
+ * template consumes. It never checks that a real deterministic rule actually produces a candidate
+ * satisfying that declaration — every candidate it renders is a hand-built fixture from
+ * `test/helpers/evaluator-payloads.ts`.
+ *
+ * That gap hid a real defect: `passive-voice-adjudication` declared `mode` as a payload key, but
+ * `pushCandidate` (`src/deterministic/rules/candidate-rules.ts`) only ever set it as a top-level
+ * `CandidatePassage.mode` field. Every real request rendered `Passage classification from the
+ * deterministic pass: none`, because `candidate.payload.mode` was always `undefined` — the hand-built
+ * fixture masked this by setting `mode` in both places. Fixed in `src/semantic/evaluators.ts` by
+ * resolving `mode` as a shared candidate-level variable, the same way `ruleId`, `passage` and
+ * `invariants` already are.
+ *
+ * This file closes the gap that let it through: it drives real trigger documents through
+ * `analyseTextDeterministic`, takes the actual `CandidatePassage` a deterministic rule produced, and
+ * confirms every variable the evaluator's prompt template consumes resolves to a real value on that
+ * candidate — not `formatValue`'s `undefined` -> `"none"` fallback standing in for data nobody wired
+ * through.
+ */
+
+const config = semanticConfigSchema.parse({ enabled: true, model: 'test-model' });
+const provider = new FilePromptProvider();
+
+interface Trigger {
+  readonly text: string;
+  /** Per-rule config overrides beyond `semantic.enabled`, when a rule needs one to adjudicate. */
+  readonly rules?: SteAiConfigInput['rules'];
+}
+
+/**
+ * One document per evaluator that has a deterministic rule producing its candidate, each verified
+ * to actually produce a candidate (not just a diagnostic) before being added here. An evaluator
+ * with no producing rule cannot be exercised this way and is not listed -- see the `KNOWN_GAPS`
+ * note below.
+ *
+ * `one-instruction-per-sentence` only reaches its candidate path for the ambiguous comma-joined
+ * case (`src/deterministic/rules/structure-rules.ts`); a clear "and"-joined instruction is decided
+ * deterministically and never produces a candidate at all. `approved-word-sense`'s only producer
+ * gates on `adjudicateSense`, which defaults to `false` and is not implied by `semantic.enabled`.
+ */
+const TRIGGER_DOCUMENTS: Partial<Record<SemanticEvaluatorId, Trigger>> = {
+  'passive-voice-adjudication': { text: 'The valve was closed by the technician.' },
+  'noun-cluster-comprehension': {
+    text: 'Check the engine oil pressure warning lamp test procedure.',
+  },
+  'pronoun-antecedent-ambiguity': {
+    text: 'Connect the sensor to the controller. It must be earthed.',
+  },
+  'one-instruction-per-sentence': { text: 'Remove the cover, install the new filter.' },
+  'approved-word-sense': {
+    text: 'Utilise the torque wrench on each of the four bolts.',
+    rules: { 'unapproved-vocabulary': { adjudicateSense: true } },
+  },
+};
+
+const RULES_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'deterministic',
+  'rules',
+);
+
+/**
+ * Every `evaluatorId` a deterministic rule actually assigns, derived from
+ * `src/deterministic/rules/*.ts` source text rather than hand-maintained.
+ *
+ * Several fixes preceded this one, each a hand-written text pattern closing the gap the last one
+ * left open, and each review round finding the next gap the same way: a hand-maintained exemption
+ * list that was never re-checked against source; a literal-only regex that missed an identifier
+ * alias; a colon-anchored regex that never matched shorthand properties at all; a shorthand
+ * detector that matched destructuring bindings and unrelated bare mentions of the word, not only
+ * genuine object-literal shorthand. Each fix was real and individually correct, and each still
+ * left a syntax shape a text pattern cannot soundly tell apart from a similar-looking one --
+ * object-literal shorthand and destructuring shorthand read identically as text, and only differ
+ * in which kind of node encloses them.
+ *
+ * A real AST closes that class of gap by construction rather than by enumeration, and was tried
+ * first, before the first text-pattern fix: this repository's pinned `typescript` package does not
+ * ship the classic Compiler API this needs -- no `createSourceFile`, no parser at all. The
+ * `derivedProducerIds()'s AST approach is justified` test below pins that claim executably,
+ * rather than as prose that goes stale the moment the pinned version changes; see it for the exact
+ * check. `@babel/parser` was not a project dependency then either, but was already resolved in
+ * `package-lock.json`, pulled in transitively by `magicast` (used by `vite-plus`'s own config
+ * tooling). Declared as a direct devDependency now, pinned to the version already resolved, rather
+ * than continuing to rely on an undeclared transitive one or patching another text-pattern edge
+ * case.
+ *
+ * `walk` is a generic, visitor-key-agnostic AST walk: `@babel/traverse` is not available the same
+ * way `@babel/parser` is, and a real traversal library is more machinery than this needs. It
+ * recurses into every own property that looks like a node or an array of nodes, skipping metadata
+ * fields, which needs no per-node-type knowledge and cannot silently miss a node shape.
+ *
+ * The lookup itself walks for `ObjectExpression` nodes -- genuine object value literals -- and
+ * inspects only their own `.properties`, which is what makes an `ObjectPattern` (a destructuring
+ * binding, from a function parameter or a `const { evaluatorId } = ...` declaration) categorically
+ * unreachable: this never visits an `ObjectPattern`'s properties at all, not merely a check that
+ * excludes them after finding them. Babel's own explicit `shorthand` flag on `ObjectProperty`
+ * replaces the old position-based regex for shorthand detection.
+ *
+ * The `spec.evaluatorId` pass-through inside `pushCandidate` (`candidate-rules.ts`) is still the
+ * one recognised exception -- forwarding an already-declared value into the `CandidatePassage`
+ * `pushCandidate` returns, not a second producer declaration -- but review found the prior fix's
+ * exemption matched any `X.evaluatorId` member expression, not only that one verified site. It is
+ * now matched by name: only a `MemberExpression` whose object is exactly the identifier `spec` is
+ * recognised: anything else -- a differently-named forwarding variable a future producer might
+ * use -- falls through to the same throw as any other unresolvable form, naming the file and the
+ * unresolved code, rather than being silently accepted as an equivalent pass-through it was never
+ * verified to be.
+ */
+function isNode(value: unknown): value is t.Node {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { type?: unknown }).type === 'string'
+  );
+}
+
+const AST_METADATA_KEYS: ReadonlySet<string> = new Set([
+  'loc',
+  'start',
+  'end',
+  'range',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+  'extra',
+]);
+
+function walk(node: t.Node, visit: (node: t.Node) => void): void {
+  visit(node);
+  for (const [key, value] of Object.entries(node)) {
+    if (AST_METADATA_KEYS.has(key)) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) if (isNode(item)) walk(item, visit);
+    } else if (isNode(value)) {
+      walk(value, visit);
+    }
+  }
+}
+
+/**
+ * The one verified pass-through shape an `evaluatorId` property's *value* can have without being a
+ * literal or an alias: `spec.evaluatorId`, forwarded by `pushCandidate` from its own first
+ * parameter. Kept as its own check (rather than folded into a broader "could this be an
+ * evaluatorId value" test) because each call site that reuses it wants a different question
+ * answered -- see each call site's own comment.
+ */
+function isSpecEvaluatorIdPassthrough(value: t.Expression | t.PatternLike): boolean {
+  return (
+    t.isMemberExpression(value) &&
+    !value.computed &&
+    t.isIdentifier(value.object) &&
+    value.object.name === 'spec' &&
+    t.isIdentifier(value.property) &&
+    value.property.name === 'evaluatorId'
+  );
+}
+
+function derivedProducerIds(dir: string = RULES_DIR): ReadonlySet<SemanticEvaluatorId> {
+  // Maps each declared id to itself so a resolved string can be typed as SemanticEvaluatorId
+  // without an unsafe assertion: the value returned by a successful lookup is already that type.
+  const declared = new Map<string, SemanticEvaluatorId>(
+    evaluatorDefinitions.map((d) => [d.id, d.id]),
+  );
+  const ids = new Set<SemanticEvaluatorId>();
+
+  // `{ recursive: true }`, not a flat listing: review found a one-level `readdirSync` blind to a
+  // producer under a subdirectory of `RULES_DIR` -- its directory entry does not end in `.ts`, so
+  // the loop skipped it outright, and the derived set silently omitted whatever it declared, the
+  // same class of silent gap the fixes above already closed for parseable-but-unresolvable syntax.
+  // A recursive listing still emits each intermediate directory name as its own entry (confirmed:
+  // `readdirSync(dir, { recursive: true })` on a fixture holding only `sub/nested.ts` returns
+  // `['sub', 'sub/nested.ts']`), which the existing `.ts` filter already excludes.
+  //
+  // `dir` defaults to `RULES_DIR` so every existing call site is unaffected; the parameter exists
+  // so `'discovers a producer under a subdirectory'` below can point this at a scratch fixture
+  // instead of committing a nested file under the real `src/deterministic/rules` tree.
+  for (const entry of readdirSync(dir, { recursive: true, encoding: 'utf8' })) {
+    if (!entry.endsWith('.ts')) continue;
+    const filePath = join(dir, entry);
+    const text = readFileSync(filePath, 'utf8');
+    const ast = parse(text, { sourceType: 'module', plugins: ['typescript'] });
+
+    // Every top-level `const NAME = 'literal';` in this file, for resolving a same-file identifier
+    // alias back to the string it names. Only `program.body` is scanned, not the full tree, so a
+    // nested `const` inside a function body -- a genuinely different binding -- is not treated as
+    // this file's alias table.
+    const topLevelStringConsts = new Map<string, string>();
+    for (const statement of ast.program.body) {
+      if (!t.isVariableDeclaration(statement) || statement.kind !== 'const') continue;
+      for (const decl of statement.declarations) {
+        if (
+          t.isIdentifier(decl.id) &&
+          decl.init !== null &&
+          decl.init !== undefined &&
+          t.isStringLiteral(decl.init)
+        ) {
+          topLevelStringConsts.set(decl.id.name, decl.init.value);
+        }
+      }
+    }
+
+    // A literal that resolves to a string outside `declared` is not a form this test cannot
+    // parse -- it parsed fine -- it is a producer naming an evaluator that does not exist. Review
+    // found this silently discarded instead of failing: `declared.get(...)` returning `undefined`
+    // just skipped the `ids.add`, so a typo'd or not-yet-declared `evaluatorId` vanished from the
+    // derived set the same way an unresolvable syntax form used to, with no test noticing either.
+    function addIfDeclared(literal: string): void {
+      const known = declared.get(literal);
+      if (known === undefined) {
+        throw new Error(
+          `${entry}: an "evaluatorId" property is assigned the literal "${literal}", which is ` +
+            'not a declared evaluatorDefinitions id -- add the definition, or fix the typo.',
+        );
+      }
+      ids.add(known);
+    }
+
+    function resolveIdentifierAlias(name: string): void {
+      const alias = topLevelStringConsts.get(name);
+      if (alias === undefined) {
+        throw new Error(
+          `${entry}: an "evaluatorId" property is assigned from identifier "${name}", which is ` +
+            'not a same-file top-level string const this test can resolve -- extend ' +
+            'derivedProducerIds() to handle this form, or use a literal or a top-level const.',
+        );
+      }
+      addIfDeclared(alias);
+    }
+
+    // A computed key naming a same-file top-level string const (`{ [EVALUATOR_ID_KEY]: ... }`)
+    // resolves the same way a value identifier alias does. Review found this test treating a
+    // computed Identifier key as categorically dynamic and skipping it unconditionally, which let
+    // a valid producer using that form vanish from the derived set the same way an unresolved
+    // value used to, with no test noticing. Unlike `resolveIdentifierAlias`, an unresolvable key
+    // here does not necessarily name `evaluatorId` at all, so this only throws when the key *is*
+    // computed -- a computed key this test cannot statically read is not safe to silently skip,
+    // because it might be exactly the property this test exists to find.
+    //
+    // Review then found that reasoning too broad twice over: `walk()` visits every
+    // `ObjectExpression` in the file, not only candidate-spec objects, so an unrelated computed key
+    // anywhere -- a lookup table keyed by a loop variable, an options object keyed by a function
+    // parameter -- threw the same error, breaking valid rule code with nothing to do with candidate
+    // production. A first fix gated the throw on the property's *value* AST node type (a string, an
+    // identifier, or the verified pass-through) -- too loose in the other direction: an unrelated
+    // dictionary with an ordinary string value (`{ [key]: 'ordinary-value' }`) still matched "is a
+    // string literal" and still threw.
+    //
+    // A second fix checked what the value would actually *mean* instead of merely what shape it
+    // has (a string literal only counts when it is itself a declared evaluator id) -- which then
+    // reopened the exact blind spot `addIfDeclared` exists to close, for the one form this narrower
+    // gate runs before: `{ [EVALUATOR_ID_KEY]: 'future-evaluator' }`, where `EVALUATOR_ID_KEY` *is*
+    // a resolvable same-file top-level const, but `'future-evaluator'` is not yet a declared
+    // evaluator id -- undeclared for the same reason a typo would be. Gating on the value before
+    // ever trying to resolve the key meant a genuinely resolvable, genuinely `evaluatorId`-naming
+    // key got silently skipped instead of resolved and validated, because its *value* did not
+    // pass the declared-id check first.
+    //
+    // `computedKeyMightBeEvaluatorId` now exists only to decide whether an *unresolvable* key is
+    // worth failing loudly over -- resolving a key that *does* name a known top-level const is
+    // always attempted regardless of its value, since resolving it is cheap, cannot itself be
+    // wrong, and lets the existing value-side checks (`addIfDeclared`, `resolveIdentifierAlias`)
+    // do their own job on whatever it resolves to, the same way they already do for a plain
+    // non-computed `evaluatorId: ...` key.
+    //
+    // Restricting *which objects* get scanned in the first place is not an option here:
+    // `structure-rules.ts` and `vocabulary.ts` build a real `CandidatePassage` inline via
+    // `candidates.push({ ..., evaluatorId: '...', ... })`, not through a top-level spec const or a
+    // `pushCandidate(...)` call at all, so any scope narrower than "every object literal" would
+    // silently stop covering those real, current producers.
+    function computedKeyMightBeEvaluatorId(value: t.Expression | t.PatternLike): boolean {
+      if (t.isStringLiteral(value)) return declared.has(value.value);
+      if (t.isIdentifier(value)) {
+        const alias = topLevelStringConsts.get(value.name);
+        return alias !== undefined && declared.has(alias);
+      }
+      return isSpecEvaluatorIdPassthrough(value);
+    }
+
+    function resolveComputedKey(
+      name: string,
+      value: t.Expression | t.PatternLike,
+    ): string | undefined {
+      const alias = topLevelStringConsts.get(name);
+      if (alias !== undefined) return alias;
+      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
+      throw new Error(
+        `${entry}: an object property's computed key is the identifier "${name}", which is ` +
+          'not a same-file top-level string const this test can resolve -- extend ' +
+          'derivedProducerIds() to handle this form, or use a literal, a top-level const, or ' +
+          'a non-computed key.',
+      );
+    }
+
+    // Folds a computed key expression down to the literal string it would evaluate to, for the
+    // forms this test can reason about without running the code: a template literal with no
+    // interpolation, a same-file top-level const, and string concatenation of any combination of
+    // those. Every other shape -- a member expression, a function call, a template literal with an
+    // interpolation -- returns `undefined`: genuinely unresolvable, not merely inconvenient to
+    // resolve.
+    function resolveStaticString(node: t.Expression | t.PatternLike): string | undefined {
+      if (t.isStringLiteral(node)) return node.value;
+      if (t.isTemplateLiteral(node) && node.expressions.length === 0) {
+        return node.quasis.map((quasi) => quasi.value.cooked ?? '').join('');
+      }
+      if (t.isIdentifier(node)) return topLevelStringConsts.get(node.name);
+      if (t.isBinaryExpression(node) && node.operator === '+' && !t.isPrivateName(node.left)) {
+        const left = resolveStaticString(node.left);
+        const right = resolveStaticString(node.right);
+        if (left !== undefined && right !== undefined) return left + right;
+      }
+      return undefined;
+    }
+
+    // A computed key that is neither a StringLiteral nor an Identifier -- a BinaryExpression
+    // (`['evaluator' + 'Id']`), a MemberExpression, a TemplateLiteral, and so on. Review found the
+    // outer ternary below falling through to `undefined` for every such shape, silently skipping
+    // the property the same way an unresolved Identifier key used to before `resolveComputedKey`
+    // existed.
+    //
+    // A first fix always threw for this shape rather than gating on
+    // `computedKeyMightBeEvaluatorId(value)` first, reasoning that real, unrelated code in this
+    // repository's rules never uses one of these shapes as an object key (confirmed by grepping
+    // `src/deterministic/rules/` -- no matches at the time). Review found that reasoning did not
+    // generalize: nothing stops a *future* unrelated object literal from using one of these shapes,
+    // and unconditionally throwing broke the contract suite for any such property regardless of its
+    // value, the same over-eager failure mode `computedKeyMightBeEvaluatorId` already exists to
+    // avoid for Identifier keys.
+    //
+    // The actual fix is to resolve rather than guess: `resolveStaticString` above statically folds
+    // the common resolvable shapes -- string concatenation, a same-file const, a plain template
+    // literal -- down to the literal string the key evaluates to, so `{ ['evaluator' + 'Id']: ... }`
+    // now resolves to exactly `"evaluatorId"` and flows through the same downstream value checks
+    // (`addIfDeclared`) an ordinary literal key already does, closing the undeclared-value blind spot
+    // without throwing on an unrelated key at all. Only a key this cannot statically fold -- a member
+    // expression, a function call -- falls back to the same gate-then-throw shape
+    // `resolveComputedKey` uses for an unresolvable Identifier key, accepting the same
+    // previously-reviewed tradeoff for the residual, genuinely ambiguous case.
+    function resolveOtherComputedKey(
+      key: t.Expression | t.PrivateName,
+      value: t.Expression | t.PatternLike,
+    ): string | undefined {
+      if (!t.isPrivateName(key)) {
+        const resolved = resolveStaticString(key);
+        if (resolved !== undefined) return resolved;
+      }
+      if (!computedKeyMightBeEvaluatorId(value)) return undefined;
+      throw new Error(
+        `${entry}: an object property's computed key is a ${key.type} node this test cannot ` +
+          'statically resolve -- extend derivedProducerIds() to handle this form, or use a ' +
+          'literal, a top-level const, or a non-computed key.',
+      );
+    }
+
+    walk(ast.program, (node) => {
+      if (!t.isObjectExpression(node)) return;
+      for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop)) continue;
+        // A key can be an Identifier (`evaluatorId: ...`), a StringLiteral (`'evaluatorId': ...`),
+        // a computed literal (`['evaluatorId']: ...`), or a computed identifier naming a same-file
+        // top-level string const (`[EVALUATOR_ID_KEY]: ...`) -- review found this test skipping
+        // the StringLiteral form, then the computed-literal form, then this last one, with no
+        // throw any time, letting such a producer vanish from the derived set without failing any
+        // test. Only a non-computed Identifier key can be `shorthand`.
+        const keyName = t.isStringLiteral(prop.key)
+          ? prop.key.value
+          : t.isIdentifier(prop.key)
+            ? prop.computed
+              ? resolveComputedKey(prop.key.name, prop.value)
+              : prop.key.name
+            : t.isNumericLiteral(prop.key) || t.isBigIntLiteral(prop.key)
+              ? undefined
+              : resolveOtherComputedKey(prop.key, prop.value);
+        if (keyName !== 'evaluatorId') continue;
+
+        if (prop.shorthand) {
+          // `{ ...base, evaluatorId, payload }` -- the property's own name is the value.
+          resolveIdentifierAlias(keyName);
+          continue;
+        }
+        const value = prop.value;
+        if (t.isStringLiteral(value)) {
+          addIfDeclared(value.value);
+          continue;
+        }
+        if (t.isIdentifier(value)) {
+          resolveIdentifierAlias(value.name);
+          continue;
+        }
+        if (isSpecEvaluatorIdPassthrough(value)) {
+          continue; // the one verified pass-through: pushCandidate forwarding spec.evaluatorId
+        }
+        throw new Error(
+          `${entry}: an "evaluatorId" property has a value this test cannot statically resolve ` +
+            `to a string (a ${value.type} node) -- extend derivedProducerIds() to handle this form.`,
+        );
+      }
+    });
+  }
+
+  return ids;
+}
+
+/**
+ * Evaluator variables allowed to resolve from missing data today, each tracked by an open issue
+ * rather than silently permitted. A gap landing here without a citation is a regression this test
+ * must still catch -- only a cited, already-known gap belongs on this list.
+ *
+ * `approved-word-sense`'s only real producer (`src/deterministic/rules/vocabulary.ts`, the
+ * unapproved-vocabulary path) never populates `permittedSenses`: nothing in `src/` reads the rule
+ * pack's `senses` field at all, so the sense-adjudication feature the schema, prompt and evaluator
+ * all support has no working trigger yet. See
+ * https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/111.
+ */
+const KNOWN_GAPS: ReadonlySet<string> = new Set(['approved-word-sense.permittedSenses']);
+
+function candidatesFor(evaluatorId: SemanticEvaluatorId, trigger: Trigger): CandidatePassage[] {
+  const result = analyseTextDeterministic(trigger.text, {
+    config: {
+      semantic: { enabled: true, model: 'test-model' },
+      ...(trigger.rules === undefined ? {} : { rules: trigger.rules }),
+    },
+  });
+  return result.candidates.filter((c) => c.evaluatorId === evaluatorId);
+}
+
+it(
+  "derivedProducerIds()'s AST approach is justified: this repository's pinned typescript " +
+    'package still exposes no classic Compiler API to parse with instead',
+  () => {
+    const ts: Record<string, unknown> = createRequire(import.meta.url)('typescript');
+    expect(
+      typeof ts['createSourceFile'],
+      'typescript now exports createSourceFile -- the doc comment above derivedProducerIds() ' +
+        'claims this repository cannot use the classic Compiler API for that reason; if this ' +
+        'starts failing, re-read that comment and decide whether the AST approach is still needed',
+    ).not.toBe('function');
+  },
+);
+
+it('discovers a producer under a subdirectory of RULES_DIR, not only its immediate children', () => {
+  // Review found a one-level `readdirSync` blind to a producer file nested under a subdirectory:
+  // its directory entry does not end in `.ts`, so the loop skipped it outright, and the derived set
+  // silently omitted whatever it declared -- the same class of silent gap the AST-resolution fixes
+  // above already closed for parseable-but-unresolvable syntax, just one level up in file discovery.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    mkdirSync(join(scratchDir, 'sub'), { recursive: true });
+    writeFileSync(
+      join(scratchDir, 'sub', 'nested.ts'),
+      "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject a computed object key whose value is not a SemanticEvaluatorId at all', () => {
+  // Review found `resolveKeyAlias` called unconditionally for *every* computed Identifier key in
+  // *every* object literal `walk()` visits, not only ones that could plausibly be an `evaluatorId`
+  // declaration -- so a lookup table keyed by a loop variable, unrelated to candidate production
+  // entirely, threw the same "not a same-file top-level string const" error a genuine unresolvable
+  // evaluatorId declaration would. `computedKeyMightBeEvaluatorId` gates the key resolution on the
+  // property's value shape first: a value that cannot possibly be a `SemanticEvaluatorId` (here, a
+  // number) makes the key irrelevant regardless of what it resolves to.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      'function build(key: string) {\n' +
+        '  const table = { [key]: 42 };\n' +
+        '  return table;\n' +
+        '}\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject a computed object key whose string value is not a declared evaluator id', () => {
+  // A first fix (above) gated on the value's AST node *type* -- too loose in the other direction:
+  // review reproduced a fresh failure with an ordinary string-valued dictionary, unrelated to
+  // candidate production, still matching "is a string literal" and still throwing before the real
+  // producer in the same file was ever reached. `computedKeyMightBeEvaluatorId` now checks the
+  // string's actual *value* against the declared evaluator ids, not merely its node type.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      'function build(key: string) {\n' +
+        "  const table = { [key]: 'ordinary-value' };\n" +
+        '  return table;\n' +
+        '}\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('resolves a computed key built from string concatenation, not just guesses at it', () => {
+  // The final branch of the keyName ternary fell through to `undefined` for a computed key that is
+  // neither a StringLiteral nor an Identifier -- a BinaryExpression (`['evaluator' + 'Id']`), a
+  // MemberExpression, a TemplateLiteral, and so on. `keyName !== 'evaluatorId'` then silently
+  // skipped the property instead of resolving or failing, the same silent-vanish gap already closed
+  // for every other unresolvable form in this function.
+  //
+  // An intermediate fix always threw for this shape instead -- simpler, but wrong in the opposite
+  // direction (see the two tests below). `resolveStaticString` actually folds the concatenation to
+  // `"evaluatorId"`, so this now resolves and validates exactly like a literal `evaluatorId` key
+  // would, with no throw at all for a *declared* id.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "pushCandidate({ ['evaluator' + 'Id']: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still catches an undeclared evaluator id behind a statically resolvable expression key', () => {
+  // An intermediate fix gated the throw on `computedKeyMightBeEvaluatorId(value)`, mirroring
+  // `resolveComputedKey`'s own gate -- but that gate returns false precisely *because* an id is
+  // undeclared, so a newly written but not-yet-declared producer behind this key shape vanished
+  // silently instead of failing the way its declared counterpart (the test above) does. A second
+  // fix always threw for this shape instead, without consulting the value -- safe for this specific
+  // case, but too broad the other way (see the test below). `resolveStaticString` closes this gap
+  // properly: the concatenation resolves to exactly `"evaluatorId"`, so the property flows into the
+  // same `addIfDeclared` check an ordinary literal key already gets, which is what actually throws
+  // here now -- not the "cannot statically resolve" error the key-shape itself used to produce.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "pushCandidate({ ['evaluator' + 'Id']: 'future-evaluator', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an "evaluatorId" property is assigned the literal "future-evaluator", which is not a declared/,
+    );
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('does not reject an unrelated object whose computed key happens to be a BinaryExpression', () => {
+  // Review found the "always throw for this key shape" fix over-corrected: `walk()` visits every
+  // `ObjectExpression` in the file, so an unrelated object using this shape for something with
+  // nothing to do with candidate production -- `{ ['ordinary' + 'key']: 42 }` -- broke the contract
+  // suite before it ever reached the real producer in the same file. `resolveStaticString` resolves
+  // this to `"ordinarykey"`, which is not `"evaluatorId"`, so the property is correctly skipped with
+  // no throw at all -- proof the key is unrelated, not a guess that it probably is.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'lookup.ts'),
+      "const table = { ['ordinary' + 'key']: 42 };\n" +
+        'function use() { return table; }\n' +
+        "pushCandidate({ evaluatorId: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(derivedProducerIds(scratchDir)).toEqual(new Set(['passive-voice-adjudication']));
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still fails loudly for a computed key this cannot statically fold at all', () => {
+  // A member expression key (`[NS.KEY]`) is not one of `resolveStaticString`'s resolvable forms --
+  // its value depends on `NS`'s own definition, which this test does not trace. This residual,
+  // genuinely unresolvable case falls back to the same gate-then-throw shape `resolveComputedKey`
+  // uses for an unresolvable Identifier key: a value that could plausibly be an `evaluatorId` is not
+  // safe to silently skip.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "const NS = { KEY: 'evaluatorId' };\n" +
+        "pushCandidate({ [NS.KEY]: 'passive-voice-adjudication', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an object property's computed key is a MemberExpression node this test cannot/,
+    );
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+it('still catches an undeclared evaluator id behind a resolvable computed key', () => {
+  // Gating the computed-key resolution on the value's declared-ness (above) reopened the exact
+  // blind spot `addIfDeclared` exists to close, for the one form that gate runs before: a computed
+  // key that *is* a resolvable same-file top-level const (`EVALUATOR_ID_KEY`), whose value is a
+  // typo'd or not-yet-declared evaluator id. Because the value alone failed the declared-id check,
+  // the key was never resolved at all, and the property was silently skipped rather than resolved
+  // and validated. A resolvable key must always be resolved regardless of its value; only an
+  // *unresolvable* key needs the value-based gate, to decide whether skipping it silently is safe.
+  const scratchDir = mkdtempSync(join(tmpdir(), 'derived-producer-ids-'));
+  try {
+    writeFileSync(
+      join(scratchDir, 'future.ts'),
+      "const EVALUATOR_ID_KEY = 'evaluatorId';\n" +
+        "pushCandidate({ [EVALUATOR_ID_KEY]: 'future-evaluator', payload: {} });\n",
+    );
+    expect(() => derivedProducerIds(scratchDir)).toThrow(
+      /an "evaluatorId" property is assigned the literal "future-evaluator", which is not a declared/,
+    );
+  } finally {
+    rmSync(scratchDir, { recursive: true, force: true });
+  }
+});
+
+describe('real candidates satisfy their evaluator payload contract', () => {
+  const derivedProducers = derivedProducerIds();
+  const covered = evaluatorDefinitions
+    .map((d) => d.id)
+    .filter((id) => TRIGGER_DOCUMENTS[id] !== undefined);
+
+  it('finds at least one evaluatorId assignment in the rules source, so derivation is not vacuous', () => {
+    expect(derivedProducers.size).toBeGreaterThan(0);
+  });
+
+  it('has a trigger document for exactly the evaluators src/deterministic/rules assigns', () => {
+    // Fails loudly whichever way the two sets diverge: a new producer added without a trigger
+    // document, or an existing trigger document left behind after its rule stopped assigning that
+    // evaluatorId -- both are the same "TRIGGER_DOCUMENTS no longer matches source" defect.
+    const triggerIds = Object.keys(TRIGGER_DOCUMENTS).toSorted();
+    expect(triggerIds).toEqual([...derivedProducers].toSorted());
+  });
+
+  it('covers every evaluator that has a deterministic producer', () => {
+    for (const definition of evaluatorDefinitions) {
+      const trigger = TRIGGER_DOCUMENTS[definition.id];
+      // 1 stands in for "not applicable" when there is no trigger to run -- the sibling test above
+      // already fails when a derived producer has no trigger document, and this expect must stay
+      // unconditional regardless of that other test's outcome.
+      const candidateCount =
+        trigger === undefined ? 1 : candidatesFor(definition.id, trigger).length;
+      expect(
+        candidateCount,
+        `${definition.id}: trigger document produced no candidate`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  for (const evaluatorId of covered) {
+    it(`${evaluatorId}: the rendered request carries the real candidate's own data`, () => {
+      const trigger = TRIGGER_DOCUMENTS[evaluatorId];
+      if (trigger === undefined) throw new Error('unreachable: covered only lists documented ids');
+      const produced = candidatesFor(evaluatorId, trigger)[0];
+      if (produced === undefined) throw new Error(`no candidate produced for ${evaluatorId}`);
+      const candidate: CandidatePassage = produced;
+
+      const template = provider.get(config.promptVersion, evaluatorId);
+
+      // What each template variable *should* resolve to, read directly off the real candidate --
+      // the same shared candidate-level fields that `buildEvaluatorRequest` special-cases below, or
+      // the payload otherwise. This does not call `buildEvaluatorRequest`; it is the independent
+      // source of truth the rendered request is checked against below, so a bug in that function's
+      // own resolution logic cannot hide by also being read here.
+      function realValueFor(variable: string): unknown {
+        if (variable === 'ruleId') return candidate.ruleId;
+        if (variable === 'passage') return candidate.passage;
+        if (variable === 'invariants') return candidate.invariants;
+        if (variable === 'mode') return candidate.mode;
+        return candidate.payload[variable];
+      }
+
+      for (const variable of template.variables) {
+        const gapKey = `${evaluatorId}.${variable}`;
+        const isKnownGap = KNOWN_GAPS.has(gapKey);
+        const isDefined = realValueFor(variable) !== undefined;
+        const message = isKnownGap
+          ? `${gapKey} is listed as a known gap but now has real data -- remove it from KNOWN_GAPS`
+          : `${gapKey}: real candidate has no value for {{${variable}}}`;
+        expect(isDefined, message).toBe(!isKnownGap);
+      }
+
+      // The request the real pipeline would actually send. Checked against `realValueFor` above,
+      // not against the fixtures `test/unit/prompts.test.ts` uses -- this is what would have caught
+      // the `mode` defect: `candidate.payload.mode` was `undefined`, `candidate.mode` was
+      // `'descriptive'`, and only rendering the request and checking for `'descriptive'` verbatim
+      // catches a resolution path that reads the wrong one.
+      const request = buildEvaluatorRequest(candidate, config, provider);
+      const rendered = request.messages[1]?.content ?? '';
+      for (const variable of template.variables) {
+        const gapKey = `${evaluatorId}.${variable}`;
+        if (KNOWN_GAPS.has(gapKey)) continue;
+        const expected = formatValue(realValueFor(variable));
+        // Anchored to the placeholder's own label, not a bare substring search. Review found the
+        // bare form false-passes: pronoun-antecedent-ambiguity's real offsetInPassage is 0, and
+        // its own template carries unrelated boilerplate reading "offsets are 0-based" -- so
+        // `rendered.toContain('0')` was satisfied by that text even when {{offsetInPassage}}'s own
+        // placeholder rendered as "none". Confirmed by construction: replacing the real render's
+        // correct "...passage: 0" with "...passage: none" left `rendered.includes('0')` still true.
+        // `labeledExpectation` finds the text template.user itself carries immediately before
+        // {{variable}}, on the same line, and requires that label followed by the real value to
+        // appear together in the rendered output -- pinning each value to its own placeholder's
+        // position instead of to the passage anywhere.
+        const labeled = labeledExpectation(template.user, variable, expected);
+        expect(
+          rendered,
+          `${gapKey}: rendered request does not carry the real candidate's value for ` +
+            `{{${variable}}} at its own label -- buildEvaluatorRequest resolved it from ` +
+            `somewhere else, or another field's text happens to contain the same value`,
+        ).toContain(labeled);
+      }
+    });
+  }
+});
+
+/**
+ * The text `template.user` carries immediately before `{{variable}}`, from the start of that
+ * line, concatenated with `expected`. Checking this combined string, rather than `expected` alone,
+ * requires the rendered request to carry the value at the position its own placeholder occupies,
+ * not merely anywhere in the passage or another field's rendered text.
+ *
+ * A placeholder that begins its own line (`{{passage}}` on a bare line, for instance) yields an
+ * empty label here, which reduces to the original bare check for that one case -- still correct,
+ * since a value alone on its own line is already unlikely to collide with unrelated boilerplate
+ * the way a short, common value substituted mid-line can.
+ *
+ * A line can carry more than one placeholder --
+ * `noun-cluster-comprehension`'s "Cluster length: {{length}} (configured limit: {{limit}})" is
+ * one -- so the label cannot simply be "back to the start of the line": for `{{limit}}`, that
+ * would include `{{length}}`'s own literal, unrendered brace syntax, which never appears in a
+ * real rendered request (it is always substituted first). Caught by this function's own first
+ * version failing exactly that case when run. The label instead starts right after the nearest
+ * earlier placeholder's closing `}}` on the same line, when one exists, so it only ever contains
+ * text this template renders verbatim.
+ */
+function labeledExpectation(templateText: string, variable: string, expected: string): string {
+  const placeholder = `{{${variable}}}`;
+  const index = templateText.indexOf(placeholder);
+  if (index === -1) {
+    throw new Error(
+      `template does not contain {{${variable}}} -- unreachable for a declared variable`,
+    );
+  }
+  const lineStart = templateText.lastIndexOf('\n', index) + 1;
+  const precedingClose = templateText.lastIndexOf('}}', index);
+  const labelStart = precedingClose >= lineStart ? precedingClose + 2 : lineStart;
+  const label = templateText.slice(labelStart, index);
+  return label + expected;
+}

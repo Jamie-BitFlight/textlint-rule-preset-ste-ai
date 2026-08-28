@@ -48,7 +48,7 @@ export const evaluatorDefinitions: readonly EvaluatorDefinition[] = [
   {
     id: 'passive-voice-adjudication',
     title: 'Passive voice adjudication',
-    payloadKeys: ['construction', 'auxiliary', 'participle', 'hasExplicitAgent', 'mode'],
+    payloadKeys: ['construction', 'auxiliary', 'participle', 'hasExplicitAgent'],
     requiredKeys: ['construction'],
     description:
       'Is this be-form plus participle a true passive verb, or an adjectival state? Only the ' +
@@ -157,6 +157,17 @@ export function buildEvaluatorRequest(
     }
     if (variable === 'invariants') {
       values[variable] = formatValue(candidate.invariants);
+      continue;
+    }
+    if (variable === 'mode') {
+      // `mode` is a candidate-level field (`sentence.mode`, set by every rule via `pushCandidate`),
+      // never a payload key: no deterministic rule puts it in `candidate.payload`. Resolving it
+      // from `payloadKeys` here, as passive-voice-adjudication's template does, silently reads
+      // `undefined` and renders "none" in every real request — `mode` was never wired into the
+      // rule's payload in the first place, only into hand-built test fixtures that happened to set
+      // both places at once. Reproduced against a real candidate before this fix, from
+      // `analyseTextDeterministic('The valve was closed by the technician.', ...)`.
+      values[variable] = candidate.mode;
       continue;
     }
     if (!definition.payloadKeys.includes(variable)) {

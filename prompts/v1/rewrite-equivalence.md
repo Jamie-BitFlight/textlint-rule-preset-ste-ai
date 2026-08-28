@@ -2,7 +2,6 @@
 id: rewrite-equivalence
 version: v1
 task: Decide whether a proposed rewrite preserves the technical meaning of the original.
-variables: ruleId, passage, invariants, original, rewritten, protectedLiterals
 <<<SYSTEM>>>
 You are a meaning-preservation gate for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.

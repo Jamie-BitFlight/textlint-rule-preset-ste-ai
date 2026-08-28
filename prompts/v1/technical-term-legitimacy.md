@@ -2,7 +2,6 @@
 id: technical-term-legitimacy
 version: v1
 task: Decide whether an unlisted word is a legitimate technical name or avoidable general vocabulary.
-variables: ruleId, passage, invariants, term, domainHint, knownTerms
 <<<SYSTEM>>>
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.
@@ -64,7 +63,8 @@ Invariants that must not change in any suggestion:
 
 Term: {{term}}
 Domain hint: {{domainHint}}
-Terms the active rule pack already recognises: {{knownTerms}}
+Terms the active rule pack already recognises:
+{{knownTerms}}
 
 Passage (offsets are 0-based into this exact string):
 {{passage}}

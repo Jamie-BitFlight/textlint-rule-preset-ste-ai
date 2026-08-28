@@ -2,7 +2,6 @@
 id: approved-word-sense
 version: v1
 task: Decide whether a word is used in a sense the active rule pack permits.
-variables: ruleId, passage, invariants, word, permittedSenses, approvedAlternatives, offsetInPassage
 <<<SYSTEM>>>
 You are a controlled-language adjudicator for technical documentation. You perform exactly one
 classification task and you return exactly one JSON object.
@@ -59,8 +58,10 @@ Invariants that must not change in any suggestion:
 
 Word: {{word}}
 Character offset of the occurrence in the passage: {{offsetInPassage}}
-Permitted senses supplied by the active rule pack: {{permittedSenses}}
-Approved alternatives supplied by the active rule pack: {{approvedAlternatives}}
+Permitted senses supplied by the active rule pack:
+{{permittedSenses}}
+Approved alternatives supplied by the active rule pack:
+{{approvedAlternatives}}
 
 Passage (offsets are 0-based into this exact string):
 {{passage}}

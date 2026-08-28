@@ -1,0 +1,31 @@
+# Files this preset must never score as this repository's own prose.
+#
+# textlint auto-detects this file (see `textlint --help`'s `--ignore-path` default), so every
+# invocation honours it: `vp check`, an ad hoc `node_modules/.bin/textlint`, a future CI step,
+# and `scripts/ci/check-dogfood-lint.mjs`. That is the point of putting the exclusion here rather
+# than inside one script's target globs — a glob only protects the tool that reads it, and the
+# dogfood ratchet is not the only thing that runs textlint against this repository.
+#
+# Only the categories below belong here, and nothing else:
+#
+#   1. Content whose violations are the deliverable, not debt. `examples/sample.md` and
+#      `examples/rule-pack/sample.md` are each documented in their own README.md as carrying
+#      "deliberate violations" — the whole point of the file is to fail the linter so a
+#      first-time user sees real findings. Scoring one as prose debt would be scoring a fixture
+#      against the thing it exists to demonstrate.
+#
+#   2. Content this repository does not author. `fixtures/original/` and `fixtures/compliant/`
+#      are verbatim (or licensed-rewrite) excerpts of other projects' documentation, tracked for
+#      provenance in fixtures/manifest.json and fixtures/LICENSES.md — see docs/fixtures.md. They
+#      are the corpus the rule engine is tested against, not writing this project is responsible
+#      for. `scripts/ci/check-dogfood-lint.mjs` discovers every tracked `*.md` file rather than
+#      reading a target list, so excluding them here is what keeps a licensed excerpt out of this
+#      repository's own lint debt — not an omission from a hand-picked glob.
+#
+# A file belongs on this list only for one of the reasons above. "It currently has a lot of
+# errors" is not one of them — that is what scripts/ci/dogfood-lint-baseline.json is for.
+
+examples/sample.md
+examples/rule-pack/sample.md
+fixtures/original/**
+fixtures/compliant/**

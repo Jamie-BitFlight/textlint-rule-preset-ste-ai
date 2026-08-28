@@ -22,9 +22,9 @@ dropped. Plain `git diff --` and `git checkout --` compare against the index onl
 from the index only too. That is a no-op on a staged mutation.
 
 Before committing new prose to a project's own rules or instructions files, self-check it first.
-Check it against that project's own doc-hygiene rules. A hardcoded count or a derivable fact
-slipped past review more than once in one session. Each review checked code quality only, not the
-repo's own way of working.
+Check it against that project's own doc-hygiene rules. A review that checks code quality only can
+let a hardcoded count or a derivable fact through. It also needs to check the repo's own way of
+working.
 
 Tell a dispatched review agent to check a change against the target repo's own rule files too.
 Also point it at the repo's own AGENTS.md or CLAUDE.md. A generic code-quality review does not

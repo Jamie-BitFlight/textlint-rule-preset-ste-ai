@@ -94,4 +94,56 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     // The valid sibling entry must survive the malformed one, not be wiped out alongside it.
     expect(result.config.rules['no-contractions']?.['enabled']).toBe(false);
   });
+
+  /**
+   * Regression: `getAnalysis` is called once per enabled rule, each with only its own
+   * `perRuleOptions` entry (see this function's own doc comment on `reportedRunNoticesFor` in
+   * `adapter.ts`). An earlier version folded that entry's *key* into `mergedRules` unconditionally,
+   * even when its value was `{}` -- no rule-specific options beyond being enabled, the common case.
+   * `cacheKey` hashes the whole merged config, so two rules that both carry empty options still
+   * produced different cache entries purely because they were keyed under different rule ids, even
+   * though neither call's `mergedRules` differed in any way that could change the analysis.
+   * Reproduced directly against this repo's own real preset (14 rules): instrumenting the cache with
+   * a trace showed 14 misses, 0 hits, for one document -- confirmed here at the `getAnalysis` level,
+   * not just observed as a slow corpus run.
+   */
+  it('shares one cache entry across rules whose own options are empty', () => {
+    const text = 'Utilise the bracket.\n';
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', {}]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['punctuation-constraints', {}]]),
+    );
+    expect(promiseA).toBe(promiseB);
+  });
+
+  /** The narrower fix must not reopen what it replaced: a rule with genuinely distinct own options
+   * still gets its own cache entry, not folded into the shared one. */
+  it('still gives a rule with genuinely distinct own options its own cache entry', () => {
+    const text = 'Utilise the bracket.\n';
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', {}]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['abbreviation-introduction', { additionalWellKnown: ['FOO'] }]]),
+    );
+    expect(promiseA).not.toBe(promiseB);
+  });
 });

@@ -1,4 +1,5 @@
 import type { SteAiConfig } from './config.js';
+import { provisionalRulePack } from './default-pack.js';
 import { gateFix, type DeterministicRule, type RuleInput } from './rule.js';
 import { rangesOverlap } from './text.js';
 import type {
@@ -124,12 +125,15 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 // fabricated dictionary entry, a loosened limit — so the diagnostic still carried a
                 // citation naming a section that describes different data than what actually fired.
                 // Matching a string proves the string matches; it proves nothing about the data
-                // behind it. Only `pack.isBundledDefault` — genuine identity with the bundled
-                // singleton, set on that one object and stripped by schema parsing from anything a
-                // supplier submits (see `RulePack.isBundledDefault`, `core/types.ts`) — proves the
-                // cited data is what the citation claims it is.
+                // behind it. A copyable field on the pack object was tried next (`isBundledDefault`)
+                // and also found insufficient: `{ ...provisionalRulePack, rules: attackerRules }`
+                // carries that field through object spread along with every other own property, so
+                // it proved nothing about where `rules` (or `dictionary`) actually came from either.
+                // Only `pack === provisionalRulePack` — genuine reference identity with the one
+                // singleton object, which spread cannot preserve because spread always allocates a
+                // new object — proves the cited data is what the citation claims it is.
                 sourceRef:
-                  pack.isBundledDefault === true || packTrusted
+                  pack === provisionalRulePack || packTrusted
                     ? packSpec.sourceRef
                     : `unverified citation from untrusted rule pack "${displaySafePackId(pack.metadata.id)}"`,
               },

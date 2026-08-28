@@ -167,20 +167,26 @@ describe('verifiedAuthority', () => {
   });
 });
 
-describe('RulePack.isBundledDefault', () => {
-  // `src/core/runner.ts` trusts `pack.isBundledDefault` to decide whether an untrusted pack's
-  // sourceRef citation can be honoured (#66, Codex review round 4). That trust rests entirely on
-  // this property: `rulePackSchema` is a plain `z.object`, so any key it does not declare is
-  // stripped during parsing, regardless of what the input asserts. Pin it directly, not just by
-  // comment, since the whole security argument depends on it.
+describe('provisionalRulePack identity', () => {
+  // `src/core/runner.ts` trusts `pack === provisionalRulePack` (genuine reference identity with
+  // the one bundled-default singleton, imported directly from `core/default-pack.ts`) to decide
+  // whether an untrusted pack's sourceRef citation can be honoured (#66). Two earlier mechanisms
+  // were tried and both found forgeable by Codex review on PR #116: a declared `status` field
+  // (round 1-2, a supplier's pack could just declare it), and a copyable `isBundledDefault` field
+  // on the pack object (round 4-7, `{ ...provisionalRulePack, rules: attackerRules }` carries a
+  // plain field through object spread along with every other own property). Reference identity is
+  // the one thing spread cannot fake: `{ ...provisionalRulePack }` always allocates a new object.
 
-  it('is set on the real bundled default pack', () => {
-    expect(provisionalRulePack.isBundledDefault).toBe(true);
+  it('parseRulePack always returns a fresh object, never the bundled singleton', () => {
+    const parsed = parseRulePack(validPackJson(), 'test');
+
+    expect(parsed).not.toBe(provisionalRulePack);
   });
 
-  it("cannot be forged by a supplier's pack, even one that declares it explicitly", () => {
-    const parsed = parseRulePack(validPackJson({ isBundledDefault: true }), 'test');
+  it('a structurally identical copy of the bundled pack is not the bundled pack', () => {
+    const copy = { ...provisionalRulePack };
 
-    expect(parsed.isBundledDefault).toBeUndefined();
+    expect(copy).not.toBe(provisionalRulePack);
+    expect(copy).toEqual(provisionalRulePack);
   });
 });

@@ -3,11 +3,17 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
+import { resolveConfig } from '../../src/core/config.js';
+import { analyseDocument } from '../../src/core/document.js';
+import { runDeterministicRules } from '../../src/core/runner.js';
+import { deterministicRules } from '../../src/deterministic/index.js';
+import type { RulePack } from '../../src/core/types.js';
 import {
   RulePackError,
   packPermitsConformanceClaim,
   parseRulePack,
 } from '../../src/rule-pack/loader.js';
+import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 /**
  * The rule pack is this package's only extension point, and until this file existed it had no test
@@ -221,15 +227,56 @@ describe('rule pack: the trust gate', () => {
 
   it('honours the real bundled default pack, unmodified, with no rulePack configured', () => {
     // The only citation that needs no trust is the one actually produced by the literal bundled
-    // singleton `provisionalRulePack` — identified in `runner.ts` by `pack.isBundledDefault`, a
-    // field set only on that one object and stripped by schema parsing from anything a supplier
-    // submits, never by comparing any text a supplied pack could copy. Confirms the positive case:
-    // the real default keeps working with no `rulePack` configured at all.
+    // singleton `provisionalRulePack` — identified in `runner.ts` by `pack === provisionalRulePack`,
+    // genuine reference identity with that one object, never by comparing any text or any field a
+    // supplied pack could copy. Confirms the positive case: the real default keeps working with no
+    // `rulePack` configured at all.
     const diagnostic = only(VOCABULARY_DOC, {}, 'unapproved-vocabulary');
 
     expect(diagnostic.ruleStatus).toBe('provisional');
     expect(diagnostic.meta).toMatchObject({
       sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+    });
+  });
+
+  it('withholds the citation from a spread copy of the bundled pack, even though every field matches (#66, round 8)', () => {
+    // Codex review on PR #116, round 8: `isBundledDefault` (the mechanism used before this test)
+    // was a plain field on the `RulePack` object, so `{ ...provisionalRulePack, rules: forged }`
+    // carried it through object spread along with every other own property — proven directly
+    // before this fix: a caller of the public `runDeterministicRules` API who spreads the bundled
+    // pack and overrides its `rules`/`dictionary` got the forged data trusted as if it were the
+    // real bundled pack's own. Reference identity is the one property spread cannot copy, because
+    // spread always allocates a new object; this pins that the new object is never trusted.
+    const forgedPack: RulePack = {
+      ...provisionalRulePack,
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          status: 'normative',
+          sourceRef: 'FORGED CITATION: not the real bundled pack data',
+          enabled: true,
+        },
+      ],
+      dictionary: {
+        approved: [],
+        unapproved: [{ term: 'florp', alternatives: ['widget'], safeSubstitution: false }],
+        preferred: [],
+      },
+    };
+    expect(forgedPack).not.toBe(provisionalRulePack);
+
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: 'The florp is broken.\n' });
+    const result = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config: resolveConfig({}),
+      pack: forgedPack,
+    });
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+
+    expect(diagnostic?.ruleStatus).toBe('supplementary');
+    expect(diagnostic?.meta).not.toMatchObject({
+      sourceRef: 'FORGED CITATION: not the real bundled pack data',
     });
   });
 

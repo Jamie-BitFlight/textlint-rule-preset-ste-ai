@@ -1,0 +1,123 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
+
+/**
+ * `.claude/rules/review-cycle-efficiency.md` documents two procedures for hiding uncommitted work
+ * during intervening work, then restoring it exactly: `git stash push -u` / `git stash pop
+ * --index`, and a two-patch fallback for when `git stash` is refused. Both procedures make a
+ * specific, falsifiable claim -- a file with both staged and unstaged changes (`git status`'s `MM`)
+ * comes back exactly as `MM`, not degraded to a single state -- which two rounds of Codex review
+ * found the file's own text got wrong on its first two drafts (plain `git stash pop`, and a
+ * single-patch fallback restored with `git apply --index`, both degrade `MM` to a single state).
+ *
+ * Per this repo's own AGENTS.md ("A doc that describes runtime behaviour needs an executable
+ * pin... Verify the replacement claim empirically before writing it. Run the thing."), these cases
+ * run the exact command sequences the rules file documents against a real scratch git repository,
+ * not a mock, and assert the documented outcome actually holds.
+ */
+
+let repoDir: string;
+let scratchDir: string;
+
+function git(...args: string[]): string {
+  return execFileSync('git', args, { cwd: repoDir, encoding: 'utf8' });
+}
+
+function statusShort(): string {
+  // `git status --short`'s porcelain format is `XY filename`, where a leading space in `XY` is
+  // semantically significant (` M` means unstaged-only, distinct from `M ` staged-only) -- a plain
+  // `.trim()` on the whole output strips that leading space off the first line, silently turning
+  // ` M f.txt` into `M f.txt` and making this helper unable to tell the two states apart. Only the
+  // trailing newline is stripped.
+  return git('status', '--short').replace(/\n$/, '');
+}
+
+beforeEach(() => {
+  repoDir = mkdtempSync(join(tmpdir(), 'ste-ai-stash-fallback-repo-'));
+  // Patch files must live outside the repo -- writing them inside it would make git see them as
+  // untracked files of their own, muddying the very status assertions this suite makes.
+  scratchDir = mkdtempSync(join(tmpdir(), 'ste-ai-stash-fallback-patches-'));
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'test');
+  writeFileSync(join(repoDir, 'f.txt'), 'line1\n');
+  git('add', 'f.txt');
+  git('commit', '-q', '-m', 'init');
+});
+
+afterEach(() => {
+  rmSync(repoDir, { recursive: true, force: true });
+  rmSync(scratchDir, { recursive: true, force: true });
+});
+
+/** Puts `f.txt` into `MM` state: one line staged, a second line only in the working tree. */
+function makeMmFile(): void {
+  writeFileSync(join(repoDir, 'f.txt'), 'line1\nstaged-change\n');
+  git('add', 'f.txt');
+  writeFileSync(join(repoDir, 'f.txt'), 'line1\nstaged-change\nunstaged-change\n');
+}
+
+describe('git stash push/pop --index preserves a staged-and-unstaged file exactly', () => {
+  it('restores MM as MM, not as a single degraded state', () => {
+    makeMmFile();
+    expect(statusShort()).toBe('MM f.txt');
+
+    git('stash', 'push', '-u', '-q');
+    expect(statusShort()).toBe('');
+
+    // The intervening work would happen here.
+
+    git('stash', 'pop', '--index', '-q');
+    expect(statusShort()).toBe('MM f.txt');
+  });
+
+  it('plain "git stash pop" (no --index) demonstrably loses the staged half -- this is the bug the rule warns against, not a recommended step', () => {
+    makeMmFile();
+    git('stash', 'push', '-u', '-q');
+    git('stash', 'pop', '-q');
+    // Degrades from `MM` to ` M`: the staged half is gone.
+    expect(statusShort()).toBe(' M f.txt');
+  });
+});
+
+describe('the documented two-patch fallback preserves a staged-and-unstaged file exactly', () => {
+  it('restores MM as MM via: two patches, revert, apply staged, stage it, apply unstaged', () => {
+    makeMmFile();
+    expect(statusShort()).toBe('MM f.txt');
+
+    const stagedPatch = git('diff', '--cached', '--', 'f.txt');
+    const unstagedPatch = git('diff', '--', 'f.txt');
+
+    git('checkout', 'HEAD', '--', 'f.txt');
+    expect(statusShort()).toBe('');
+
+    // The intervening work would happen here.
+
+    const stagedPatchPath = join(scratchDir, 'staged.patch');
+    const unstagedPatchPath = join(scratchDir, 'unstaged.patch');
+    writeFileSync(stagedPatchPath, stagedPatch);
+    writeFileSync(unstagedPatchPath, unstagedPatch);
+
+    git('apply', '--allow-empty', stagedPatchPath);
+    git('add', 'f.txt');
+    git('apply', '--allow-empty', unstagedPatchPath);
+
+    expect(statusShort()).toBe('MM f.txt');
+  });
+
+  it('a single combined "git diff HEAD" patch, restored with "git apply --index", demonstrably loses the split -- this is the bug the rule warns against, not a recommended step', () => {
+    makeMmFile();
+    const combinedPatch = git('diff', 'HEAD', '--', 'f.txt');
+    git('checkout', 'HEAD', '--', 'f.txt');
+
+    const patchPath = join(scratchDir, 'combined.patch');
+    writeFileSync(patchPath, combinedPatch);
+    git('apply', '--index', patchPath);
+
+    // Degrades from `MM` to `M `: the unstaged half is gone (fully staged instead).
+    expect(statusShort()).toBe('M  f.txt');
+  });
+});

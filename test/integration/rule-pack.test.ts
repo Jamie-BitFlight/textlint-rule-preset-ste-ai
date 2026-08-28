@@ -157,13 +157,11 @@ describe('rule pack: the trust gate', () => {
     expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
   });
 
-  it("passes an untrusted pack's citation through unchanged when it only restates the rule's own default", () => {
-    // The trust gate withholds a citation only when the pack entry claims something the rule does
-    // not already claim about itself. Every shipped rule's own `meta.status` is `provisional`
-    // (`DISCLAIMER.md`), so a pack entry that also declares `provisional` is not claiming anything
-    // beyond the rule's built-in baseline, and its citation is not neutralised just because the pack
-    // as a whole is untrusted. This is also what lets the bundled provisional pack's own citations
-    // through without needing `trustedRulePackIds` to name it.
+  it("withholds the citation even when the declared status matches the rule's own default", () => {
+    // Codex review on PR #116, round 2: matching `status` was not enough either. Every shipped
+    // rule's own `meta.status` is `provisional`, so an untrusted pack could declare `provisional`
+    // too and still supply a fabricated citation — the status matched, but the citation text was
+    // still the pack's own unverified claim, not something the rule's own code already asserted.
     const diagnostic = only(
       VOCABULARY_DOC,
       {
@@ -181,7 +179,39 @@ describe('rule pack: the trust gate', () => {
     );
 
     expect(diagnostic.ruleStatus).toBe('provisional');
-    expect(diagnostic.meta).toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("passes an untrusted pack's citation through unchanged when it repeats the rule's own sourceRef verbatim", () => {
+    // The trust gate withholds a citation only when its *text* is the pack's own claim. A pack
+    // entry cannot change what `rule.meta.sourceRef` is — only whether it repeats that exact string
+    // — so an entry that does repeat it verbatim is not asserting anything beyond what the rule's
+    // own code already asserts, and its citation is not neutralised just because the pack as a
+    // whole is untrusted. This is also what lets the bundled provisional pack's own citations
+    // through without needing `trustedRulePackIds` to name it (every shipped rule's pack entry
+    // repeats that same rule's own `sourceRef` exactly — see `test/unit/rule-pack-loader.test.ts`
+    // for nothing that pins this specific invariant; verified ad hoc for this test instead).
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'provisional',
+              sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).toMatchObject({
+      sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+    });
   });
 
   it('honours a declared status only once the operator names the pack as trusted', () => {

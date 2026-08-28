@@ -118,15 +118,19 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
               ruleStatus: packStatus,
               meta: {
                 ...processed.meta,
-                // A pack entry that only restates the rule's own built-in status (`rule.meta.status`
-                // — always `provisional` for every shipped rule) makes no claim for a citation to
-                // misrepresent, so its `sourceRef` is honoured regardless of trust; this is what lets
-                // the bundled provisional pack's self-referential citations through without needing
-                // `trustedRulePackIds` to name it. A pack entry that declares anything else — a real
-                // claim about this rule's authority — has its citation withheld unless the pack
-                // itself is trusted.
+                // Matching `status` was not enough (Codex review on PR #116): every shipped rule's
+                // own status is `"provisional"`, so an untrusted pack could declare `"provisional"`
+                // too and still supply a fabricated standard citation — the status matched, but the
+                // *citation text* was still the pack's own unverified claim. The only citation that
+                // needs no trust is the one the rule already carries in code — `rule.meta.sourceRef`
+                // — because a pack entry cannot change what that string is, only whether it repeats
+                // it verbatim. Any other citation text is the pack's own claim and is withheld unless
+                // the pack itself is trusted. The bundled provisional pack's entries repeat their
+                // rule's own `sourceRef` exactly (verified: every shipped rule's pack entry matches),
+                // so its citations still reach diagnostics without needing `trustedRulePackIds` to
+                // name it.
                 sourceRef:
-                  packSpec.status === rule.meta.status || packTrusted
+                  packSpec.sourceRef === rule.meta.sourceRef || packTrusted
                     ? packSpec.sourceRef
                     : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
               },

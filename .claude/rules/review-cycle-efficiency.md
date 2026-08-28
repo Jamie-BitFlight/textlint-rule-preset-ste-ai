@@ -10,11 +10,11 @@ with that name.
 Dispatch a plan's independent nodes as parallel `isolation: "worktree"` agents from the start of
 the wave.
 
-`git stash push -u` worked directly in this environment. This was confirmed twice: once on the
-whole tree, once scoped to one file. An earlier note here called `git stash` blocked. That claim
-was wrong.
+Try `git stash push -u` first. Do not assume it is blocked. An earlier note here called it
+blocked. That turned out to be wrong at the time. Whether it works can vary by environment and
+permission policy. Verify it fresh each time instead of trusting either claim from memory.
 
-If `git stash` is ever refused, use this fallback instead. First, save the diff:
+If `git stash` is refused, use this fallback instead. First, save the diff:
 `git diff HEAD -- <files> > patch`. Next, revert the files: `git checkout HEAD -- <files>`. Do the
 intervening work. Then restore the diff: `git apply --index patch`. Diff and checkout both use
 `HEAD`. A file already staged before the revert is captured too, and restored too, not silently
@@ -23,7 +23,7 @@ from the index only too. That is a no-op on a staged mutation.
 
 Before committing new prose to a project's own rules or instructions files, self-check it first.
 Check it against that project's own doc-hygiene rules. A hardcoded count or a derivable fact
-slipped past review three times in one session. Each review checked code quality only, not the
+slipped past review more than once in one session. Each review checked code quality only, not the
 repo's own way of working.
 
 Tell a dispatched review agent to check a change against the target repo's own rule files too.

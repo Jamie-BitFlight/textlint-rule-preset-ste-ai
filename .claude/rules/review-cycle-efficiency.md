@@ -13,15 +13,20 @@ the wave.
 Try `git stash push -u` first. Do not assume it is blocked. An earlier note here called it
 blocked. That turned out to be wrong at the time. Whether it works can vary by environment and
 permission policy. Verify it fresh each time instead of trusting either claim from memory. Do the
-intervening work once it succeeds. Then run `git stash pop` to restore what it hid. A stash left
-unpopped drops those changes from the eventual commit silently.
+intervening work once it succeeds. Then run `git stash pop --index` to restore what it hid. Plain
+`git stash pop`, without `--index`, drops a staged file back to merely modified. A file with both
+staged and unstaged changes needs `--index` to come back exactly as it was, not just to come back.
 
-If `git stash` is refused, use this fallback instead. First, save the diff:
-`git diff HEAD -- <files> > patch`. Next, revert the files: `git checkout HEAD -- <files>`. Do the
-intervening work. Then restore the diff: `git apply --index patch`. Diff and checkout both use
-`HEAD`. A file already staged before the revert is captured too, and restored too, not silently
-dropped. Plain `git diff --` and `git checkout --` compare against the index only, and restore
-from the index only too. That is a no-op on a staged mutation.
+If `git stash` is refused, use this fallback instead. First, save two separate diffs, not one:
+`git diff --cached -- <files> > staged.patch` for what was staged, and
+`git diff -- <files> > unstaged.patch` for what was not. Next, revert the files:
+`git checkout HEAD -- <files>`. Do the intervening work. Then restore both, in this order:
+`git apply --allow-empty staged.patch`, then `git add -- <files>`, then
+`git apply --allow-empty unstaged.patch`. A single combined patch from `git diff HEAD` loses that
+split instead. Restoring it with `git apply --index` does too. Verified directly: a file staged and
+then further modified came back merely staged, not staged-and-modified. `git stash pop` without
+`--index` causes the same loss. `--allow-empty` matters too. It keeps either apply from failing
+outright. A file with only one kind of change leaves its other patch empty.
 
 Before committing new prose to a project's own rules or instructions files, self-check it first.
 Check it against that project's own doc-hygiene rules. A review that checks code quality only can

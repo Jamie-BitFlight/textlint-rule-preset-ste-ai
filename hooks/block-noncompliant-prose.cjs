@@ -6,11 +6,14 @@
  * (`textlint-rule-preset-ste-ai`) lint finding a markdown file does not already carry.
  *
  * Scope: only engages in a project that actually configures this preset. The nearest
- * `.textlintrc.json` walking up from the target file is authoritative — it must mention
- * `preset-ste-ai` itself; a config further up the tree does not count once a nearer one exists,
- * even when that nearer config omits the preset. Only `.md` files are ever in scope. A file that
- * already carries pre-existing errors is not blocked from every future edit — only from an edit
- * that introduces a finding the file did not already have. This mirrors
+ * `.textlintrc.json` walking up from the target file is authoritative — it must actually enable
+ * `preset-ste-ai` (a `"preset-ste-ai": false` entry does not count as enabling it, even though
+ * the preset's own name appears in the file); a config further up the tree does not count once a
+ * nearer one exists, even when that nearer config disables or omits the preset. Only `.md` files
+ * are ever in scope, and only a file `textlint` itself would not skip — a target already excluded
+ * by a `.textlintignore` entry is left alone the same way an ordinary `textlint` run leaves it
+ * alone. A file that already carries pre-existing errors is not blocked from every future edit —
+ * only from an edit that introduces a finding the file did not already have. This mirrors
  * `scripts/ci/check-dogfood-lint.mjs`'s own ratchet in this repo ("the ratchet only ever
  * shrinks"), keyed on the exact finding (its rule plus its message) rather than on a raw error
  * count: swapping one finding for a different one blocks the write even when the total count of
@@ -69,12 +72,32 @@ function readStdin() {
   }
 }
 
+/** Whether a parsed `.textlintrc.json` actually enables `preset-ste-ai`, rather than merely
+ * mentioning it somewhere in the file. `"rules": { "preset-ste-ai": false }` disables the preset
+ * the same way it disables any other textlint rule -- a substring search for the preset's own
+ * name cannot see that `false`, and would opt a project into this hook even though the project's
+ * own config turned the preset off. */
+function presetIsEnabled(raw) {
+  let config;
+  try {
+    config = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (typeof config !== 'object' || config === null) return false;
+  const rules = config.rules;
+  if (typeof rules !== 'object' || rules === null) return false;
+  if (!('preset-ste-ai' in rules)) return false;
+  return rules['preset-ste-ai'] !== false;
+}
+
 /** Walk from `startDir` up to the filesystem root. The first readable `.textlintrc.json` found is
- * authoritative and ends the walk immediately -- it is matched if it mentions `preset-ste-ai`, and
- * treated as no match at all otherwise, even when some ancestor directory further up has a config
- * that does mention it. A nested project's own config, once it exists and can be read, always
- * decides that project's own files; the hook must never fall through to a parent's config the
- * nested project never opted into. Returns `undefined` when no readable config is found at all. */
+ * authoritative and ends the walk immediately -- it is matched if it actually enables
+ * `preset-ste-ai`, and treated as no match at all otherwise, even when some ancestor directory
+ * further up has a config that does enable it. A nested project's own config, once it exists and
+ * can be read, always decides that project's own files; the hook must never fall through to a
+ * parent's config the nested project never opted into. Returns `undefined` when no readable
+ * config is found at all. */
 function findSteAiConfigDir(startDir) {
   let dir = startDir;
   for (;;) {
@@ -82,9 +105,7 @@ function findSteAiConfigDir(startDir) {
     if (fs.existsSync(candidate)) {
       try {
         const raw = fs.readFileSync(candidate, 'utf8');
-        return raw.includes('preset-ste-ai')
-          ? { configDir: dir, configPath: candidate }
-          : undefined;
+        return presetIsEnabled(raw) ? { configDir: dir, configPath: candidate } : undefined;
       } catch {
         // Unreadable config: keep walking up rather than treating it as a match.
       }
@@ -104,6 +125,38 @@ function findTextlintBin(startDir) {
     const parent = path.dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
+  }
+}
+
+/** Whether `realFilePath` is excluded by a `.textlintignore` (or the config's own `ignoreFilePath`)
+ * the same way an ordinary `textlint <file>` invocation would skip it. Only decidable when
+ * `realFilePath` already exists on disk: textlint's own ignore matching (`searchFiles` in its
+ * `find-util`) resolves patterns by enumerating real filesystem entries, so it cannot tell "would
+ * this not-yet-created path be ignored" without something already at that exact path -- and this
+ * hook must never create or touch the real target file itself to find out, only ever a scratch
+ * file beside it. A brand-new file's own first write is therefore not checked for ignore status;
+ * only an edit to a file that already exists is. Reproduced directly against this repository's own
+ * `examples/sample.md`, which `.textlintignore` excludes on purpose (its violations are the
+ * deliverable): linting it in file mode returns zero result entries, not an entry with zero
+ * messages, which is how textlint's own JSON output distinguishes "ignored" from "clean". */
+function isIgnoredByTextlint(textlintBin, configPath, realFilePath) {
+  if (!fs.existsSync(realFilePath)) return false;
+  try {
+    const output = execFileSync(
+      textlintBin,
+      ['--config', configPath, '--format', 'json', realFilePath],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: TEXTLINT_TIMEOUT_MS,
+      },
+    );
+    const results = JSON.parse(output);
+    return Array.isArray(results) && results.length === 0;
+  } catch {
+    // Any failure here (timeout, malformed output, ...) is not evidence of "ignored" -- treat the
+    // file as not ignored and let the normal before/after check run and fail open on its own.
+    return false;
   }
 }
 
@@ -206,6 +259,8 @@ function main() {
 
   const textlintBin = findTextlintBin(found.configDir);
   if (textlintBin === undefined) process.exit(0);
+
+  if (isIgnoredByTextlint(textlintBin, found.configPath, filePath)) process.exit(0);
 
   const currentContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
 

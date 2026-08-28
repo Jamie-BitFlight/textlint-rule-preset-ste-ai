@@ -169,6 +169,13 @@ describe('block-noncompliant-prose hook', () => {
   // binary that sleeps. This case proves both that the hook now self-terminates well inside the
   // 60s test budget, and that it leaves no `.ste-ai-hook-*` scratch file behind in the target
   // project when it does.
+  //
+  // The target file here already exists on disk, so `isIgnoredByTextlint` runs its own
+  // `TEXTLINT_TIMEOUT_MS`-bounded probe against the stub before the before/after check even
+  // starts, and that probe's own timeout is what the elapsed-time assertion below now has to
+  // budget for on top of the first `countErrors` call's timeout -- two sequential 15s-bounded
+  // subprocess calls, not one, before the hook can fail open. `countErrors`'s second call (`after`)
+  // never runs: the first call's timeout throws past `main`'s own try, which fails open right away.
   it(
     'fails open, without hanging, when textlint itself hangs',
     () => {
@@ -196,9 +203,10 @@ describe('block-noncompliant-prose hook', () => {
         const elapsedMs = Date.now() - started;
 
         expect(result.status).toBe(0);
-        // Well under the 60s test budget -- the hook's own 15s textlint timeout, not the test
-        // timeout, should be what ends this.
-        expect(elapsedMs).toBeLessThan(30_000);
+        // Well under the 60s test budget -- two sequential ~15s hook-level timeouts (the ignore
+        // probe, then the first before/after check), not the test timeout, should be what ends
+        // this.
+        expect(elapsedMs).toBeLessThan(40_000);
         const leftovers = readdirSync(scratchProject).filter((name) =>
           name.startsWith('.ste-ai-hook-'),
         );
@@ -256,6 +264,63 @@ describe('block-noncompliant-prose hook', () => {
       } finally {
         rmSync(parentProject, { recursive: true, force: true });
       }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122, round 2): the config match was a plain
+  // `raw.includes('preset-ste-ai')` substring search, so `"rules": { "preset-ste-ai": false }` —
+  // the ordinary way to disable any textlint rule — still counted as enabling this hook, because
+  // the preset's own name is still present in the file text even while turned off. Reproduced
+  // directly with the config below before `findSteAiConfigDir` was changed to parse the config and
+  // check the rule's actual value.
+  it(
+    'treats "preset-ste-ai": false as disabled, not merely mentioned',
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-disabled-'));
+      try {
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': false, 'no-todo': true } }),
+        );
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: {
+            file_path: targetPath,
+            content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+          },
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122, round 2): the hook always linted a randomly named
+  // scratch file next to the real target, so a real target excluded by `.textlintignore` (this
+  // repository's own `examples/sample.md`, whose whole point is to carry deliberate violations —
+  // see `examples/README.md`) got checked under the scratch file's own, non-ignored identity
+  // instead. That let the hook block an edit that an ordinary `textlint examples/sample.md` run
+  // would silently skip. Reproduced directly against this repository's real ignore file before
+  // `isIgnoredByTextlint` was added.
+  it(
+    'ignores a real target excluded by .textlintignore, even with many new commas',
+    () => {
+      const ignoredTargetFile = `${repoRoot}examples/sample.md`;
+      const originalContent = readFileSync(ignoredTargetFile, 'utf8');
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: ignoredTargetFile,
+          content: `${originalContent}\n\nThis, sentence, has, way, too, many, commas, in, it, right, here, now.\n`,
+        },
+      });
+      expect(result.status).toBe(0);
     },
     SUBPROCESS_TEST_TIMEOUT_MS,
   );

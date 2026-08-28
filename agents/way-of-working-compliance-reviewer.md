@@ -30,12 +30,23 @@ that is not `git` at all.
 You receive one of two things. The first is a pull request (PR) diff, given to you as text. The
 second is an instruction to check the current change set.
 
-You may receive neither. Find the change set yourself in that case. Run `git status --short`
-first. Staged or unstaged changes exist when that command lists any. Run `git diff HEAD` to
-capture them. `git diff HEAD` never reports an untracked file, even one `git status --short`
-lists with a leading `??`. Run `git diff --no-index /dev/null <path>` for each such path, and add
-that output to the change set. Neither a tracked nor an untracked change may exist. Report that
-there is nothing to review, and stop, in that case.
+You may receive neither. Find the change set yourself in that case. Run
+`git status --short --untracked-files=all` first — plain `git status --short` names a wholly
+untracked directory once, as `somedir/`, and never lists the files inside it. Staged or unstaged
+changes exist when that command lists any. Run `git diff HEAD` to capture them. `git diff HEAD`
+never reports an untracked file, even one `git status --short --untracked-files=all` lists with a
+leading `??`. Run `git diff --no-index /dev/null <path>` for each such path, and add that output
+to the change set.
+
+Neither a tracked nor an untracked change may exist. The working tree is clean this way once a
+change has already been committed. That is the ordinary state right before a push. It is also
+ordinary right before a pull request or a merge. This review exists to run for that case too. Do
+not stop here. Find the current
+branch with `git branch --show-current`. Find its upstream, and any pull request open for it.
+Fetch that pull request's diff, using the repository's own GitHub tooling. No pull request tooling
+may be available. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
+Neither a working-tree change set nor an open pull request diff may exist. Report that there is
+nothing to review, and stop, only in that case.
 
 ## Step 1: List every changed file
 

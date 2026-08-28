@@ -218,13 +218,6 @@
       "ste-ai/unapproved-vocabulary\n[deterministic-violation][provisional] \"sufficient\" is not approved general vocabulary. Use \"enough\".\nor's own `meaningPreserved` flag is not sufficient, because it comes from the sa\n# Architecture > ## Autofix\n1": 1
     }
   },
-  "docs/configuration.md": {
-    "total": 2,
-    "findings": {
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"PR\" is used before it is introduced. Write the full term followed by \"(PR)\" at the first use.\nas resolvable, which is what broke in [PR #86](https://github.com/Jamie-BitFlig\n# Configuration > ## textlint\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 21.2 (52 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nTwo separate checks keep it honest: `tes\n# Configuration > ## textlint\n1": 1
-    }
-  },
   "docs/design/64-layered-rule-packs/01-merge-core.md": {
     "total": 170,
     "findings": {

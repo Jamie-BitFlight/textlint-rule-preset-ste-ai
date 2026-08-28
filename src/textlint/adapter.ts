@@ -161,16 +161,25 @@ export function getAnalysis(
   const fileRules = sharedFile.config.rules as Record<string, Record<string, unknown>>;
   const sharedRules = validRulesOf(shared?.rules);
   const mergedRules: Record<string, Record<string, unknown>> = {};
-  for (const id of new Set([
-    ...Object.keys(fileRules),
-    ...Object.keys(sharedRules),
-    ...perRuleOptions.keys(),
-  ])) {
-    mergedRules[id] = {
-      ...fileRules[id],
-      ...sharedRules[id],
-      ...perRuleOptions.get(id),
-    };
+  for (const id of new Set([...Object.keys(fileRules), ...Object.keys(sharedRules)])) {
+    mergedRules[id] = { ...fileRules[id], ...sharedRules[id] };
+  }
+  // Every enabled rule calls `getAnalysis` with its own `perRuleOptions` entry, most often `{}` --
+  // no rule-specific options set beyond being enabled. Folding that entry's *key* into `mergedRules`
+  // unconditionally, even when its value is empty, made `cacheKey` sensitive to which rule was
+  // calling regardless of whether the call actually carried anything new: a 14-rule preset produced
+  // up to 14 distinct cache entries for the same document, one per calling rule, because each call's
+  // `mergedRules` differed only by which rule's own (frequently empty) options object happened to be
+  // present as a key -- reproduced directly: instrumenting the cache with a trace showed 14 misses,
+  // 0 hits, for a single file under this repo's own preset. Skipping a genuinely empty entry restores
+  // the doc comment's own claim -- one shared cache entry per document, regardless of which of the
+  // 14 rules asks first -- without weakening the real fix this replaced (review found scoping a
+  // rule's *non-empty* own options into the merge, rather than sharing one unscoped config across
+  // every rule, was what closed a silently-dropped-notice defect; an empty entry never carried any of
+  // that information to begin with, so omitting it changes no rule's own effective options).
+  for (const [id, options] of perRuleOptions) {
+    if (Object.keys(options).length === 0) continue;
+    mergedRules[id] = { ...mergedRules[id], ...options };
   }
 
   const config: SteAiConfigInput = {

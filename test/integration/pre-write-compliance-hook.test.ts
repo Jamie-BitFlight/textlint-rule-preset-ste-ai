@@ -1,5 +1,15 @@
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vite-plus/test';
 
@@ -24,9 +34,13 @@ const hookScript = 'hooks/block-noncompliant-prose.cjs';
 const targetFile = `${repoRoot}docs/architecture.md`;
 
 function runHook(event: unknown): { status: number | null; stderr: string } {
+  return runHookRaw(JSON.stringify(event));
+}
+
+function runHookRaw(stdin: string): { status: number | null; stderr: string } {
   const result = spawnSync('node', [hookScript], {
     cwd: repoRoot,
-    input: JSON.stringify(event),
+    input: stdin,
     encoding: 'utf8',
   });
   return { status: result.status, stderr: result.stderr };
@@ -129,6 +143,68 @@ describe('block-noncompliant-prose hook', () => {
         tool_input: { file_path: targetFile },
       });
       expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): `JSON.parse('null')` is valid JSON and does not
+  // throw, but a bare `event.tool_name` property access on `null` does. That crashed the hook with
+  // an uncaught TypeError and exit code 1, directly contradicting its own documented "any
+  // unexpected error fails open (exit 0)" guarantee. Reproduced directly with `echo 'null' | node
+  // hooks/block-noncompliant-prose.cjs` before the `typeof event !== 'object' || event === null`
+  // guard was added.
+  it(
+    'fails open on a syntactically valid but non-object JSON event (null)',
+    () => {
+      const result = runHookRaw('null');
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): `execFileSync` had no `timeout` option, so a hung
+  // `textlint` process (or a hung rule/plugin it loads) blocked the hook, and therefore every
+  // subsequent Write/Edit in the session, indefinitely. Reproduced directly with a stub `textlint`
+  // binary that sleeps. This case proves both that the hook now self-terminates well inside the
+  // 60s test budget, and that it leaves no `.ste-ai-hook-*` scratch file behind in the target
+  // project when it does.
+  it(
+    'fails open, without hanging, when textlint itself hangs',
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-hang-'));
+      try {
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
+        writeFileSync(stubTextlintPath, '#!/usr/bin/env bash\nsleep 120\n');
+        chmodSync(stubTextlintPath, 0o755);
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const started = Date.now();
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: {
+            file_path: targetPath,
+            content: 'New content, with, way, too, many, commas, right, here, now.\n',
+          },
+        });
+        const elapsedMs = Date.now() - started;
+
+        expect(result.status).toBe(0);
+        // Well under the 60s test budget -- the hook's own 15s textlint timeout, not the test
+        // timeout, should be what ends this.
+        expect(elapsedMs).toBeLessThan(30_000);
+        const leftovers = readdirSync(scratchProject).filter((name) =>
+          name.startsWith('.ste-ai-hook-'),
+        );
+        expect(leftovers).toEqual([]);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
     },
     SUBPROCESS_TEST_TIMEOUT_MS,
   );

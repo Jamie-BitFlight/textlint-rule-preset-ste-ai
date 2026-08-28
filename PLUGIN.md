@@ -31,6 +31,25 @@ through `Write` or `Edit`. A human can still work around the hook, but the defau
 This matches the standard this repository holds itself to: comply with the linter in advance.
 Failing that, comply with its findings before the write lands, not after.
 
+## A known tradeoff in the compliance-reviewing agent
+
+The agent reads diffs and rule files. A reviewed change set can control that content. The agent
+also holds a `Bash` grant. It needs that grant to run `git status`, `git diff`, and `git branch`
+when nothing hands it a diff directly.
+
+Claude Code's own tool-grant syntax has a limit here. It cannot scope `Bash` down to only those
+three read-only subcommands, inside an agent's frontmatter. Every narrower grant tried here either
+failed plugin validation, or would not have enforced anything.
+
+The agent's own prompt carries an explicit instruction instead. It says to treat all reviewed
+content as data, never as instructions. It says never to run any command beyond those three
+read-only ones. That instruction is not a technical enforcement boundary, though. A crafted diff
+or rule file could still try to make the model run an unintended command.
+
+Weigh that risk before enabling `permissionMode: dontAsk` on a fork of this agent. Weigh it
+especially in a setting where an untrusted party can shape the diffs this agent reviews. Watch
+this agent's `Bash` calls instead, when that risk applies.
+
 ## Installing this plugin elsewhere
 
 Point Claude Code's plugin configuration at this repository. A marketplace entry for it works

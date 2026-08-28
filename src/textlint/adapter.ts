@@ -82,9 +82,19 @@ export interface SteRuleOptions {
  * sufficient and correct here because array order stays semantically significant (rule packs and
  * lists are never key-value data) and every value cache keys are built from is plain JSON-shaped
  * config, never a class instance with its own `toJSON`.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `21ebd8f`): an array entry of
+ * `undefined` mapped through `stableStringify` returned the bare JS `undefined` value (`JSON
+ * .stringify(undefined) === undefined`), which `Array.prototype.join` then rendered as `''` --
+ * so `[undefined]` and `[]` serialised identically and collided in the cache, reproduced directly
+ * with `approvedTerms: [undefined]` colliding with `approvedTerms: []`. `JSON.stringify` itself
+ * renders an array's `undefined` entry as the string `"null"`; matching that same array semantics
+ * here keeps the two configurations distinct.
  */
 function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => (entry === undefined ? 'null' : stableStringify(entry))).join(',')}]`;
+  }
   if (!isPlainObject(value)) return JSON.stringify(value);
   const entries = Object.keys(value)
     .filter((key) => value[key] !== undefined)

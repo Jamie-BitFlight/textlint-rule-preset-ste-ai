@@ -210,4 +210,29 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     );
     expect(promiseA).toBe(promiseB);
   });
+
+  // Regression (`chatgpt-codex-connector`, P2, on PR #117, commit `21ebd8f`): `stableStringify`'s
+  // array branch mapped `undefined` through `JSON.stringify` (which returns the bare JS `undefined`
+  // value for that input, not a string) and then joined the array, so an `undefined` entry silently
+  // collapsed to an empty string -- `[undefined]` and `[]` serialised identically and collided in the
+  // cache. A rule config carrying `approvedTerms: [undefined]` -- a caller error -- would then
+  // wrongly reuse the cached analysis of an unrelated rule whose config was `approvedTerms: []`.
+  it('does not share a cache entry between an array with an undefined entry and an empty array', () => {
+    const text = 'Utilise the bracket.\n';
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', { approvedTerms: [undefined] }]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', { approvedTerms: [] }]]),
+    );
+    expect(promiseA).not.toBe(promiseB);
+  });
 });

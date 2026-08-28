@@ -39,7 +39,11 @@ import { readMarkdownUnitsSync } from '../reader/markdown-reader.js';
 import { readPlainTextUnitsSync } from '../reader/plain-text-reader.js';
 import type { TextUnit } from '../reader/types.js';
 import { provisionalRulePack, resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
-import { analyseSemantically } from '../semantic/analyse.js';
+import {
+  analyseSemantically,
+  semanticNotRunNoticeMessage,
+  undecidedCandidateReasonMessage,
+} from '../semantic/analyse.js';
 import { SemanticBroker, type SemanticBrokerDeps } from '../semantic/broker.js';
 import { resolveOverlappingFixes } from '../core/runner.js';
 
@@ -591,9 +595,7 @@ function undecidedCandidateDiagnostics(
         ruleStatus,
         category: 'review-required' as const,
         severity: config.diagnostics.severity['review-required'],
-        message:
-          'This passage needs semantic adjudication, which did not run, so it was not decided. ' +
-          `A reviewer must decide it. Reason: ${candidate.reason}`,
+        message: undecidedCandidateReasonMessage(candidate.reason),
         range: candidate.range,
         producedBy: 'deterministic' as const,
         candidateId: candidate.id,
@@ -607,9 +609,7 @@ function undecidedCandidateDiagnostics(
       {
         code: 'semantic-disabled',
         level: 'info',
-        message:
-          `${candidates.length} passage(s) needed semantic adjudication, which did not run. They ` +
-          'are reported as review-required. No compliance conclusion was drawn about them.',
+        message: semanticNotRunNoticeMessage(candidates.length),
         detail: { candidates: candidates.length },
       },
     ],

@@ -31,6 +31,23 @@ export interface SemanticAnalysisResult {
 }
 
 /**
+ * Canonical wording for a candidate that needed semantic adjudication but never got it — whether
+ * because the broker declined it (`analyseSemantically` below) or because semantic adjudication was
+ * never attempted at all (`analyseTextDeterministic`'s `undecidedCandidateDiagnostics` in
+ * `../analysis/analyse.ts`). The two call sites used to maintain separate hand-written strings for
+ * this identical fact; they drifted apart (see `test/integration/deterministic-parity.test.ts`, which
+ * pins them staying equal).
+ */
+export function undecidedCandidateReasonMessage(reason: string): string {
+  return `Semantic adjudication did not run, so this candidate was not decided. A reviewer must decide it. Reason: ${reason}`;
+}
+
+/** Companion to {@link undecidedCandidateReasonMessage} for the run-notice summary line. */
+export function semanticNotRunNoticeMessage(count: number): string {
+  return `${count} passage(s) needed semantic adjudication, which is disabled. They are reported as review-required. No compliance conclusion was drawn about them.`;
+}
+
+/**
  * Turn candidates into diagnostics.
  *
  * Three invariants hold here:
@@ -73,8 +90,7 @@ export async function analyseSemantically(
           candidate,
           ruleStatus,
           policy,
-          'Semantic adjudication did not run, so this candidate was not decided. A reviewer must ' +
-            `decide it. Reason: ${candidate.reason}`,
+          undecidedCandidateReasonMessage(candidate.reason),
         );
         continue;
       }
@@ -187,9 +203,7 @@ export async function analyseSemantically(
     notices.push({
       code: 'semantic-disabled',
       level: 'info',
-      message:
-        `${disabledCount} passage(s) needed semantic adjudication, which is disabled. They are ` +
-        'reported as review-required. No compliance conclusion was drawn about them.',
+      message: semanticNotRunNoticeMessage(disabledCount),
       detail: { candidates: disabledCount },
     });
   }

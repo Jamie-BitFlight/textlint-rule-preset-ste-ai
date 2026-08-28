@@ -103,9 +103,9 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
    * `cacheKey` hashes the whole merged config, so two rules that both carry empty options still
    * produced different cache entries purely because they were keyed under different rule ids, even
    * though neither call's `mergedRules` differed in any way that could change the analysis.
-   * Reproduced directly against this repo's own real preset (14 rules): instrumenting the cache with
-   * a trace showed 14 misses, 0 hits, for one document -- confirmed here at the `getAnalysis` level,
-   * not just observed as a slow corpus run.
+   * Reproduced directly against this repo's own real preset: instrumenting the cache with a trace
+   * showed a distinct cache miss per enabled rule and no hits, for one document -- confirmed here at
+   * the `getAnalysis` level, not just observed as a slow corpus run.
    */
   it('shares one cache entry across rules whose own options are empty', () => {
     const text = 'Utilise the bracket.\n';

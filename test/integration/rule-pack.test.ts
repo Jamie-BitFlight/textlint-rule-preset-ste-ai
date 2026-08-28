@@ -119,6 +119,40 @@ describe('rule pack: the trust gate', () => {
     expect(diagnostic.ruleStatus).toBe('supplementary');
   });
 
+  it("withholds an untrusted pack's fabricated citation instead of printing it verbatim (#66)", () => {
+    // A pack's `sourceRef` is free text the supplier controls. Printing it verbatim next to a
+    // `supplementary` tag lets an untrusted pack fabricate a specific-looking citation (e.g. a
+    // standard clause number) that most readers will not weigh against the tag.
+    const diagnostic = only(VOCABULARY_DOC, { rulePack: pack() }, 'unapproved-vocabulary');
+
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("passes an untrusted pack's citation through unchanged when it never claimed normative", () => {
+    // The trust gate only withholds a citation attached to a claim it actually downgraded. A rule
+    // entry that declares `provisional` never had a normative claim to lose, so its citation is
+    // not neutralised just because the pack as a whole is untrusted.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'provisional',
+              sourceRef: 'ACME-DOC-1 clause 4',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+  });
+
   it('honours a declared status only once the operator names the pack as trusted', () => {
     const diagnostic = only(
       VOCABULARY_DOC,

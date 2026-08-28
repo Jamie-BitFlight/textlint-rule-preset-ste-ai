@@ -221,6 +221,13 @@ An imported pack is therefore untrusted until the operator names its `metadata.i
 normative standing is capped at `supplementary`. The match is on `metadata.id` alone. The pack name
 and the file path do not count.
 
+A rule entry's `sourceRef` is capped the same way. A rule entry can declare `status: "normative"`.
+Say the pack is untrusted. The diagnostic then withholds that entry's free-text citation. It
+reports `unverified citation from untrusted rule pack "<metadata.id>"` instead. An untrusted pack
+cannot fabricate a specific-looking citation next to a `supplementary` tag. A rule entry can instead
+never declare `normative`. Such an entry keeps its `sourceRef` regardless of trust. There was no
+normative claim for a citation to withhold.
+
 ## What status a diagnostic reports
 
 Two rule paths report status differently. This surprises pack authors, so read the table before you
@@ -229,11 +236,11 @@ write `rules[]`.
 A deterministic rule reports a violation directly. A candidate rule instead hands the passage to a
 semantic evaluator. The passage is reported as `review-required` when no evaluator ran.
 
-| Rule entry            | Deterministic diagnostic           | Candidate (`review-required`) |
-| --------------------- | ---------------------------------- | ----------------------------- |
-| listed in `rules[]`   | the entry's `status`, trust-capped | ignored. Pack-wide authority  |
-| absent from `rules[]` | `provisional`, the rule default    | pack-wide authority           |
-| `sourceRef` reported  | the entry's `sourceRef`            | never reported                |
+| Rule entry            | Deterministic diagnostic                   | Candidate (`review-required`) |
+| --------------------- | ------------------------------------------ | ----------------------------- |
+| listed in `rules[]`   | the entry's `status`, trust-capped         | ignored. Pack-wide authority  |
+| absent from `rules[]` | `provisional`, the rule default            | pack-wide authority           |
+| `sourceRef` reported  | the entry's `sourceRef`, also trust-capped | never reported                |
 
 Read the second column downwards. Omitting a rule from `rules[]` leaves it `provisional` even under
 a trusted normative pack. Read the third column downwards. Omitting a rule changes nothing there,

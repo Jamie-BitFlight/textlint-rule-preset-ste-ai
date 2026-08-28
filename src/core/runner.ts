@@ -104,12 +104,23 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
       const processed = postProcess(diagnostic, rule, doc, config, blockById, severityOverride);
       if (processed === null) continue;
       diagnostics.push(
-        packStatus === undefined
+        packSpec === undefined || packStatus === undefined
           ? processed
           : {
               ...processed,
               ruleStatus: packStatus,
-              meta: { ...processed.meta, sourceRef: packSpec?.sourceRef ?? '' },
+              meta: {
+                ...processed.meta,
+                // An untrusted pack's declared citation is capped the same way its status is: a
+                // pack that asserted `normative` but was downgraded to `supplementary` cannot
+                // still put its own free-text citation on the diagnostic verbatim (#66) — that
+                // citation is exactly the kind of claim the trust gate exists to withhold from an
+                // unverified supplier.
+                sourceRef:
+                  packSpec.status === packStatus
+                    ? packSpec.sourceRef
+                    : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
+              },
             },
       );
     }

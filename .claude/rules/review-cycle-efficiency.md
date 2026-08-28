@@ -12,7 +12,9 @@ the wave.
 
 Try `git stash push -u` first. Do not assume it is blocked. An earlier note here called it
 blocked. That turned out to be wrong at the time. Whether it works can vary by environment and
-permission policy. Verify it fresh each time instead of trusting either claim from memory.
+permission policy. Verify it fresh each time instead of trusting either claim from memory. Do the
+intervening work once it succeeds. Then run `git stash pop` to restore what it hid. A stash left
+unpopped drops those changes from the eventual commit silently.
 
 If `git stash` is refused, use this fallback instead. First, save the diff:
 `git diff HEAD -- <files> > patch`. Next, revert the files: `git checkout HEAD -- <files>`. Do the

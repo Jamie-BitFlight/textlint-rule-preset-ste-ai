@@ -212,12 +212,16 @@ test strategy, and staged rollout remain applicable. Its back-compat reasoning d
 Both were independent of layering, tracked separately, and are now fixed for the single-pack case
 this repository ships today:
 
-- **`sourceRef` passed through untrusted (#66, fixed).** `runner.ts` withheld an untrusted pack's
+- **`sourceRef` passed through untrusted (#66, fixed, two rounds).** `runner.ts` first withheld a
   citation only when a downgrade actually occurred. A pack could dodge that check. It only had to
-  declare a non-`normative` status directly. The check now withholds the citation on a different
-  test. Any status beyond the rule's own built-in `provisional` default is a claim. An untrusted
-  pack's claim withholds its citation. Layering still leaves one gap open: attributing a claim to
-  _which_ layer supplied it, once several packs stack. See attack 5 in `02-authority-trust.md`.
+  declare a non-`normative` status directly. The check moved to gating on the declared status
+  instead. That gate still had a hole. Every shipped rule's own status is `provisional`. A pack
+  could declare `provisional` and still supply a fabricated citation. The check now gates on the
+  citation text itself. A pack entry's `sourceRef` is honoured only when it repeats
+  `rule.meta.sourceRef` verbatim, or the pack is trusted. `rule.meta.sourceRef` is the rule's own
+  built-in citation. Matching the status proved nothing about the citation. Matching the text does.
+  Layering still leaves one gap open: attributing a claim to _which_ layer supplied it, once several
+  packs stack. See attack 5 in `02-authority-trust.md`.
 - **The rule-pack loader had no test coverage (#67, fixed).** `test/integration/rule-pack.test.ts`
   and `test/unit/rule-pack-loader.test.ts` now cover it directly, as above.
 

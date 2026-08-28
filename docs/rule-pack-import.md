@@ -221,14 +221,15 @@ An imported pack is therefore untrusted until the operator names its `metadata.i
 normative standing is capped at `supplementary`. The match is on `metadata.id` alone. The pack name
 and the file path do not count.
 
-A rule entry's `sourceRef` is gated too, but on a different test than status. Every shipped rule
-already declares its own `provisional` status in code. A pack entry that also declares `provisional`
-claims nothing beyond that baseline, so its citation always reaches the diagnostic. A pack entry
-that declares anything else is making a real claim about the rule. That claim's citation reaches the
-diagnostic only once the operator trusts the pack. An untrusted pack's diagnostic instead reports
-`unverified citation from untrusted rule pack "<metadata.id>"`. This holds regardless of which
-status the entry declares. An untrusted pack cannot dodge the gate by declaring `supplementary`
-outright, instead of `normative`.
+A rule entry's `sourceRef` is gated too, but on the citation text, not on the declared status. Every
+shipped rule already carries its own `sourceRef` in code (`rule.meta.sourceRef`). A pack entry can
+repeat that exact string in its own `sourceRef`. Doing so asserts nothing beyond what the rule's own
+code already asserts. Its citation then always reaches the diagnostic. Any other `sourceRef` text is
+a real claim of its own. That claim's citation reaches the diagnostic only once the operator trusts
+the pack. An untrusted pack's diagnostic instead reports `unverified citation from untrusted rule
+pack "<metadata.id>"`. This holds regardless of which status the entry declares. Declaring
+`provisional` does not exempt a pack entry's citation. Every shipped rule's own status already is
+`provisional`. Matching the status alone proves nothing about the citation text.
 
 ## What status a diagnostic reports
 

@@ -8,7 +8,7 @@ One npm package, six internal modules with an enforced dependency direction:
 core            → (nothing internal)      domain types, offsets, protected regions, segmentation,
                                           rule contract, fix gate, runner
 rule-pack       → core                    schema, loader, bundled provisional pack  [IMPORT BOUNDARY]
-deterministic   → core, rule-pack         the 14 rules
+deterministic   → core, rule-pack         rule implementations
 model-client    → core                    llama.cpp HTTP transport, cache      [NO RULE LOGIC]
 semantic        → core, rule-pack,        broker, evaluators, prompt loader, response schema
                   model-client
@@ -226,7 +226,8 @@ carrying its own id. Consequences:
   rule cannot disagree with its neighbours about what is code;
 - diagnostics are reported against the `Document` node, whose range starts at 0, so the relative
   padding textlint wants equals the absolute offset the core produced;
-- a 14-rule preset performs one analysis and at most one round of semantic requests.
+- rules with no rule-specific options of their own share one analysis and, at most, one round of
+  semantic requests. A rule that sets its own options gets a separate analysis scoped to it.
 
 Per-document configuration that textlint cannot express per rule (rule pack, semantic service,
 autofix policy, protected terminology) is read from a shared file — see

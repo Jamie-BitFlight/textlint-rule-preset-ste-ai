@@ -126,8 +126,11 @@ function validRulesOf(raw: unknown): Record<string, Record<string, unknown>> {
 /**
  * Analyse the document once per (text, shared configuration) pair.
  *
- * Every enabled rule within one textlint run shares the entry, so a preset with many rules
- * performs one analysis and, at most, one round of semantic requests, rather than one per rule.
+ * An enabled rule with no rule-specific options of its own shares the entry with every other such
+ * rule in the same run, so a preset performs one analysis and, at most, one round of semantic
+ * requests for those rules combined, rather than one per rule. A rule that does set its own options
+ * gets a distinct entry scoped to it (see `test/integration/shared-config-merge.test.ts`, which
+ * pins both halves of this).
  */
 export function getAnalysis(
   text: string,

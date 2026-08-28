@@ -38,7 +38,7 @@ import type { ModelTransport } from '../model-client/types.js';
 import { readMarkdownUnitsSync } from '../reader/markdown-reader.js';
 import { readPlainTextUnitsSync } from '../reader/plain-text-reader.js';
 import type { TextUnit } from '../reader/types.js';
-import { provisionalRulePack, resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
+import { resolveRulePack, verifiedAuthority } from '../rule-pack/loader.js';
 import {
   analyseSemantically,
   semanticNotRunNoticeMessage,
@@ -281,7 +281,6 @@ function prepareRun(
     rules: deterministicRules,
     config,
     pack,
-    packIsBundledDefault: pack === provisionalRulePack,
     resolveFixes: false,
   });
 

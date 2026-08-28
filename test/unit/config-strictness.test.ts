@@ -99,7 +99,6 @@ function runWith(config: SteAiConfigInput) {
     rules: deterministicRules,
     config: resolved,
     pack: provisionalRulePack,
-    packIsBundledDefault: true,
   });
 }
 

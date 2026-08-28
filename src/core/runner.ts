@@ -22,20 +22,6 @@ export interface RunOptions {
   readonly rules: readonly DeterministicRule[];
   readonly config: SteAiConfig;
   readonly pack: RulePack;
-  /**
-   * True when `pack` is the literal bundled-default singleton `provisionalRulePack`, not merely a
-   * pack whose content happens to match it. `core` cannot import `rule-pack` to check this itself
-   * (`test/architecture/module-boundaries.test.ts` forbids it), so the caller — which already holds
-   * the reference `resolveRulePack` returned — passes the answer in. String-comparing a pack
-   * entry's `sourceRef` against `rule.meta.sourceRef` was tried and found insufficient (Codex review
-   * on PR #116): an untrusted pack can copy that citation string verbatim while supplying entirely
-   * different rule-governing data (a fabricated dictionary entry, a loosened limit), so the
-   * diagnostic still carries a citation that names a section describing different data than the one
-   * that actually fired. Only genuine identity with the bundled singleton — which no supplied pack
-   * can ever produce, since `resolveRulePack` always returns a freshly parsed object for anything
-   * other than "no `rulePack` configured" — proves the cited data is what the citation claims it is.
-   */
-  readonly packIsBundledDefault: boolean;
   /** Restrict the run to a single rule id. Used by the per-rule textlint adapters. */
   readonly onlyRuleId?: string;
   /**
@@ -138,11 +124,12 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 // fabricated dictionary entry, a loosened limit — so the diagnostic still carried a
                 // citation naming a section that describes different data than what actually fired.
                 // Matching a string proves the string matches; it proves nothing about the data
-                // behind it. Only `options.packIsBundledDefault` — genuine identity with the bundled
-                // singleton, which no supplied pack can ever produce — proves the cited data is what
-                // the citation claims it is.
+                // behind it. Only `pack.isBundledDefault` — genuine identity with the bundled
+                // singleton, set on that one object and stripped by schema parsing from anything a
+                // supplier submits (see `RulePack.isBundledDefault`, `core/types.ts`) — proves the
+                // cited data is what the citation claims it is.
                 sourceRef:
-                  options.packIsBundledDefault || packTrusted
+                  pack.isBundledDefault === true || packTrusted
                     ? packSpec.sourceRef
                     : `unverified citation from untrusted rule pack "${displaySafePackId(pack.metadata.id)}"`,
               },
@@ -226,12 +213,13 @@ const UNTRUSTED_PACK_ID_DISPLAY_LIMIT = 80;
  * leave only its fabricated citation visible — the same attack #66 closed for `sourceRef` itself,
  * reopened through the id used to explain why `sourceRef` was withheld. Strips every C0/C1 control
  * character (not only newlines: any character in that range can be gathered into an ANSI escape
- * sequence acting on terminal state) and caps the length, rather than assuming a newline is the
- * only dangerous byte an unconstrained string can carry.
+ * sequence acting on terminal state), caps the length, and strips `"` (round 2 of this finding):
+ * the marker wraps the id in double quotes, so an embedded one can visually appear to close that
+ * quote early and start a second, unrelated-looking clause.
  */
 function displaySafePackId(id: string): string {
   // eslint-disable-next-line no-control-regex -- deliberately stripping control chars from untrusted supplier input
-  const stripped = id.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+  const stripped = id.replace(/[\u0000-\u001f\u007f-\u009f"]/g, ' ').trim();
   return stripped.length > UNTRUSTED_PACK_ID_DISPLAY_LIMIT
     ? `${stripped.slice(0, UNTRUSTED_PACK_ID_DISPLAY_LIMIT)}…`
     : stripped;

@@ -204,7 +204,6 @@ function fixesFor(text: string): { quote: string; replacement: string }[] {
     rules: deterministicRules,
     config: resolveConfig({}),
     pack: provisionalRulePack,
-    packIsBundledDefault: true,
   });
   return result.diagnostics
     .filter((d) => d.fix !== undefined)

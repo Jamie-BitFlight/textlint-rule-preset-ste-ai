@@ -309,4 +309,7 @@ export const provisionalRulePack: RulePack = {
       enabled: true,
     },
   ],
+  // See `RulePack.isBundledDefault` (`core/types.ts`) for why this is safe: `rulePackSchema` strips
+  // any key a supplier's JSON does not declare, so no parsed pack can ever carry this field.
+  isBundledDefault: true,
 };

@@ -221,9 +221,10 @@ describe('rule pack: the trust gate', () => {
 
   it('honours the real bundled default pack, unmodified, with no rulePack configured', () => {
     // The only citation that needs no trust is the one actually produced by the literal bundled
-    // singleton `provisionalRulePack` — identified by object identity in `runner.ts`
-    // (`packIsBundledDefault`), never by comparing any text a supplied pack could copy. Confirms
-    // the positive case: the real default keeps working with no `rulePack` configured at all.
+    // singleton `provisionalRulePack` — identified in `runner.ts` by `pack.isBundledDefault`, a
+    // field set only on that one object and stripped by schema parsing from anything a supplier
+    // submits, never by comparing any text a supplied pack could copy. Confirms the positive case:
+    // the real default keeps working with no `rulePack` configured at all.
     const diagnostic = only(VOCABULARY_DOC, {}, 'unapproved-vocabulary');
 
     expect(diagnostic.ruleStatus).toBe('provisional');
@@ -257,6 +258,10 @@ describe('rule pack: the trust gate', () => {
     const sourceRef = String(diagnostic.meta?.['sourceRef']);
     expect(sourceRef).not.toContain('\n');
     expect(sourceRef).toContain('evil');
+    // Codex review, round 7: an id containing `"` can otherwise make the marker's own wrapper
+    // quote look like it closes early, with the id's own fabricated text appearing to follow it as
+    // a separate, unrelated-looking clause. Only two `"` are expected: the wrapper's own pair.
+    expect(sourceRef.match(/"/g)).toHaveLength(2);
 
     // A very long id must not let the pack inflate every diagnostic it triggers.
     const longIdDiagnostic = only(

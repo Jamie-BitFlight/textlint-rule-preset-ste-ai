@@ -166,3 +166,21 @@ describe('verifiedAuthority', () => {
     expect(verifiedAuthority(normativePack)).toBe('supplementary');
   });
 });
+
+describe('RulePack.isBundledDefault', () => {
+  // `src/core/runner.ts` trusts `pack.isBundledDefault` to decide whether an untrusted pack's
+  // sourceRef citation can be honoured (#66, Codex review round 4). That trust rests entirely on
+  // this property: `rulePackSchema` is a plain `z.object`, so any key it does not declare is
+  // stripped during parsing, regardless of what the input asserts. Pin it directly, not just by
+  // comment, since the whole security argument depends on it.
+
+  it('is set on the real bundled default pack', () => {
+    expect(provisionalRulePack.isBundledDefault).toBe(true);
+  });
+
+  it("cannot be forged by a supplier's pack, even one that declares it explicitly", () => {
+    const parsed = parseRulePack(validPackJson({ isBundledDefault: true }), 'test');
+
+    expect(parsed.isBundledDefault).toBeUndefined();
+  });
+});

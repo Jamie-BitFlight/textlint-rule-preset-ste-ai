@@ -488,6 +488,20 @@ export interface RulePack {
   /** Terms this pack designates as project-approved technical names (protected as literals). */
   readonly approvedTechnicalTerms: readonly string[];
   readonly rules: readonly RulePackRuleSpec[];
+  /**
+   * Set only on the literal bundled-default singleton (`rule-pack/provisional-pack.ts`), never on
+   * a pack a supplier can produce. `rulePackSchema` is a plain `z.object`, which strips any
+   * unrecognised key during parsing (verified: `z.object({a: z.string()}).parse({a:'x', b:'y'})`
+   * drops `b`), and this field is deliberately absent from that schema's shape — so every pack that
+   * reaches `runner.ts` through `parseRulePack` (a JSON file or an inline config object) loses this
+   * field regardless of what the supplier's data claims, even a supplier who names their own field
+   * `isBundledDefault: true`. `runner.ts` reads it to decide whether an untrusted pack's citation
+   * can be honoured (#66) without `core` importing `rule-pack` (`test/architecture/
+   * module-boundaries.test.ts` forbids it) and without requiring every caller of the public
+   * `runDeterministicRules` export to thread a new parameter through `RunOptions` — the field lives
+   * on the value already being passed, not on a second one a caller could omit.
+   */
+  readonly isBundledDefault?: true;
 }
 
 // ---------------------------------------------------------------------------

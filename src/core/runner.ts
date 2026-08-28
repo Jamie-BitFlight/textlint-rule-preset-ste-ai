@@ -144,7 +144,7 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 sourceRef:
                   options.packIsBundledDefault || packTrusted
                     ? packSpec.sourceRef
-                    : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
+                    : `unverified citation from untrusted rule pack "${displaySafePackId(pack.metadata.id)}"`,
               },
             },
       );
@@ -210,6 +210,31 @@ function verifiedRuleStatus(
 ): RulePack['metadata']['authority'] {
   if (declared !== 'normative') return declared;
   return trustedRulePackIds.includes(pack.metadata.id) ? 'normative' : 'supplementary';
+}
+
+/**
+ * Longest `metadata.id` fragment embedded in the "unverified citation" marker. `rulePackSchema`
+ * places no length limit on `id` (`z.string().min(1)`), so an untrusted pack could otherwise use
+ * its own id to inflate every diagnostic it triggers.
+ */
+const UNTRUSTED_PACK_ID_DISPLAY_LIMIT = 80;
+
+/**
+ * `pack.metadata.id` is free text the supplier controls, with no format constraint (Codex review
+ * on PR #116): a newline or control character embedded in it reaches the "unverified citation"
+ * marker verbatim, letting an untrusted pack push that marker's own warning text off-screen and
+ * leave only its fabricated citation visible — the same attack #66 closed for `sourceRef` itself,
+ * reopened through the id used to explain why `sourceRef` was withheld. Strips every C0/C1 control
+ * character (not only newlines: any character in that range can be gathered into an ANSI escape
+ * sequence acting on terminal state) and caps the length, rather than assuming a newline is the
+ * only dangerous byte an unconstrained string can carry.
+ */
+function displaySafePackId(id: string): string {
+  // eslint-disable-next-line no-control-regex -- deliberately stripping control chars from untrusted supplier input
+  const stripped = id.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+  return stripped.length > UNTRUSTED_PACK_ID_DISPLAY_LIMIT
+    ? `${stripped.slice(0, UNTRUSTED_PACK_ID_DISPLAY_LIMIT)}…`
+    : stripped;
 }
 
 function stripControlKeys(userConfig: Record<string, unknown>): Record<string, unknown> {

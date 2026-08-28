@@ -105,7 +105,7 @@ The same principle is restated in config: `src/core/config.ts:126-132`:
 | ------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `src/rule-pack/loader.ts:80-82` | `packPermitsConformanceClaim`                        | whether output may use conformance wording                                      |
 | `src/rule-pack/loader.ts:96-97` | `verifiedAuthority`                                  | run-level authority scalar                                                      |
-| `src/core/runner.ts:139-146`    | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
+| `src/core/runner.ts`            | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
 | `src/analysis/analyse.ts:292`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on `review-required` diagnostics                                   |
 | `src/analysis/analyse.ts:607`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on every semantic diagnostic                                       |
 | `src/cli/main.ts:190-196`       | both loader functions                                | `packAuthority`, `declaredAuthority`, `conformanceClaim` per file in CLI output |

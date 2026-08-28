@@ -232,6 +232,41 @@ describe('rule pack: the trust gate', () => {
     });
   });
 
+  it("strips control characters and caps the length of an untrusted pack's id in the citation", () => {
+    // Codex review on PR #116, round 5: the withheld-citation marker embedded `pack.metadata.id`
+    // verbatim. `metadata.id` is `z.string().min(1)` with no format or length constraint, so an
+    // untrusted pack could put a newline in its own id to push the marker's warning text
+    // off-screen and leave only a fabricated citation visible after it — reopening the same class
+    // of attack #66 closed for `sourceRef` itself, through the field used to explain why
+    // `sourceRef` was withheld.
+    const evilMetadata = {
+      id: 'evil\n"a fabricated citation"',
+      name: 'Acme test pack',
+      version: '1.0.0',
+      authority: 'normative',
+      licence: 'Proprietary — test fixture',
+      source: 'Authored for this test. Not derived from any standard.',
+      conformanceClaim: 'declared-by-supplier',
+    };
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      { rulePack: pack({ metadata: evilMetadata }) },
+      'unapproved-vocabulary',
+    );
+
+    const sourceRef = String(diagnostic.meta?.['sourceRef']);
+    expect(sourceRef).not.toContain('\n');
+    expect(sourceRef).toContain('evil');
+
+    // A very long id must not let the pack inflate every diagnostic it triggers.
+    const longIdDiagnostic = only(
+      VOCABULARY_DOC,
+      { rulePack: pack({ metadata: { ...evilMetadata, id: 'x'.repeat(500) } }) },
+      'unapproved-vocabulary',
+    );
+    expect(String(longIdDiagnostic.meta?.['sourceRef']).length).toBeLessThan(200);
+  });
+
   it('honours a declared status only once the operator names the pack as trusted', () => {
     const diagnostic = only(
       VOCABULARY_DOC,

@@ -215,6 +215,29 @@ describe('request construction', () => {
     expect(edited.user).toBe(original.user);
   });
 
+  // `docs/prompt-authoring.md`'s "`<<<SYSTEM>>>` is sent to the model exactly as written" claim was
+  // literally true of the file's raw block, but `parsePromptFile` trims the block before that
+  // sentence's own next clause ("`buildEvaluatorRequest` never renders it") applies -- so a prompt
+  // author's own leading or trailing whitespace inside `<<<SYSTEM>>>` never reaches the model. The
+  // doc now says trimming happens; this pins the actual behavior it describes.
+  it('trims surrounding whitespace from <<<SYSTEM>>> before it reaches the model', () => {
+    const source = [
+      '<<<META>>>',
+      'id: one-instruction-per-sentence',
+      'version: v1',
+      'task: whitespace check',
+      '<<<SYSTEM>>>',
+      '  Leading and trailing spaces should not survive.  ',
+      '<<<USER>>>',
+      'Passage: {{passage}}',
+      '',
+    ].join('\n');
+
+    const { system } = parsePromptFile(source, 'whitespace-check');
+
+    expect(system).toBe('Leading and trailing spaces should not survive.');
+  });
+
   it('golden: the rendered user message for one-instruction-per-sentence is stable', () => {
     const request = buildEvaluatorRequest(
       candidateFor('one-instruction-per-sentence', PAYLOADS['one-instruction-per-sentence']),

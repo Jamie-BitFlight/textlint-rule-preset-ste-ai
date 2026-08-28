@@ -21,10 +21,11 @@ task: <one line>
 …the user template with {{placeholder}} substitutions…
 ```
 
-`<<<SYSTEM>>>` is sent to the model exactly as written. `buildEvaluatorRequest` never renders it.
-A literal `{` or `}` character there is rejected at load time, mustache-shaped or not. Put
-per-request data in `<<<USER>>>` instead. Keep the system message a general instruction, as every
-other prompt's already is.
+`buildEvaluatorRequest` never renders `<<<SYSTEM>>>`. `parsePromptFile` trims surrounding
+whitespace from the block, then sends the rest to the model unchanged. A literal `{` or `}`
+character there is rejected at load time, mustache-shaped or not. Put per-request data in
+`<<<USER>>>` instead. Keep the system message a general instruction, as every other prompt's
+already is.
 
 `<<<META>>>` carries only the keys in this table, no fewer and no more. `test/unit/prompt-corpus.test.ts`
 asserts the exact set and rejects any mismatch.

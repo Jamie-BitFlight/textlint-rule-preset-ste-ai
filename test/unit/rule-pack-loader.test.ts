@@ -14,7 +14,7 @@ import {
 
 /**
  * `src/rule-pack/loader.ts` is the trust boundary #67 found untested: nothing in `test/` imported
- * it directly before this file, so `resolveRulePack`'s three input shapes, `loadRulePackFromFile`'s
+ * it directly before this file, so `resolveRulePack`'s input shapes, `loadRulePackFromFile`'s
  * failure modes, and `verifiedAuthority` were each exercised only incidentally, through whichever
  * higher-level test happened to route through them.
  *

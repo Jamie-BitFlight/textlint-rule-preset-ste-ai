@@ -129,10 +129,41 @@ describe('rule pack: the trust gate', () => {
     expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
   });
 
-  it("passes an untrusted pack's citation through unchanged when it never claimed normative", () => {
-    // The trust gate only withholds a citation attached to a claim it actually downgraded. A rule
-    // entry that declares `provisional` never had a normative claim to lose, so its citation is
-    // not neutralised just because the pack as a whole is untrusted.
+  it("withholds the citation even when the pack declares 'supplementary' directly", () => {
+    // Codex review on PR #116: gating the citation on whether `ruleStatus` was actually *downgraded*
+    // let an untrusted pack bypass the check just by declaring `status: "supplementary"` up front —
+    // `verifiedRuleStatus` only ever touches a `"normative"` declaration, so a directly-declared
+    // `"supplementary"` was never downgraded and its citation sailed through unexamined. The gate
+    // must withhold an untrusted pack's citation for *any* declared status that isn't the rule's own
+    // built-in default, not only a declaration of `"normative"`.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'supplementary',
+              sourceRef: 'ACME-DOC-1 clause 4',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('supplementary');
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("passes an untrusted pack's citation through unchanged when it only restates the rule's own default", () => {
+    // The trust gate withholds a citation only when the pack entry claims something the rule does
+    // not already claim about itself. Every shipped rule's own `meta.status` is `provisional`
+    // (`DISCLAIMER.md`), so a pack entry that also declares `provisional` is not claiming anything
+    // beyond the rule's built-in baseline, and its citation is not neutralised just because the pack
+    // as a whole is untrusted. This is also what lets the bundled provisional pack's own citations
+    // through without needing `trustedRulePackIds` to name it.
     const diagnostic = only(
       VOCABULARY_DOC,
       {

@@ -146,21 +146,26 @@ provenance:{...}})` yields `{"a":"x"}` — unknown keys are **stripped**, silent
 These are real today, with a single pack, and layering multiplies each of them. Flagged here because
 they are inside the trust boundary I own.
 
-1. **An untrusted pack's `sourceRef` is written to diagnostics verbatim.** `src/core/runner.ts:96-112`
-   caps `status` through `verifiedRuleStatus` but assigns
-   `meta: { ...processed.meta, sourceRef: packSpec?.sourceRef ?? '' }` (line 110) **unconditionally**
-   whenever `packSpec !== undefined`. An untrusted pack can therefore put the string
-   `"ASD-STE100 Issue 8, Writing Rule 3.1"` onto a diagnostic that reports `supplementary`. The
-   authority scalar is capped; the citation is not.
+1. **Fixed for a single pack: an untrusted pack's `sourceRef` reached diagnostics verbatim.** (#66.)
+   `src/core/runner.ts` withheld a citation only when `verifiedRuleStatus` downgraded a `"normative"`
+   declaration. A pack could declare `status: "supplementary"` directly instead. That declaration was
+   never downgraded. Its citation reached the diagnostic unexamined. The fix gates on a different
+   test now. A pack entry that only restates the rule's own built-in `provisional` status makes no
+   claim. Its citation always reaches the diagnostic. Any other declared status is a claim. That
+   citation reaches the diagnostic only once the pack is named in `trustedRulePackIds`. This closes
+   the single-pack case. The multi-layer attribution problem below (attack 5) is unaffected. This fix
+   has no `EntryProvenance`. It cannot say _which_ layer made a claim, once layering lands.
 2. **Documentation understates the trust condition.** `docs/rule-pack-import.md:51` says
    "`packPermitsConformanceClaim()` returns true only for 'normative' + not 'none'." and the table at
    `docs/rule-pack-import.md:135` gives `true` if `conformanceClaim !== 'none'`. Both omit condition
    3 — the `trustedRulePackIds` requirement — i.e. the documented function is _more permissive than
    the implemented one_. Safe in practice (the code is stricter than the doc), wrong as a contract.
-3. **No test covers the trust boundary.** `grep -rln "authority\|conformance\|rulePack" test/`
-   returns nothing across all 27 files under `test/`. `verifiedAuthority`,
-   `packPermitsConformanceClaim` and `verifiedRuleStatus` are unexercised. (Testing is out of scope
-   for this spec; recording the gap is not.)
+3. **Fixed: the trust boundary now has direct test coverage.** (#67.)
+   `test/integration/rule-pack.test.ts` pins the trust gate, the status split, and
+   `packPermitsConformanceClaim` end-to-end. `test/unit/rule-pack-loader.test.ts` calls
+   `resolveRulePack`, `loadRulePackFromFile`, `parseRulePack` and `verifiedAuthority` directly. This
+   spec still lacks one thing: coverage of the _layered_ trust model below. That model does not exist
+   yet.
 4. **Config already overrides pack limits with no record.** `options.maxSentencesPerStep ??
 pack.limits.maxSentencesPerProceduralStep` (`structure-rules.ts:43`) and the equivalents in
    `sentence-length.ts:28-30` and `candidate-rules.ts:331` let operator config silently displace a
@@ -817,12 +822,14 @@ no record at all (`structure-rules.ts:43`, `sentence-length.ts:28-30`) — pre-e
 
 _Attack._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
 "normative", sourceRef: "ASD-STE100 Issue 8, Writing Rule 3.1"}]`. Status is capped to
-`supplementary` by `verifiedRuleStatus` (`runner.ts:139-146`) — but `runner.ts:110` assigns
-`meta.sourceRef` **unconditionally** whenever `packSpec !== undefined`. The fabricated citation lands
-on the diagnostic verbatim, next to a `supplementary` tag that most readers will not weigh against a
-specific-looking standard citation.
+`supplementary` by `verifiedRuleStatus` (`runner.ts:139-146`).
 
-_Naively:_ works **today**, with one pack. Layering adds six more suppliers who can do it.
+_Naively:_ **fixed for a single pack** (#66). `runner.ts` now withholds the citation on a real claim
+from an untrusted pack. A real claim is any declared status other than the rule's own built-in
+`provisional`. The fabricated citation above is replaced with `unverified citation from untrusted
+rule pack "<id>"`. Single-pack trust still cannot do one thing. It cannot name _which_ layer made
+the claim, once several suppliers stack. That is the part layering still adds, six more suppliers
+deep. It is also the part this fix does not touch.
 
 _Stopped by:_ `sourceRef` becomes attributed, not asserted. It moves onto `EntryProvenance.sourceRef`
 (where it sits beside `packId`, `trusted`, and `verifiedAuthority`) and is rendered as

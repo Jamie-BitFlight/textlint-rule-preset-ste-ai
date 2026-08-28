@@ -100,6 +100,13 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
         ? undefined
         : verifiedRuleStatus(packSpec.status, pack, config.trustedRulePackIds);
 
+    // Whether the *pack itself* is trusted, independent of what any one rule entry declares.
+    // `sourceRef` trust cannot be inferred from whether `packStatus` was downgraded (#66's original
+    // gap): an untrusted pack that declares `status: "supplementary"` directly, rather than
+    // `"normative"`, is never downgraded — `verifiedRuleStatus` only ever touches a `"normative"`
+    // declaration — so gating on the downgrade let that pack's citation straight through.
+    const packTrusted = config.trustedRulePackIds.includes(pack.metadata.id);
+
     for (const diagnostic of output.diagnostics) {
       const processed = postProcess(diagnostic, rule, doc, config, blockById, severityOverride);
       if (processed === null) continue;
@@ -111,13 +118,15 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
               ruleStatus: packStatus,
               meta: {
                 ...processed.meta,
-                // An untrusted pack's declared citation is capped the same way its status is: a
-                // pack that asserted `normative` but was downgraded to `supplementary` cannot
-                // still put its own free-text citation on the diagnostic verbatim (#66) — that
-                // citation is exactly the kind of claim the trust gate exists to withhold from an
-                // unverified supplier.
+                // A pack entry that only restates the rule's own built-in status (`rule.meta.status`
+                // — always `provisional` for every shipped rule) makes no claim for a citation to
+                // misrepresent, so its `sourceRef` is honoured regardless of trust; this is what lets
+                // the bundled provisional pack's self-referential citations through without needing
+                // `trustedRulePackIds` to name it. A pack entry that declares anything else — a real
+                // claim about this rule's authority — has its citation withheld unless the pack
+                // itself is trusted.
                 sourceRef:
-                  packSpec.status === packStatus
+                  packSpec.status === rule.meta.status || packTrusted
                     ? packSpec.sourceRef
                     : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
               },

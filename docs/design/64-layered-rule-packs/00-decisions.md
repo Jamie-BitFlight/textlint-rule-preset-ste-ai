@@ -209,13 +209,17 @@ test strategy, and staged rollout remain applicable. Its back-compat reasoning d
 
 ## Related defects found while specifying
 
-Both are independent of layering and are tracked separately:
+Both were independent of layering, tracked separately, and are now fixed for the single-pack case
+this repository ships today:
 
-- **`sourceRef` passes through untrusted.** `runner.ts:112` assigns `meta.sourceRef` from the pack
-  unconditionally. `verifiedRuleStatus` caps an untrusted pack's _status_. The citation _string_,
-  however, is copied verbatim. An untrusted pack can therefore print a fabricated standard citation on
-  a diagnostic.
-- **The rule-pack loader has no test coverage**, as above.
+- **`sourceRef` passed through untrusted (#66, fixed).** `runner.ts` withheld an untrusted pack's
+  citation only when a downgrade actually occurred. A pack could dodge that check. It only had to
+  declare a non-`normative` status directly. The check now withholds the citation on a different
+  test. Any status beyond the rule's own built-in `provisional` default is a claim. An untrusted
+  pack's claim withholds its citation. Layering still leaves one gap open: attributing a claim to
+  _which_ layer supplied it, once several packs stack. See attack 5 in `02-authority-trust.md`.
+- **The rule-pack loader had no test coverage (#67, fixed).** `test/integration/rule-pack.test.ts`
+  and `test/unit/rule-pack-loader.test.ts` now cover it directly, as above.
 
 ## Documentation already inaccurate, before any of this lands
 

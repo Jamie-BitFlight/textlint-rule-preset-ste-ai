@@ -1,6 +1,26 @@
 import type { RulePack } from './types.js';
 
 /**
+ * Recursively freezes an object graph. `core/runner.ts` trusts `pack === provisionalRulePack`
+ * (reference identity) to decide whether an untrusted pack's citation can be honoured — but
+ * identity alone does not stop a caller from mutating this exact object in place (`pack.rules =
+ * forged`), which changes what the trusted reference points at without changing the reference
+ * itself (Codex review on PR #116, round 9: verified directly by mutating `rules` and
+ * `dictionary` on the live singleton and observing the forged citation get trusted). Freezing
+ * every object and array in the graph makes that assignment throw in strict-mode module code
+ * (all of `src/` is ESM) instead of silently succeeding.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const nested of Object.values(value)) {
+      deepFreeze(nested);
+    }
+  }
+  return value;
+}
+
+/**
  * Bundled **provisional** rule pack.
  *
  * PROVENANCE (classification 4 — implementation assumption).
@@ -19,7 +39,7 @@ import type { RulePack } from './types.js';
  *
  * To replace this with normative data, see `docs/rule-pack-import.md`.
  */
-export const provisionalRulePack: RulePack = {
+export const provisionalRulePack: RulePack = deepFreeze({
   metadata: {
     id: 'ste-ai-provisional',
     name: 'STE-AI provisional controlled-English pack',
@@ -309,4 +329,4 @@ export const provisionalRulePack: RulePack = {
       enabled: true,
     },
   ],
-};
+});

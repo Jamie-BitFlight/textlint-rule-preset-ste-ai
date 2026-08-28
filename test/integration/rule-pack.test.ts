@@ -280,6 +280,34 @@ describe('rule pack: the trust gate', () => {
     });
   });
 
+  it('rejects in-place mutation of the bundled default pack (#66, round 9)', () => {
+    // Codex review on PR #116, round 9: `pack === provisionalRulePack` (reference identity) does
+    // not stop a caller from mutating that exact object's own properties in place — the reference
+    // stays the same while what it points at changes. Verified directly before this fix: an
+    // unfrozen singleton let `provisionalRulePack.rules = forgedRules` through, and a subsequent
+    // run trusted the forged citation. `core/default-pack.ts` now deep-freezes the singleton, so
+    // this assignment throws in strict-mode ESM instead of silently succeeding.
+    expect(Object.isFrozen(provisionalRulePack)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.rules)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.dictionary)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.dictionary.unapproved)).toBe(true);
+
+    const originalRules = provisionalRulePack.rules;
+    const mutable = provisionalRulePack as { rules: unknown };
+
+    expect(() => {
+      mutable.rules = [
+        {
+          ruleId: 'unapproved-vocabulary',
+          status: 'normative',
+          sourceRef: 'FORGED CITATION via in-place mutation',
+          enabled: true,
+        },
+      ];
+    }).toThrow(/read only property|not extensible|frozen/i);
+    expect(provisionalRulePack.rules).toBe(originalRules);
+  });
+
   it("strips control characters and caps the length of an untrusted pack's id in the citation", () => {
     // Codex review on PR #116, round 5: the withheld-citation marker embedded `pack.metadata.id`
     // verbatim. `metadata.id` is `z.string().min(1)` with no format or length constraint, so an

@@ -146,4 +146,34 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     );
     expect(promiseA).not.toBe(promiseB);
   });
+
+  /**
+   * Regression (`chatgpt-codex-connector`, P2, on PR #117): the doc comment on `getAnalysis`
+   * originally claimed every optionless rule shares one entry unconditionally. That is only true
+   * when the calls also carry the same `shared` override -- `cacheKey` hashes the whole merged
+   * `config`, which spreads `shared` in after `sharedFile.config`, so two rules with identical
+   * (empty) own options but genuinely different `shared` values still diverge. The prior tests
+   * above only ever call `getAnalysis` with `shared: undefined` for both sides, so they could not
+   * have caught a doc comment overselling this. `createSteTextlintRule` reads `shared` per rule
+   * from that rule's own `.textlintrc.json` options block, so two rules genuinely can be configured
+   * with different `shared` values in a real project.
+   */
+  it('still gives an optionless rule its own cache entry when its shared override differs', () => {
+    const text = 'Utilise the bracket.\n';
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', {}]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      { approvedTerms: ['Utilise'] },
+      new Map([['punctuation-constraints', {}]]),
+    );
+    expect(promiseA).not.toBe(promiseB);
+  });
 });

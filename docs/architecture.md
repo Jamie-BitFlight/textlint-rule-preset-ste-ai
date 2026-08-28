@@ -219,15 +219,20 @@ disagreeing about the same characters is the situation where an automated edit i
 
 ## textlint adapter
 
-The whole document is analysed once, by the core; each textlint rule reports only the diagnostics
-carrying its own id. Consequences:
+The core analyses the document once per distinct effective configuration a rule ends up with. It
+does not analyse the whole run just once. Each textlint rule reports only the diagnostics carrying
+its own id.
 
-- protected regions, segmentation and the fix gate are applied once, identically, for all rules — a
-  rule cannot disagree with its neighbours about what is code;
-- diagnostics are reported against the `Document` node, whose range starts at 0, so the relative
-  padding textlint wants equals the absolute offset the core produced;
-- rules with no rule-specific options of their own share one analysis and, at most, one round of
-  semantic requests. A rule that sets its own options gets a separate analysis scoped to it.
+Consequences:
+
+- Protected regions, segmentation, and the fix gate are applied identically within each such
+  analysis. A rule cannot disagree with a neighbour sharing that configuration about what is code.
+- Diagnostics are reported against the `Document` node. Its range starts at 0. The relative padding
+  textlint wants equals the absolute offset the core produced.
+- Rules with no rule-specific options of their own, and the same `shared` override, share one
+  analysis. They share at most one round of semantic requests too. A rule that sets its own
+  options gets a separate analysis scoped to it. So does a rule with a different `shared`
+  override.
 
 Per-document configuration that textlint cannot express per rule (rule pack, semantic service,
 autofix policy, protected terminology) is read from a shared file — see

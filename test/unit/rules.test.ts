@@ -34,6 +34,7 @@ function run(
     rules: deterministicRules,
     config: resolved,
     pack: provisionalRulePack,
+    packIsBundledDefault: true,
   });
   return {
     diagnostics: result.diagnostics,
@@ -423,6 +424,7 @@ describe('abbreviation-introduction', () => {
       rules: deterministicRules,
       config: resolved,
       pack: provisionalRulePack,
+      packIsBundledDefault: true,
     });
 
     const notice = result.notices.find(
@@ -696,6 +698,7 @@ describe('runner invariants', () => {
       rules: deterministicRules,
       config: resolved,
       pack: provisionalRulePack,
+      packIsBundledDefault: true,
     });
     expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(true);
   });

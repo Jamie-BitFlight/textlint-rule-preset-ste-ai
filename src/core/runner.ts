@@ -22,6 +22,20 @@ export interface RunOptions {
   readonly rules: readonly DeterministicRule[];
   readonly config: SteAiConfig;
   readonly pack: RulePack;
+  /**
+   * True when `pack` is the literal bundled-default singleton `provisionalRulePack`, not merely a
+   * pack whose content happens to match it. `core` cannot import `rule-pack` to check this itself
+   * (`test/architecture/module-boundaries.test.ts` forbids it), so the caller — which already holds
+   * the reference `resolveRulePack` returned — passes the answer in. String-comparing a pack
+   * entry's `sourceRef` against `rule.meta.sourceRef` was tried and found insufficient (Codex review
+   * on PR #116): an untrusted pack can copy that citation string verbatim while supplying entirely
+   * different rule-governing data (a fabricated dictionary entry, a loosened limit), so the
+   * diagnostic still carries a citation that names a section describing different data than the one
+   * that actually fired. Only genuine identity with the bundled singleton — which no supplied pack
+   * can ever produce, since `resolveRulePack` always returns a freshly parsed object for anything
+   * other than "no `rulePack` configured" — proves the cited data is what the citation claims it is.
+   */
+  readonly packIsBundledDefault: boolean;
   /** Restrict the run to a single rule id. Used by the per-rule textlint adapters. */
   readonly onlyRuleId?: string;
   /**
@@ -118,19 +132,17 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
               ruleStatus: packStatus,
               meta: {
                 ...processed.meta,
-                // Matching `status` was not enough (Codex review on PR #116): every shipped rule's
-                // own status is `"provisional"`, so an untrusted pack could declare `"provisional"`
-                // too and still supply a fabricated standard citation — the status matched, but the
-                // *citation text* was still the pack's own unverified claim. The only citation that
-                // needs no trust is the one the rule already carries in code — `rule.meta.sourceRef`
-                // — because a pack entry cannot change what that string is, only whether it repeats
-                // it verbatim. Any other citation text is the pack's own claim and is withheld unless
-                // the pack itself is trusted. The bundled provisional pack's entries repeat their
-                // rule's own `sourceRef` exactly (verified: every shipped rule's pack entry matches),
-                // so its citations still reach diagnostics without needing `trustedRulePackIds` to
-                // name it.
+                // String-comparing `sourceRef` against `rule.meta.sourceRef` was tried and found
+                // insufficient (Codex review on PR #116): an untrusted pack can copy that citation
+                // string verbatim while supplying entirely different rule-governing data — a
+                // fabricated dictionary entry, a loosened limit — so the diagnostic still carried a
+                // citation naming a section that describes different data than what actually fired.
+                // Matching a string proves the string matches; it proves nothing about the data
+                // behind it. Only `options.packIsBundledDefault` — genuine identity with the bundled
+                // singleton, which no supplied pack can ever produce — proves the cited data is what
+                // the citation claims it is.
                 sourceRef:
-                  packSpec.sourceRef === rule.meta.sourceRef || packTrusted
+                  options.packIsBundledDefault || packTrusted
                     ? packSpec.sourceRef
                     : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
               },

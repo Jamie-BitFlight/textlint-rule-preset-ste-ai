@@ -146,17 +146,23 @@ provenance:{...}})` yields `{"a":"x"}` — unknown keys are **stripped**, silent
 These are real today, with a single pack, and layering multiplies each of them. Flagged here because
 they are inside the trust boundary I own.
 
-1. **Fixed for a single pack, two rounds.** An untrusted pack's `sourceRef` reached diagnostics
+1. **Fixed for a single pack, three rounds.** An untrusted pack's `sourceRef` reached diagnostics
    verbatim. (#66.) `src/core/runner.ts` first withheld a citation only when `verifiedRuleStatus`
    downgraded a `"normative"` declaration. A pack could declare `status: "supplementary"` directly
    instead. That declaration was never downgraded. Its citation reached the diagnostic unexamined.
    The fix moved to gating on the declared status. A pack entry that only restated the rule's own
    built-in `provisional` status made no claim. Its citation always reached the diagnostic. That gate
    still had a hole. Every shipped rule's own status already is `provisional`. A pack could declare
-   `provisional` and still supply a fabricated citation. The gate now compares the citation text
-   itself. A pack entry's `sourceRef` reaches the diagnostic in two cases only. It repeats
-   `rule.meta.sourceRef` verbatim. Or the pack is named in `trustedRulePackIds`.
-   `rule.meta.sourceRef` is the rule's own built-in citation. This closes the single-pack
+   `provisional` and still supply a fabricated citation. The fix moved again. It compared the
+   citation text instead. A pack entry's `sourceRef` reached the diagnostic only when it repeated
+   `rule.meta.sourceRef` verbatim. That gate had a hole too. An untrusted pack could copy the exact
+   citation string. It could still replace the data behind it. A fabricated dictionary entry, a
+   loosened limit, either one. A citation naming this repository's own documentation could then sit
+   next to a finding that documentation never describes. The gate now compares identity instead. It
+   does not check any field a pack declares or any text it copies. A pack entry's citation reaches
+   the diagnostic in two cases only. `pack` is
+   the literal bundled-default object, which no supplied pack can ever be. Or the pack is named in
+   `trustedRulePackIds`. This closes the single-pack
    case. The multi-layer attribution problem below (attack 5) is unaffected. This fix has no
    `EntryProvenance`. It cannot say _which_ layer made a claim, once layering lands.
 2. **Documentation understates the trust condition.** `docs/rule-pack-import.md:51` says
@@ -824,18 +830,29 @@ no record at all (`structure-rules.ts:43`, `sentence-length.ts:28-30`) — pre-e
 
 ### 5. Fabricated `sourceRef`
 
-_Attack._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
+_Attack, variant 1._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
 "normative", sourceRef: "ASD-STE100 Issue 8, Writing Rule 3.1"}]`. Status is capped to
 `supplementary` by the local `verifiedRuleStatus` helper in `runner.ts`.
 
-_Naively:_ **fixed for a single pack** (#66). `runner.ts` now withholds the citation whenever its
-text is the pack's own claim. The only citation that needs no trust is the one the rule already
-carries in code, `rule.meta.sourceRef`. A pack entry that repeats that string verbatim is not
-claiming anything the code did not already claim. Any other text is the pack's own unverified
-citation. The fabricated citation above is replaced with `unverified citation from untrusted rule
-pack "<id>"`. Single-pack trust still cannot do one thing. It cannot name _which_ layer made the
-claim, once several suppliers stack. That is the part layering still adds, six more suppliers deep.
-It is also the part this fix does not touch.
+_Attack, variant 2._ Untrusted pack supplies `dictionary.unapproved: [{term: "florp", alternatives:
+["widget"]}]`. That word is not in the bundled dictionary. The pack also supplies `rules:
+[{ruleId: "unapproved-vocabulary", status: "provisional", sourceRef:
+"provisional:docs/provisional-rules.md#unapproved-vocabulary"}]`. That copies the bundled pack's own
+citation string exactly. An earlier fix compared that string against `rule.meta.sourceRef`. A match
+let the citation through. The finding on "florp" would then carry a citation naming this
+repository's own documentation. That section describes the bundled list. It states plainly that the
+list "is deliberately small". It does not include "florp". The citation matched. The data behind it
+did not.
+
+_Naively:_ **fixed for a single pack, both variants** (#66). `runner.ts` now withholds the citation
+in one case only. `pack` must be the literal bundled-default object, or the pack must be named in
+`trustedRulePackIds`. Identity decides the first case. No field a pack declares decides it. No text
+it copies decides it either. No supplied pack, however it shapes itself, can ever be that same
+object. So neither variant above can produce a citation the gate accepts. The fabricated citation in
+variant 1 is replaced with `unverified citation from untrusted rule pack "<id>"`. So is variant 2's,
+regardless of what it copied. Single-pack trust still cannot do one thing. It cannot name _which_
+layer made the claim, once several suppliers stack. That is the part layering still adds, six more
+suppliers deep. It is also the part this fix does not touch.
 
 _Stopped by:_ `sourceRef` becomes attributed, not asserted. It moves onto `EntryProvenance.sourceRef`
 (where it sits beside `packId`, `trusted`, and `verifiedAuthority`) and is rendered as

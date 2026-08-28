@@ -183,19 +183,23 @@ describe('rule pack: the trust gate', () => {
     expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
   });
 
-  it("passes an untrusted pack's citation through unchanged when it repeats the rule's own sourceRef verbatim", () => {
-    // The trust gate withholds a citation only when its *text* is the pack's own claim. A pack
-    // entry cannot change what `rule.meta.sourceRef` is — only whether it repeats that exact string
-    // — so an entry that does repeat it verbatim is not asserting anything beyond what the rule's
-    // own code already asserts, and its citation is not neutralised just because the pack as a
-    // whole is untrusted. This is also what lets the bundled provisional pack's own citations
-    // through without needing `trustedRulePackIds` to name it (every shipped rule's pack entry
-    // repeats that same rule's own `sourceRef` exactly — see `test/unit/rule-pack-loader.test.ts`
-    // for nothing that pins this specific invariant; verified ad hoc for this test instead).
+  it("withholds the citation even when it repeats the bundled pack's own sourceRef text verbatim", () => {
+    // Codex review on PR #116, round 4: comparing `sourceRef` text against `rule.meta.sourceRef`
+    // was still not enough. An untrusted pack can copy that citation string verbatim while
+    // supplying entirely different rule-governing data — here, a dictionary entry the bundled pack
+    // never lists — so the diagnostic would carry a citation naming a documentation section that
+    // describes different data than what actually fired. Reproduces Codex's own proof: a
+    // supplier-invented term with the bundled pack's exact `unapproved-vocabulary` citation
+    // attached.
     const diagnostic = only(
-      VOCABULARY_DOC,
+      'Florp the widget.\n',
       {
         rulePack: pack({
+          dictionary: {
+            approved: [],
+            unapproved: [{ term: 'florp', alternatives: ['widget'] }],
+            preferred: [],
+          },
           rules: [
             {
               ruleId: 'unapproved-vocabulary',
@@ -207,6 +211,20 @@ describe('rule pack: the trust gate', () => {
       },
       'unapproved-vocabulary',
     );
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).not.toMatchObject({
+      sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+    });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it('honours the real bundled default pack, unmodified, with no rulePack configured', () => {
+    // The only citation that needs no trust is the one actually produced by the literal bundled
+    // singleton `provisionalRulePack` — identified by object identity in `runner.ts`
+    // (`packIsBundledDefault`), never by comparing any text a supplied pack could copy. Confirms
+    // the positive case: the real default keeps working with no `rulePack` configured at all.
+    const diagnostic = only(VOCABULARY_DOC, {}, 'unapproved-vocabulary');
 
     expect(diagnostic.ruleStatus).toBe('provisional');
     expect(diagnostic.meta).toMatchObject({

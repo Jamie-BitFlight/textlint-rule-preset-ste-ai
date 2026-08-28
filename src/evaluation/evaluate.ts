@@ -6,7 +6,7 @@ import { runDeterministicRules } from '../core/runner.js';
 import type { CandidatePassage, SemanticEvaluatorId, SourceRange } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
 import type { ModelTransport } from '../model-client/types.js';
-import { resolveRulePack } from '../rule-pack/loader.js';
+import { provisionalRulePack, resolveRulePack } from '../rule-pack/loader.js';
 import { SemanticBroker } from '../semantic/broker.js';
 import { annotationSchema, type Annotation } from '../fixture-tools/annotation-schema.js';
 import { fixtureManifestSchema, type FixtureEntry } from '../fixture-tools/manifest-schema.js';
@@ -247,7 +247,13 @@ export async function evaluateSemanticEvaluators(
         structure: { extraImperativeVerbs: config.extraImperativeVerbs },
       },
     );
-    const run = runDeterministicRules({ doc, rules: deterministicRules, config, pack });
+    const run = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config,
+      pack,
+      packIsBundledDefault: pack === provisionalRulePack,
+    });
     if (run.candidates.length === 0) continue;
 
     const outcomes = await broker.adjudicate(run.candidates, options.signal);

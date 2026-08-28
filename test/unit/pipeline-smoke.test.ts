@@ -36,6 +36,7 @@ function analyse(text: string) {
       rules: deterministicRules,
       config,
       pack: provisionalRulePack,
+      packIsBundledDefault: true,
     }),
   };
 }

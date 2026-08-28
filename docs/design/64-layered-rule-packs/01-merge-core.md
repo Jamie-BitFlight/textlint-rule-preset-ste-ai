@@ -854,8 +854,9 @@ The merge core hands the authority spec structured data and makes no trust decis
    raise `status` from `provisional` to `normative` while inheriting an earlier layer's `sourceRef`,
    or replace the `sourceRef` while inheriting the status. `runDeterministicRules()` in `runner.ts`
    uses both. It caps `status` through `verifiedRuleStatus`. It gates `sourceRef` through a check of
-   its own (#66, fixed). An untrusted single pack's citation is withheld. It is honoured only when it
-   repeats the rule's own built-in `sourceRef` verbatim. Neither check has any per-layer identity to
+   its own (#66, fixed). An untrusted single pack's citation is withheld. It is honoured only when
+   `pack` is the literal bundled-default object, or the pack is trusted. Identity decides this, not
+   any field the pack declares or any text it copies. Neither check has any per-layer identity to
    reason about yet.
    The merge core records every field change in `provenance` and classifies none of them. Whether a
    layer may raise `status` at all, and whether raising it while inheriting someone else's

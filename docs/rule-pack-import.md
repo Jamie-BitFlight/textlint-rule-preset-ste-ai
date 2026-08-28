@@ -221,15 +221,20 @@ An imported pack is therefore untrusted until the operator names its `metadata.i
 normative standing is capped at `supplementary`. The match is on `metadata.id` alone. The pack name
 and the file path do not count.
 
-A rule entry's `sourceRef` is gated too, but on the citation text, not on the declared status. Every
-shipped rule already carries its own `sourceRef` in code (`rule.meta.sourceRef`). A pack entry can
-repeat that exact string in its own `sourceRef`. Doing so asserts nothing beyond what the rule's own
-code already asserts. Its citation then always reaches the diagnostic. Any other `sourceRef` text is
-a real claim of its own. That claim's citation reaches the diagnostic only once the operator trusts
-the pack. An untrusted pack's diagnostic instead reports `unverified citation from untrusted rule
-pack "<metadata.id>"`. This holds regardless of which status the entry declares. Declaring
-`provisional` does not exempt a pack entry's citation. Every shipped rule's own status already is
-`provisional`. Matching the status alone proves nothing about the citation text.
+A rule entry's `sourceRef` is gated too, but not on anything the entry declares. Two earlier gates
+were tried and found insufficient. Matching the entry's declared `status` against the rule's own
+default was the first. Every shipped rule's own status already is `provisional`. An untrusted pack
+could declare `provisional` too, and still fabricate a citation. Matching the `sourceRef` text
+against the rule's own built-in citation was the second. An untrusted pack can copy that exact
+string. It can still supply different data underneath it — a fabricated dictionary entry, a loosened
+limit. The citation would then name a documentation section describing data other than what actually
+fired. Neither a declared field nor a copied string proves where the data came from.
+
+The citation reaches the diagnostic in exactly two cases now. The pack is the literal bundled
+default. Identity proves that, not any field or text it could copy. No supplied pack can
+ever be that same object. Or the operator has named the pack's `metadata.id` in
+`trustedRulePackIds`. Anything else reports `unverified citation from untrusted rule pack
+"<metadata.id>"` instead of the pack's own text.
 
 ## What status a diagnostic reports
 

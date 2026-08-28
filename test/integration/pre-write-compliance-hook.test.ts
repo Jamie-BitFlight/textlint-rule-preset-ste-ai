@@ -1,0 +1,166 @@
+import { execSync, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vite-plus/test';
+
+/**
+ * `hooks/block-noncompliant-prose.cjs` is a Claude Code `PreToolUse` hook shipped by this
+ * repository's own plugin (`.claude-plugin/plugin.json`): it blocks a `Write`/`Edit` call that
+ * would make a markdown file's ste-ai lint error count worse than what is already on disk. It has
+ * no unit test of its own kind — it only runs as a subprocess fed a JSON event on stdin — so these
+ * cases run the real script the same way Claude Code does, against this repository's own real
+ * `.textlintrc.json` and `docs/architecture.md`.
+ *
+ * The diffing logic inside the hook was wrong on its first draft: it took `after.slice(before
+ * .length)` to mean "the new findings", which actually reports whichever findings end up at the
+ * tail of the *sorted-by-position* list — a pre-existing finding on a later line, shifted only
+ * because an earlier insertion moved every subsequent line down, not a genuinely new one. Verified
+ * directly by inserting a run-on sentence and diffing the real message sets by hand before fixing
+ * the hook to use a multiset diff keyed on `ruleId` + `message` instead. The case below pins that
+ * the reported findings are the real new ones, not shifted old ones.
+ */
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+const hookScript = 'hooks/block-noncompliant-prose.cjs';
+const targetFile = `${repoRoot}docs/architecture.md`;
+
+function runHook(event: unknown): { status: number | null; stderr: string } {
+  const result = spawnSync('node', [hookScript], {
+    cwd: repoRoot,
+    input: JSON.stringify(event),
+    encoding: 'utf8',
+  });
+  return { status: result.status, stderr: result.stderr };
+}
+
+// Each case here spawns the hook as a real subprocess, which itself spawns real `textlint` runs
+// (once or twice) -- inherently slower than the default test budget under full-suite parallel
+// load. Verified flaky at the default 20s timeout: 3 of 8 full-suite runs failed with
+// `Test timed out in 20000ms`, none with an assertion failure, while every isolated run of this
+// file alone passed -- CPU contention from the other 37 files running concurrently, not a logic
+// bug. 60s leaves headroom.
+const SUBPROCESS_TEST_TIMEOUT_MS = 60_000;
+
+describe('block-noncompliant-prose hook', () => {
+  it(
+    'passes an edit that introduces no new lint errors',
+    () => {
+      const result = runHook({
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: targetFile,
+          old_string: '## textlint adapter',
+          new_string: '## textlint adapter (renamed)',
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'blocks an edit that introduces new lint errors, reporting the real new findings',
+    () => {
+      const result = runHook({
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: targetFile,
+          old_string: '## textlint adapter',
+          new_string:
+            '## textlint adapter\n\n' +
+            'This sentence, which has, way too many, commas, in, it, is bad, style, and, should, ' +
+            'be, blocked, by, the, hook, immediately, without, any, hesitation, whatsoever, today.',
+        },
+      });
+      expect(result.status).toBe(2);
+      // The genuinely new findings, not a pre-existing finding whose line shifted.
+      expect(result.stderr).toContain('This sentence has 20 commas');
+      expect(result.stderr).toContain('ste-ai/punctuation-constraints');
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'passes an edit that reduces the file’s existing lint-error count',
+    () => {
+      const content = readFileSync(targetFile, 'utf8');
+      const oldString =
+        '`evaluation` is deliberately its own module rather than part of `fixture-tools`. Measuring an\n' +
+        'evaluator requires running the real rule set and the real broker, so it needs almost every layer;\n' +
+        'keeping it separate lets `fixture-tools` — which the library itself uses for corpus validation — stay\n' +
+        'restricted to `core` and `rule-pack`.';
+      expect(content).toContain(oldString);
+      const result = runHook({
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: targetFile,
+          old_string: oldString,
+          new_string:
+            '`evaluation` is its own module, separate from `fixture-tools`. Measuring an ' +
+            'evaluator needs the real rule set and broker. `fixture-tools` is used for corpus ' +
+            'validation. It stays restricted to `core` and `rule-pack`.',
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'ignores a non-markdown file',
+    () => {
+      const result = runHook({
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: `${repoRoot}src/textlint/adapter.ts`,
+          old_string: 'foo',
+          new_string: 'bar, bar, bar, bar, bar, bar',
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'ignores a tool other than Write or Edit',
+    () => {
+      const result = runHook({
+        tool_name: 'Read',
+        tool_input: { file_path: targetFile },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'ignores a markdown file outside any ste-ai-configured project',
+    () => {
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: '/tmp/no-ste-ai-project-marker/whatever.md',
+          content: 'This, sentence, has, way, too, many, commas, in, it.\n',
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'leaves no scratch file behind after blocking',
+    () => {
+      runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: `${repoRoot}docs/architecture.md`,
+          content: 'This, sentence, has, way, too, many, commas, in, it, and, more, and, more.\n',
+        },
+      });
+      const leftovers = execSync('git status --short', { cwd: repoRoot, encoding: 'utf8' });
+      expect(leftovers).not.toContain('.ste-ai-hook-');
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+});

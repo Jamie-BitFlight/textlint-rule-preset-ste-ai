@@ -1,0 +1,16 @@
+{
+  "description": "Blocks an agent's own Write/Edit calls that would make a markdown file's ste-ai lint errors worse than what is already on disk.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/block-noncompliant-prose.cjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

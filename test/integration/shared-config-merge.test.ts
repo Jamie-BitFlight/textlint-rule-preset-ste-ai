@@ -176,4 +176,38 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     );
     expect(promiseA).not.toBe(promiseB);
   });
+
+  /**
+   * Regression (`chatgpt-codex-connector`, P2, on PR #117, second round): `cacheKey` hashed
+   * `JSON.stringify(config)` directly, which serialises object keys in insertion order. Two
+   * `shared` overrides with the same keys and values, only reordered, hashed to different keys and
+   * did not share an analysis -- reproduced directly (`diagnostics` field order reversed) before
+   * `cacheKey` was changed to a recursive-key-sort `stableStringify`. The reordering below is
+   * exactly that repro: `sharedA` and `sharedB` differ only in which of `diagnostics`' two nested
+   * fields is written first.
+   */
+  it('shares one cache entry when two shared overrides differ only in key order', () => {
+    const text = 'Utilise the bracket.\n';
+    const sharedA = {
+      diagnostics: { reportSuppressed: true, severity: { 'review-required': 'info' as const } },
+    };
+    const sharedB = {
+      diagnostics: { severity: { 'review-required': 'info' as const }, reportSuppressed: true },
+    };
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      sharedA,
+      new Map([['no-contractions', {}]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      sharedB,
+      new Map([['punctuation-constraints', {}]]),
+    );
+    expect(promiseA).toBe(promiseB);
+  });
 });

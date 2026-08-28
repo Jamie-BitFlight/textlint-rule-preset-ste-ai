@@ -67,9 +67,35 @@ export interface SteRuleOptions {
   readonly [key: string]: unknown;
 }
 
+/**
+ * `JSON.stringify` on a plain object serialises keys in insertion order, so two objects with
+ * identical keys and values -- built by different code paths, or read from two `.textlintrc.json`
+ * rule entries that happen to list the same fields in a different order -- can serialise
+ * differently.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117): `cacheKey` used plain `JSON.stringify`
+ * directly, so two rules with a semantically identical but differently-ordered `shared` override
+ * hashed to different keys and did not share an analysis -- reproduced directly by constructing
+ * two `shared` objects with the same `diagnostics` fields in reversed order and observing distinct
+ * cache entries. This restores what the doc comment on `getAnalysis` actually claims: sharing keyed
+ * on the configuration's *content*, not its literal serialised text. Sorting keys recursively is
+ * sufficient and correct here because array order stays semantically significant (rule packs and
+ * lists are never key-value data) and every value cache keys are built from is plain JSON-shaped
+ * config, never a class instance with its own `toJSON`.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  if (!isPlainObject(value)) return JSON.stringify(value);
+  const entries = Object.keys(value)
+    .filter((key) => value[key] !== undefined)
+    .toSorted()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
 function cacheKey(text: string, ruleId: string, options: unknown, baseDir: string): string {
   void ruleId;
-  return contentHash(text, baseDir, JSON.stringify(options ?? {}));
+  return contentHash(text, baseDir, stableStringify(options ?? {}));
 }
 
 /**
@@ -348,7 +374,7 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
         let reportedForNode = reportedRunNoticesFor.get(node);
         for (const notice of analysis.notices) {
           if (notice.level === 'info') continue;
-          const identity = `${notice.code} ${notice.message}`;
+          const identity = JSON.stringify([notice.code, notice.message]);
           if (reportedForNode?.has(identity) === true) continue;
           if (reportedForNode === undefined) {
             reportedForNode = new Set();

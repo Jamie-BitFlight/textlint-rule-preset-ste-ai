@@ -32,7 +32,10 @@ second is an instruction to check the current change set.
 
 You may receive neither. Find the change set yourself in that case. Run `git status --short`
 first. Staged or unstaged changes exist when that command lists any. Run `git diff HEAD` to
-capture them. Neither may exist. Report that there is nothing to review, and stop, in that case.
+capture them. `git diff HEAD` never reports an untracked file, even one `git status --short`
+lists with a leading `??`. Run `git diff --no-index /dev/null <path>` for each such path, and add
+that output to the change set. Neither a tracked nor an untracked change may exist. Report that
+there is nothing to review, and stop, in that case.
 
 ## Step 1: List every changed file
 
@@ -53,24 +56,31 @@ At each directory level, check for five things:
 4. `AGENTS.md`.
 5. `CLAUDE.md`.
 
-Treat each of these five categories on its own. For each category, find the nearest directory
-level with any match. That is the level closest to the changed file, not the repository root.
+Treat each of these five categories on its own. Collect every match at every directory level in
+the ancestry. Walk from the changed file's own directory up to the repository root. A deeper file
+does not remove a shallower one from this set. A changed file three levels down can end up governed by four different `AGENTS.md` files at once.
+One such file can exist at every level.
 
-`AGENTS.md` and `CLAUDE.md` each name a single file. `.claude/rules/*.md`, `.cursor/rules/*.md`,
-and `.agents/rules/*.md` are globs instead. A directory can hold several matching files at once.
-Every file matching the glob at the nearest level counts, not only one of them.
+`AGENTS.md` and `CLAUDE.md` each name a single file per directory. `.claude/rules/*.md`,
+`.cursor/rules/*.md`, and `.agents/rules/*.md` are globs instead. A directory can hold several
+matching files at once. Every file matching the glob at every level counts, not only one of them.
 
 A category with no match anywhere in the ancestry contributes nothing for that file. Two changed
-files in different subdirectories can end up governed by different rule files. This can happen
-even within the same review.
+files in different subdirectories can end up governed by different sets of rule files. This can
+happen even within the same review.
 
 Read every rule file this way resolves. Read each one only once per review, even if several
 changed files resolve to the same rule file.
 
 ## Step 3: Compare each change against its resolved rules
 
-Take each changed file's diff hunk. Compare it against every instruction in that file's resolved
-rule set. Do not compare the whole file, unless the rule concerns whole-file structure.
+Take each changed file's diff hunk. Compare it against every instruction in every rule file its
+ancestry resolved to. Use the root file too, not only the file nearest to the change. A deeper
+file's instruction can actually conflict with a shallower one. The deeper file wins that conflict,
+for that changed file only. An unrelated, non-conflicting instruction from a shallower file still
+applies in full. A nested `AGENTS.md` narrowing one rule never cancels the root `AGENTS.md`'s
+other, unrelated requirements. Do not compare the whole file, unless the rule concerns whole-file
+structure.
 
 Flag a breach only when a rule file states a concrete, checkable expectation. Checkable
 expectations include a "must" and a "must not." They include a required step order. They include

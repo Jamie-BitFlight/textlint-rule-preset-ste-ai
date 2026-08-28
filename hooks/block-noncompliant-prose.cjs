@@ -2,22 +2,24 @@
 'use strict';
 
 /**
- * PreToolUse hook — blocks a Write or Edit call that would make a markdown file's ste-ai
- * (`textlint-rule-preset-ste-ai`) lint error count worse than what is already on disk.
+ * PreToolUse hook — blocks a Write or Edit call that would introduce a ste-ai
+ * (`textlint-rule-preset-ste-ai`) lint finding a markdown file does not already carry.
  *
- * Scope: only engages in a project that actually configures this preset (a `.textlintrc.json`
- * mentioning `preset-ste-ai` must exist somewhere above the target file) and only for `.md`
- * files. A file that already carries pre-existing errors is not blocked from every future edit —
- * only from an edit that adds MORE errors than it already had. This mirrors
+ * Scope: only engages in a project that actually configures this preset. The nearest
+ * `.textlintrc.json` walking up from the target file is authoritative — it must mention
+ * `preset-ste-ai` itself; a config further up the tree does not count once a nearer one exists,
+ * even when that nearer config omits the preset. Only `.md` files are ever in scope. A file that
+ * already carries pre-existing errors is not blocked from every future edit — only from an edit
+ * that introduces a finding the file did not already have. This mirrors
  * `scripts/ci/check-dogfood-lint.mjs`'s own ratchet in this repo ("the ratchet only ever
- * shrinks"), at file-level error-count granularity rather than exact-finding fingerprinting,
- * since a hook has to stay fast and self-contained enough to run on every write in any project
- * that installs this plugin — not just this one.
+ * shrinks"), keyed on the exact finding (its rule plus its message) rather than on a raw error
+ * count: swapping one finding for a different one blocks the write even when the total count of
+ * errors does not rise.
  *
- * Exits code 2 (block + feedback to the agent) when the would-be content has more textlint errors
- * than the current on-disk content. Exits code 0 (pass) otherwise, including whenever the check
- * cannot run at all (no textlint config, no textlint binary, any unexpected error) — a hook that
- * fails open never blocks legitimate work.
+ * Exits code 2 (block + feedback to the agent) when the would-be content carries a genuinely new
+ * finding the current on-disk content does not have. Exits code 0 (pass) otherwise, including
+ * whenever the check cannot run at all (no textlint config, no textlint binary, any unexpected
+ * error) — a hook that fails open never blocks legitimate work.
  */
 
 const fs = require('node:fs');
@@ -67,8 +69,12 @@ function readStdin() {
   }
 }
 
-/** Walk from `startDir` up to the filesystem root, returning the first directory containing a
- * `.textlintrc.json` that mentions `preset-ste-ai`, or `undefined` if none is found. */
+/** Walk from `startDir` up to the filesystem root. The first readable `.textlintrc.json` found is
+ * authoritative and ends the walk immediately -- it is matched if it mentions `preset-ste-ai`, and
+ * treated as no match at all otherwise, even when some ancestor directory further up has a config
+ * that does mention it. A nested project's own config, once it exists and can be read, always
+ * decides that project's own files; the hook must never fall through to a parent's config the
+ * nested project never opted into. Returns `undefined` when no readable config is found at all. */
 function findSteAiConfigDir(startDir) {
   let dir = startDir;
   for (;;) {
@@ -76,9 +82,9 @@ function findSteAiConfigDir(startDir) {
     if (fs.existsSync(candidate)) {
       try {
         const raw = fs.readFileSync(candidate, 'utf8');
-        if (raw.includes('preset-ste-ai')) {
-          return { configDir: dir, configPath: candidate };
-        }
+        return raw.includes('preset-ste-ai')
+          ? { configDir: dir, configPath: candidate }
+          : undefined;
       } catch {
         // Unreadable config: keep walking up rather than treating it as a match.
       }

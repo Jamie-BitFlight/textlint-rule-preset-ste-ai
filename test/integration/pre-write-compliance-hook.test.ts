@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vite-plus/test';
 /**
  * `hooks/block-noncompliant-prose.cjs` is a Claude Code `PreToolUse` hook shipped by this
  * repository's own plugin (`.claude-plugin/plugin.json`): it blocks a `Write`/`Edit` call that
- * would make a markdown file's ste-ai lint error count worse than what is already on disk. It has
+ * would introduce a ste-ai lint finding a markdown file does not already carry, even when a
+ * different pre-existing finding drops out and the total error count does not rise. It has
  * no unit test of its own kind — it only runs as a subprocess fed a JSON event on stdin — so these
  * cases run the real script the same way Claude Code does, against this repository's own real
  * `.textlintrc.json` and `docs/architecture.md`.
@@ -50,8 +51,8 @@ function runHookRaw(stdin: string): { status: number | null; stderr: string } {
 // (once or twice) -- inherently slower than the default test budget under full-suite parallel
 // load. Verified flaky at the default 20s timeout: 3 of 8 full-suite runs failed with
 // `Test timed out in 20000ms`, none with an assertion failure, while every isolated run of this
-// file alone passed -- CPU contention from the other 37 files running concurrently, not a logic
-// bug. 60s leaves headroom.
+// file alone passed -- CPU contention from the rest of the suite running concurrently, not a
+// logic bug. 60s leaves headroom.
 const SUBPROCESS_TEST_TIMEOUT_MS = 60_000;
 
 describe('block-noncompliant-prose hook', () => {
@@ -220,6 +221,41 @@ describe('block-noncompliant-prose hook', () => {
         },
       });
       expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): the config walk used to keep climbing past a
+  // config that did not mention `preset-ste-ai`, so a nested project's own opt-out config was
+  // silently overridden by a parent directory's config that did enable the preset. Reproduced
+  // directly with the layout below before `findSteAiConfigDir` was changed to stop at the first
+  // readable config instead of only the first matching one.
+  it(
+    "stops at a nested project's own textlint config instead of a parent's",
+    () => {
+      const parentProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-parent-'));
+      try {
+        writeFileSync(
+          join(parentProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const nestedProject = join(parentProject, 'nested-project');
+        mkdirSync(nestedProject, { recursive: true });
+        writeFileSync(join(nestedProject, '.textlintrc.json'), JSON.stringify({ rules: {} }));
+        const targetPath = join(nestedProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: {
+            file_path: targetPath,
+            content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+          },
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(parentProject, { recursive: true, force: true });
+      }
     },
     SUBPROCESS_TEST_TIMEOUT_MS,
   );

@@ -26,16 +26,21 @@ The rules this check looks for live in a small set of files, each nearest to the
 2. That command may list staged or unstaged changes.
 3. Treat any such changes as the change set.
 4. Run `git diff HEAD` to capture the change set.
-5. The working tree may instead be clean.
-6. Fall back to the current pull request's diff in that case.
-7. Find the current branch with `git branch --show-current`.
-8. Find its upstream, and any pull request open for it.
-9. Fetch that pull request's diff, using the repository's own GitHub tooling.
-10. No pull request tooling may be available.
-11. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
-12. Neither a working-tree change set nor an open pull request diff may exist.
-13. Report that there is nothing to review, and stop, when neither exists.
-14. Do not invent a change set.
+5. `git diff HEAD` never reports an untracked file.
+6. `git status --short` still lists an untracked file, with a leading `??`.
+7. Run `git diff --no-index /dev/null <path>` for each `??` path.
+8. Add that command's output to the change set.
+9. This step alone makes a new file visible to the review.
+10. The working tree may instead be clean, with no staged, unstaged, or untracked changes at all.
+11. Fall back to the current pull request's diff in that case.
+12. Find the current branch with `git branch --show-current`.
+13. Find its upstream, and any pull request open for it.
+14. Fetch that pull request's diff, using the repository's own GitHub tooling.
+15. No pull request tooling may be available.
+16. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
+17. Neither a working-tree change set nor an open pull request diff may exist.
+18. Report that there is nothing to review, and stop, when neither exists.
+19. Do not invent a change set.
 
 ## Step 2: Review
 

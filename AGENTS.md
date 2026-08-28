@@ -18,6 +18,15 @@ import. Every instruction lives here, in one place.
    - Update stale behavior descriptions.
    - Replace or remove commands, paths, and claims that the change invalidates.
    - Also replace or remove any manually maintained, derivable data that the change invalidates.
+4. Do not cite a line number as a reference into source code, in a document that gets committed.
+   - A line number drifts on the next unrelated edit to that file. The citation is often stale
+     before review even finishes, let alone by the time a future reader opens it.
+   - Cite a symbol instead: the file path plus the function, type, constant, or export name it
+     names. `src/core/runner.ts`'s `runDeterministicRules`, not `runner.ts:44`.
+   - No symbol fits some claims — a doc comment's exact wording, an error message, a schema field.
+     Quote the identifying text itself instead of pointing at a line.
+   - This rule governs a document that gets committed. A line number is fine in chat. It is also
+     fine in a dispatched subagent's prompt. Any exchange that does not get checked in is fine too.
 
 Prose-style rules for this repository live in `.claude/skills/ste-ai-prose-style/SKILL.md`.
 

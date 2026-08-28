@@ -822,7 +822,7 @@ no record at all (`structure-rules.ts:43`, `sentence-length.ts:28-30`) — pre-e
 
 _Attack._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
 "normative", sourceRef: "ASD-STE100 Issue 8, Writing Rule 3.1"}]`. Status is capped to
-`supplementary` by `verifiedRuleStatus` (`runner.ts:139-146`).
+`supplementary` by the local `verifiedRuleStatus` helper in `runner.ts`.
 
 _Naively:_ **fixed for a single pack** (#66). `runner.ts` now withholds the citation on a real claim
 from an untrusted pack. A real claim is any declared status other than the rule's own built-in

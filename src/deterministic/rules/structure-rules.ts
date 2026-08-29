@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  buildSentencePosIndex,
-  isImperativeOpenerWord,
-  sentenceOpensImperative,
-} from '../../core/pos-tags.js';
+import { isImperativeOpenerWord, sentenceOpensImperative } from '../../core/pos-tags.js';
 import { buildDiagnostic, type DeterministicRule, type RuleOutput } from '../../core/rule.js';
 import type { CandidatePassage, Diagnostic, RuleMetadata } from '../../core/types.js';
 import { excerpt, groupSiblingListItems } from '../helpers.js';
@@ -159,7 +155,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
 > = {
   meta: oneInstructionMeta,
   optionsSchema: oneInstructionOptionsSchema,
-  run({ doc, options, policy, extraImperativeVerbs }): RuleOutput {
+  run({ doc, options, policy, extraImperativeVerbs, posIndexFor }): RuleOutput {
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
     const conjunctions = new Set(options.conjunctions.map((c) => c.toLowerCase()));
@@ -170,7 +166,7 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const first = words[0];
       if (first === undefined) continue;
       if (!sentenceOpensImperative(sentence.masked, extraImperativeVerbs)) continue;
-      const posIndex = buildSentencePosIndex(sentence, extraImperativeVerbs);
+      const posIndex = posIndexFor(sentence);
 
       let conjunctionHit: { index: number; verb: (typeof words)[number] } | null = null;
       for (let i = 1; i < words.length - 1; i += 1) {

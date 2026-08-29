@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  buildSentencePosIndex,
   isFunctionWord,
   isImperativeVerbWord,
   type SentencePosIndex,
@@ -14,7 +13,7 @@ import type {
   Sentence,
   SourceRange,
 } from '../../core/types.js';
-import { buildWinkPosIndex, type WinkPosIndex } from '../../core/wink-tags.js';
+import type { WinkPosIndex } from '../../core/wink-tags.js';
 import { excerpt } from '../helpers.js';
 
 /**
@@ -233,13 +232,13 @@ const passiveSpec: CandidateRuleSpec = {
 export const passiveVoiceCandidateRule: DeterministicRule<z.output<typeof passiveOptionsSchema>> = {
   meta: passiveSpec.meta,
   optionsSchema: passiveOptionsSchema,
-  run({ doc, options, policy }): RuleOutput {
+  run({ doc, options, policy, winkIndexFor }): RuleOutput {
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
     for (const sentence of doc.sentences) {
       const matches = [...sentence.masked.matchAll(PASSIVE_RE)];
       if (matches.length === 0) continue;
-      const winkIndex = buildWinkPosIndex(sentence.masked);
+      const winkIndex = winkIndexFor(sentence);
       for (const m of matches) {
         // `RegExpMatchArray.groups` is typed as a generic string-keyed record; `PassiveMatchGroups`
         // names `PASSIVE_RE`'s actual named capture groups, which the type checker cannot derive
@@ -327,13 +326,13 @@ export const nounClusterCandidateRule: DeterministicRule<
 > = {
   meta: nounClusterSpec.meta,
   optionsSchema: nounClusterOptionsSchema,
-  run({ doc, options, pack, policy, extraImperativeVerbs }): RuleOutput {
+  run({ doc, options, pack, policy, posIndexFor }): RuleOutput {
     const limit = options.maxClusterLength ?? pack.limits.maxNounClusterLength;
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
 
     for (const sentence of doc.sentences) {
-      const posIndex = buildSentencePosIndex(sentence, extraImperativeVerbs);
+      const posIndex = posIndexFor(sentence);
       let run: (typeof sentence.words)[number][] = [];
       const flush = (): void => {
         if (run.length <= limit) {
@@ -461,7 +460,7 @@ export const ambiguousPronounCandidateRule: DeterministicRule<
 > = {
   meta: pronounSpec.meta,
   optionsSchema: pronounOptionsSchema,
-  run({ doc, options, policy, extraImperativeVerbs }): RuleOutput {
+  run({ doc, options, policy, posIndexFor }): RuleOutput {
     const diagnostics: Diagnostic[] = [];
     const candidates: CandidatePassage[] = [];
 
@@ -471,7 +470,7 @@ export const ambiguousPronounCandidateRule: DeterministicRule<
       const previous = doc.sentences[s - 1];
       const words = sentence.words;
 
-      const antecedents = countAntecedents(sentence, previous, extraImperativeVerbs);
+      const antecedents = countAntecedents(sentence, previous, posIndexFor);
 
       for (let i = 0; i < words.length; i += 1) {
         const word = words[i];
@@ -539,12 +538,12 @@ export const ambiguousPronounCandidateRule: DeterministicRule<
 function countAntecedents(
   sentence: Sentence,
   previous: Sentence | undefined,
-  extraImperativeVerbs: readonly string[],
+  posIndexFor: (sentence: Sentence) => SentencePosIndex,
 ): string[] {
   const seen = new Set<string>();
   const collect = (s: Sentence | undefined): void => {
     if (s === undefined) return;
-    const posIndex: SentencePosIndex = buildSentencePosIndex(s, extraImperativeVerbs);
+    const posIndex = posIndexFor(s);
     for (const word of s.words) {
       if (word.protectedKind !== undefined) {
         seen.add(`«${word.protectedKind}»`);

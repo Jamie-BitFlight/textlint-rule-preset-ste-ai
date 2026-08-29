@@ -42,7 +42,7 @@ import type { TextUnit } from './types.js';
  * its own; see `docs/architecture.md`, "Document reader", for the full history. Reintroduce an async
  * seam if and when a reader that genuinely needs real I/O (docx, a remotely-fetched document) lands.
  */
-export function readMarkdownUnitsSync(doc: SourceDocument): TextUnit[] {
+export function readMarkdownUnitsSync(doc: SourceDocument, classifyMode = true): TextUnit[] {
   const ast = parse(doc.text);
   const counter = new Counter();
   const ctx: WalkContext = {
@@ -67,6 +67,7 @@ export function readMarkdownUnitsSync(doc: SourceDocument): TextUnit[] {
     // object identity instead of an indent comparison.
     containerAdmonition: { value: 'none' },
     counter,
+    classifyMode,
   };
   return [...walkChildren(ast.children, ctx)];
 }
@@ -103,6 +104,7 @@ interface WalkContext {
   /** See the doc comment where this is first constructed, in `readMarkdownUnitsSync`. */
   readonly containerAdmonition: { value: AdmonitionKind };
   readonly counter: Counter;
+  readonly classifyMode: boolean;
 }
 
 /**
@@ -483,7 +485,9 @@ function buildUnit(
     range,
     text,
     masked,
-    mode: modeOverride ?? detectMode(text, defaultStructureOptions),
+    mode:
+      modeOverride ??
+      (ctx.classifyMode ? detectMode(text, defaultStructureOptions) : 'descriptive'),
     admonition,
     depth,
     ...(listOrdinal === undefined ? {} : { listOrdinal }),

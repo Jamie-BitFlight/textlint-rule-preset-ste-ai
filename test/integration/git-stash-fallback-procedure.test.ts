@@ -9,9 +9,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
  * during intervening work, then restoring it exactly: `git stash push -u` / `git stash pop
  * --index`, and a two-patch fallback for when `git stash` is refused. Both procedures make a
  * specific, falsifiable claim -- a file with both staged and unstaged changes (`git status`'s `MM`)
- * comes back exactly as `MM`, not degraded to a single state -- which two rounds of Codex review
- * found the file's own text got wrong on its first two drafts (plain `git stash pop`, and a
- * single-patch fallback restored with `git apply --index`, both degrade `MM` to a single state).
+ * comes back exactly as `MM`, not degraded to a single state -- which prior review rounds found
+ * the file's own text got wrong (plain `git stash pop`, and a single-patch fallback restored with
+ * `git apply --index`, both degrade `MM` to a single state). The fallback also makes a second
+ * claim: restoring the staged half must not sweep in an unrelated file the intervening work
+ * touched, which a broad `git add -- <files>` does and a scoped `git apply --index` on just the
+ * staged patch does not.
  *
  * Per this repo's own AGENTS.md ("A doc that describes runtime behaviour needs an executable
  * pin... Verify the replacement claim empirically before writing it. Run the thing."), these cases
@@ -84,7 +87,7 @@ describe('git stash push/pop --index preserves a staged-and-unstaged file exactl
 });
 
 describe('the documented two-patch fallback preserves a staged-and-unstaged file exactly', () => {
-  it('restores MM as MM via: two patches, revert, apply staged, stage it, apply unstaged', () => {
+  it('restores MM as MM via: two patches, revert, apply staged with --index, apply unstaged', () => {
     makeMmFile();
     expect(statusShort()).toBe('MM f.txt');
 
@@ -101,8 +104,7 @@ describe('the documented two-patch fallback preserves a staged-and-unstaged file
     writeFileSync(stagedPatchPath, stagedPatch);
     writeFileSync(unstagedPatchPath, unstagedPatch);
 
-    git('apply', '--allow-empty', stagedPatchPath);
-    git('add', 'f.txt');
+    git('apply', '--index', '--allow-empty', stagedPatchPath);
     git('apply', '--allow-empty', unstagedPatchPath);
 
     expect(statusShort()).toBe('MM f.txt');
@@ -119,5 +121,57 @@ describe('the documented two-patch fallback preserves a staged-and-unstaged file
 
     // Degrades from `MM` to `M `: the unstaged half is gone (fully staged instead).
     expect(statusShort()).toBe('M  f.txt');
+  });
+
+  it('restoring the staged patch with a broad "git add -- <files>" sweeps in unrelated intervening work -- this is the bug the rule warns against, not a recommended step', () => {
+    writeFileSync(join(repoDir, 'g.txt'), 'other1\n');
+    git('add', 'g.txt');
+    git('commit', '-q', '-m', 'add g.txt');
+    makeMmFile();
+
+    const stagedPatch = git('diff', '--cached', '--', 'f.txt');
+    const unstagedPatch = git('diff', '--', 'f.txt');
+    git('checkout', 'HEAD', '--', 'f.txt');
+
+    // The intervening work touches an unrelated file, left deliberately unstaged.
+    writeFileSync(join(repoDir, 'g.txt'), 'other1\nintervening\n');
+    expect(statusShort()).toBe(' M g.txt');
+
+    const stagedPatchPath = join(scratchDir, 'staged.patch');
+    const unstagedPatchPath = join(scratchDir, 'unstaged.patch');
+    writeFileSync(stagedPatchPath, stagedPatch);
+    writeFileSync(unstagedPatchPath, unstagedPatch);
+
+    git('apply', '--allow-empty', stagedPatchPath);
+    git('add', '.');
+    git('apply', '--allow-empty', unstagedPatchPath);
+
+    // The intervening g.txt change is now staged too, not just the restored f.txt patch.
+    expect(statusShort()).toBe('MM f.txt\nM  g.txt');
+  });
+
+  it('restoring the staged patch with "git apply --index" leaves unrelated intervening work exactly as the intervening step left it', () => {
+    writeFileSync(join(repoDir, 'g.txt'), 'other1\n');
+    git('add', 'g.txt');
+    git('commit', '-q', '-m', 'add g.txt');
+    makeMmFile();
+
+    const stagedPatch = git('diff', '--cached', '--', 'f.txt');
+    const unstagedPatch = git('diff', '--', 'f.txt');
+    git('checkout', 'HEAD', '--', 'f.txt');
+
+    // The intervening work touches an unrelated file, left deliberately unstaged.
+    writeFileSync(join(repoDir, 'g.txt'), 'other1\nintervening\n');
+
+    const stagedPatchPath = join(scratchDir, 'staged.patch');
+    const unstagedPatchPath = join(scratchDir, 'unstaged.patch');
+    writeFileSync(stagedPatchPath, stagedPatch);
+    writeFileSync(unstagedPatchPath, unstagedPatch);
+
+    git('apply', '--index', '--allow-empty', stagedPatchPath);
+    git('apply', '--allow-empty', unstagedPatchPath);
+
+    // f.txt is restored to MM; g.txt's intervening change stays unstaged, untouched.
+    expect(statusShort()).toBe('MM f.txt\n M g.txt');
   });
 });

@@ -127,7 +127,7 @@ loosen.
 
 This follows `01`'s recommendation. Its argument stands: `limits` is required in `rulePackSchema`. A
 most-restrictive-wins rule would therefore pin the bundled pack's values (see
-`provisionalRulePack.limits` in `src/rule-pack/provisional-pack.ts`) as a ceiling. No organisation
+`provisionalRulePack.limits`, defined in `src/core/default-pack.ts`) as a ceiling. No organisation
 could raise that ceiling.
 
 This is an accepted cost, recorded here so it is not rediscovered as a surprise. A product or locale
@@ -209,13 +209,27 @@ test strategy, and staged rollout remain applicable. Its back-compat reasoning d
 
 ## Related defects found while specifying
 
-Both are independent of layering and are tracked separately:
+Both were independent of layering, tracked separately, and are now fixed for the single-pack case
+this repository ships today:
 
-- **`sourceRef` passes through untrusted.** `runner.ts:112` assigns `meta.sourceRef` from the pack
-  unconditionally. `verifiedRuleStatus` caps an untrusted pack's _status_. The citation _string_,
-  however, is copied verbatim. An untrusted pack can therefore print a fabricated standard citation on
-  a diagnostic.
-- **The rule-pack loader has no test coverage**, as above.
+- **`sourceRef` passed through untrusted (#66, fixed, three rounds).** `runner.ts` first withheld a
+  citation only when a downgrade actually occurred. A pack could dodge that check. It only had to
+  declare a non-`normative` status directly. The check moved to gating on the declared status
+  instead. That gate still had a hole. Every shipped rule's own status is `provisional`. A pack
+  could declare `provisional` and still supply a fabricated citation. The check moved again. It
+  gated on the citation text. A pack entry's `sourceRef` was honoured only when it repeated
+  `rule.meta.sourceRef` verbatim. That gate had a hole too. An untrusted pack could copy the exact
+  citation string. It could still replace the data behind it — an invented dictionary entry, a
+  loosened limit. The citation would then name a section describing different data than what fired.
+  The check now gates on identity instead. It does not check anything a pack declares or copies. A
+  pack entry's citation is honoured only when `pack` is the literal bundled-default object, or the
+  pack is trusted. No supplied pack can ever be that same object. Matching a status or a string
+  proved nothing about the data. Identity does. Layering still leaves one gap open: attributing a
+  claim to _which_ layer supplied
+  it, once several
+  packs stack. See attack 5 in `02-authority-trust.md`.
+- **The rule-pack loader had no test coverage (#67, fixed).** `test/integration/rule-pack.test.ts`
+  and `test/unit/rule-pack-loader.test.ts` now cover it directly, as above.
 
 ## Documentation already inaccurate, before any of this lands
 

@@ -1,5 +1,7 @@
 import type { SteAiConfig } from './config.js';
+import { provisionalRulePack } from './default-pack.js';
 import { gateFix, type DeterministicRule, type RuleInput } from './rule.js';
+import { isSafeRulePackId } from './rule-pack-id.js';
 import { rangesOverlap } from './text.js';
 import type {
   AnalysedDocument,
@@ -100,16 +102,56 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
         ? undefined
         : verifiedRuleStatus(packSpec.status, pack, config.trustedRulePackIds);
 
+    // Whether the *pack itself* is trusted, independent of what any one rule entry declares.
+    // `sourceRef` trust cannot be inferred from whether `packStatus` was downgraded (#66's original
+    // gap): an untrusted pack that declares `status: "supplementary"` directly, rather than
+    // `"normative"`, is never downgraded — `verifiedRuleStatus` only ever touches a `"normative"`
+    // declaration — so gating on the downgrade let that pack's citation straight through.
+    const packTrusted = config.trustedRulePackIds.includes(pack.metadata.id);
+
     for (const diagnostic of output.diagnostics) {
       const processed = postProcess(diagnostic, rule, doc, config, blockById, severityOverride);
       if (processed === null) continue;
       diagnostics.push(
-        packStatus === undefined
+        packSpec === undefined || packStatus === undefined
           ? processed
           : {
               ...processed,
               ruleStatus: packStatus,
-              meta: { ...processed.meta, sourceRef: packSpec?.sourceRef ?? '' },
+              meta: {
+                ...processed.meta,
+                // String-comparing `sourceRef` against `rule.meta.sourceRef` was tried and found
+                // insufficient (Codex review on PR #116): an untrusted pack can copy that citation
+                // string verbatim while supplying entirely different rule-governing data — a
+                // fabricated dictionary entry, a loosened limit — so the diagnostic still carried a
+                // citation naming a section that describes different data than what actually fired.
+                // Matching a string proves the string matches; it proves nothing about the data
+                // behind it. A copyable field on the pack object was tried next (`isBundledDefault`)
+                // and also found insufficient: `{ ...provisionalRulePack, rules: attackerRules }`
+                // carries that field through object spread along with every other own property, so
+                // it proved nothing about where `rules` (or `dictionary`) actually came from either.
+                // Only `pack === provisionalRulePack` — genuine reference identity with the one
+                // singleton object, which spread cannot preserve because spread always allocates a
+                // new object — proves the cited data is what the citation claims it is.
+                //
+                // `pack.metadata.id` is interpolated below only after passing `isSafeRulePackId`
+                // (`RULE_PACK_ID_PATTERN`: `[A-Za-z0-9@][A-Za-z0-9._:@/+-]*`, max 128 characters —
+                // no space, no quote, no control character, no Unicode line/paragraph separator,
+                // nothing that could make an id read as prose or break out of the quoted
+                // template). `rulePackMetadataSchema` (`src/rule-pack/schema.ts`) enforces the same
+                // pattern for every pack that reaches this point through `parseRulePack`, but a
+                // caller of the public `runDeterministicRules` API can hand it a `RulePack`-shaped
+                // object that never went through that schema (round 11) — this check makes the
+                // interpolation safe regardless of how `pack` got here, not just for the schema-
+                // validated path. A denylist strip (`displaySafePackId`, since removed) was tried
+                // here across three review rounds (PR #116, rounds 5, 7, 10) and lost each time to
+                // a fresh character class; an allowlist, checked at both the schema and this sink,
+                // closes the class instead of extending the list.
+                sourceRef:
+                  pack === provisionalRulePack || packTrusted
+                    ? packSpec.sourceRef
+                    : `unverified citation from untrusted rule pack "${isSafeRulePackId(pack.metadata.id) ? pack.metadata.id : '<id omitted: does not match the expected pack-id format>'}"`,
+              },
             },
       );
     }

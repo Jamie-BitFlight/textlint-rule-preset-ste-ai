@@ -67,8 +67,9 @@ export const myRule: DeterministicRule<z.output<typeof optionsSchema>> = {
 
 Register it in `src/deterministic/index.ts`. **Append** the entry. Do not sort the array. Array order
 is the run order. Array order is also part of the tool's deterministic behaviour. Add a `rules[]`
-entry to `src/rule-pack/provisional-pack.ts`. Also add a section in `docs/provisional-rules.md`
-matching your `sourceRef` anchor.
+entry to `src/core/default-pack.ts`, which holds the bundled pack's data.
+`src/rule-pack/provisional-pack.ts` only re-exports it, so editing that file changes nothing. Also
+add a section in `docs/provisional-rules.md` matching your `sourceRef` anchor.
 
 ## Put every option constraint in the schema, including the ones between fields
 

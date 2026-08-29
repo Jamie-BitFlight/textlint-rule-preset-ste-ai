@@ -73,8 +73,8 @@ consistent with the project's own approved, preferred, and unapproved terms. A r
 supply its own `approvedTerms` list on top of whichever pack is active. A repository can also
 replace the bundled provisional pack entirely with its own `rulePack`.
 
-That serves three distinct consumer surfaces, at different stages of readiness. They are not the same
-shape, and should not be conflated.
+That serves several distinct consumer surfaces, at different stages of readiness. They are not the
+same shape, and should not be conflated.
 
 **1. Pre-commit hooks — works today**. Husky, prek, and the Python `pre-commit` framework can all
 invoke this via `npx`. Each can lint documentation files before a commit lands. Both pieces this needs
@@ -146,6 +146,19 @@ arguments. There is no stdin path. The programmatic API (`analyseTextDeterminist
 already accepts an arbitrary string, with no file dependency. This gap is in the CLI surface only, not
 in the underlying analysis. Tracked as
 [issue #26](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/issues/26).
+
+**4. A blocking Claude Code `PreToolUse` hook gating an agent's own file writes — built, shipped
+as this repository's own plugin**. This repository is also a Claude Code plugin (see
+[`PLUGIN.md`](PLUGIN.md)). Its hook blocks `Write` and `Edit` when the would-be markdown content
+would carry a lint finding the file does not already have. A swapped finding blocks the write too,
+even when the total error count stays flat. The plugin also ships a way-of-working compliance
+agent and a pre-push skill.
+
+This is a different integration shape from surface 3. Surface 3 would gate outgoing chat text
+before it is sent, over stdin. That gap is still open, still tracked under issue #26. This hook
+instead gates a file write already headed for disk. It checks the write through the real
+`textlint` binary, against a scratch copy of the would-be content. It does not touch the stdin gap
+surface 3 needs.
 
 ## The rules
 
@@ -375,6 +388,7 @@ either one yourself.
 | [`docs/fixtures.md`](docs/fixtures.md)                           | the corpus and its provenance                                  |
 | [`docs/implementation-report.md`](docs/implementation-report.md) | what was built and verified                                    |
 | [`docs/extension-roadmap.md`](docs/extension-roadmap.md)         | where this goes next, and what is blocked                      |
+| [`PLUGIN.md`](PLUGIN.md)                                         | this repository as a Claude Code plugin                        |
 
 ## Licence
 

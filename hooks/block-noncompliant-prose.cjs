@@ -10,9 +10,10 @@
  * `preset-ste-ai` (a `"preset-ste-ai": false` entry does not count as enabling it, even though
  * the preset's own name appears in the file); a config further up the tree does not count once a
  * nearer one exists, even when that nearer config disables or omits the preset. Only `.md` files
- * are ever in scope, and only a file `textlint` itself would not skip — a target already excluded
- * by a `.textlintignore` entry is left alone the same way an ordinary `textlint` run leaves it
- * alone. A file that already carries pre-existing errors is not blocked from every future edit —
+ * are ever in scope, and only a file `textlint` itself would not skip — a target excluded by
+ * `.textlintignore`, whether it exists yet or this write would create it, is left alone the same
+ * way an ordinary `textlint` run leaves it alone. A file that already carries pre-existing errors
+ * is not blocked from every future edit —
  * only from an edit that introduces a finding the file did not already have. This mirrors
  * `scripts/ci/check-dogfood-lint.mjs`'s own ratchet in this repo ("the ratchet only ever
  * shrinks"), keyed on the exact finding (its rule plus its message) rather than on a raw error
@@ -128,36 +129,58 @@ function findTextlintBin(startDir) {
   }
 }
 
-/** Whether `realFilePath` is excluded by a `.textlintignore` (or the config's own `ignoreFilePath`)
- * the same way an ordinary `textlint <file>` invocation would skip it. Only decidable when
- * `realFilePath` already exists on disk: textlint's own ignore matching (`searchFiles` in its
- * `find-util`) resolves patterns by enumerating real filesystem entries, so it cannot tell "would
- * this not-yet-created path be ignored" without something already at that exact path -- and this
- * hook must never create or touch the real target file itself to find out, only ever a scratch
- * file beside it. A brand-new file's own first write is therefore not checked for ignore status;
- * only an edit to a file that already exists is. Reproduced directly against this repository's own
- * `examples/sample.md`, which `.textlintignore` excludes on purpose (its violations are the
- * deliverable): linting it in file mode returns zero result entries, not an entry with zero
- * messages, which is how textlint's own JSON output distinguishes "ignored" from "clean". */
-function isIgnoredByTextlint(textlintBin, configPath, realFilePath) {
-  if (!fs.existsSync(realFilePath)) return false;
+/** Best-effort `require('minimatch')`. `minimatch` is not a declared dependency of this
+ * repository, or of a host project this plugin's hook might run inside -- it is only ever present
+ * as a transitive dependency of `glob` (itself pulled in by `textlint`, found through
+ * `findTextlintBin`'s own walk). Returns `undefined` when it cannot be resolved, so the caller can
+ * fail open instead of crashing the whole hook on an unmet `require`. */
+function tryLoadMinimatch() {
   try {
-    const output = execFileSync(
-      textlintBin,
-      ['--config', configPath, '--format', 'json', realFilePath],
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: TEXTLINT_TIMEOUT_MS,
-      },
-    );
-    const results = JSON.parse(output);
-    return Array.isArray(results) && results.length === 0;
+    return require('minimatch').minimatch;
   } catch {
-    // Any failure here (timeout, malformed output, ...) is not evidence of "ignored" -- treat the
-    // file as not ignored and let the normal before/after check run and fail open on its own.
-    return false;
+    return undefined;
   }
+}
+
+/** Loads `.textlintignore`'s active patterns the same way textlint's own `find-util.js` does:
+ * split on newlines, drop blank lines and `#`-comment lines. Returns `[]` when no ignore file
+ * exists at `ignoreFilePath` -- textlint's own default, silently absent. */
+function loadIgnorePatterns(ignoreFilePath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(ignoreFilePath, 'utf8');
+  } catch {
+    return [];
+  }
+  return raw.split(/\r?\n/).filter((line) => !/^\s*$/.test(line) && !/^\s*#/.test(line));
+}
+
+/** Whether `realFilePath` is excluded by `.textlintignore` the same way an ordinary
+ * `textlint <file>` invocation would skip it -- matched directly against the patterns
+ * `.textlintignore` declares, plus textlint's own two built-in defaults (`.git`, `node_modules`),
+ * rather than by asking the real CLI to lint the path.
+ *
+ * textlint's own ignore matching (`find-util.js`'s `searchFiles`, which this mirrors) is `glob`'s
+ * `ignore` option -- `minimatch` under the hood -- applied only to paths a filesystem walk already
+ * found. A path that does not exist on disk yet can never be returned by that walk, so asking the
+ * real CLI has no way to answer "would this not-yet-created path be ignored": a brand-new file's
+ * own first write was previously never checked for ignore status, only an edit to a file that
+ * already exists was. Matching the patterns directly, independent of the target existing,
+ * sidesteps that walk entirely and closes that gap.
+ *
+ * Verified directly against the real CLI for every case this repository's own `.textlintignore`
+ * declares before relying on this: `examples/sample.md` and `examples/rule-pack/sample.md` both
+ * agree ignored; `README.md` and `docs/architecture.md` both agree not ignored. */
+function isIgnoredByTextlint(cwd, realFilePath) {
+  const minimatch = tryLoadMinimatch();
+  if (minimatch === undefined) return false;
+  const relativePath = path.relative(cwd, realFilePath).split(path.sep).join('/');
+  const patterns = [
+    '**/.git/**',
+    '**/node_modules/**',
+    ...loadIgnorePatterns(path.join(cwd, '.textlintignore')),
+  ];
+  return patterns.some((pattern) => minimatch(relativePath, pattern, { dot: true }));
 }
 
 /** Runs textlint against `content` (written to a scratch file beside `realFilePath` so relative
@@ -260,7 +283,7 @@ function main() {
   const textlintBin = findTextlintBin(found.configDir);
   if (textlintBin === undefined) process.exit(0);
 
-  if (isIgnoredByTextlint(textlintBin, found.configPath, filePath)) process.exit(0);
+  if (isIgnoredByTextlint(process.cwd(), filePath)) process.exit(0);
 
   const currentContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
 

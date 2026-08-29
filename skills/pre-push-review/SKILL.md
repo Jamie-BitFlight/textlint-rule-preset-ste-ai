@@ -1,6 +1,6 @@
 ---
 name: pre-push-review
-description: Runs the way-of-working compliance reviewer against the current change set before a push, a pull request, or a merge. Checks staged and uncommitted changes first. Checks the current pull request's diff instead when the working tree is clean. Use before pushing, opening a pull request, or merging. Also use when asked to check way-of-working compliance.
+description: Runs the way-of-working compliance reviewer against the current change set before a push, a pull request, or a merge. Combines the branch's committed-but-unpushed history with any staged, unstaged, or untracked working-tree edit, so neither half of a pending push goes unreviewed. Use before pushing, opening a pull request, or merging. Also use when asked to check way-of-working compliance.
 context: fork
 agent: way-of-working-compliance-reviewer
 user-invocable: true
@@ -15,38 +15,55 @@ before the change gets merged.
 The rules this check looks for live in a small set of files, each nearest to the changed file:
 
 - `.claude/rules/*.md`
-- `.cursor/rules/*.md`
+- `.cursor/rules/*.md` and `.cursor/rules/*.mdc`
 - `.agents/rules/*.md`
 - `AGENTS.md`
 - `CLAUDE.md`
 
 ## Step 1: Find the change set to review
 
-1. Run `git status --short --untracked-files=all`.
-2. That command may list staged or unstaged changes.
-3. Treat any such changes as the change set.
-4. Run `git diff HEAD` to capture the change set.
-5. `git diff HEAD` never reports an untracked file.
-6. `--untracked-files=all` matters here.
-7. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
-   the files inside it.
-8. `--untracked-files=all` instead lists every untracked file inside that directory on its own
-   `??` line.
-9. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
-10. Run `git diff --no-index /dev/null <path>` for each such `??` file path.
-11. Add that command's output to the change set.
-12. This step alone makes a new file visible to the review, including one inside an untracked
-    directory.
-13. The working tree may instead be clean, with no staged, unstaged, or untracked changes at all.
-14. Fall back to the current pull request's diff in that case.
-15. Find the current branch with `git branch --show-current`.
-16. Find its upstream, and any pull request open for it.
-17. Fetch that pull request's diff, using the repository's own GitHub tooling.
-18. No pull request tooling may be available.
-19. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
-20. Neither a working-tree change set nor an open pull request diff may exist.
-21. Report that there is nothing to review, and stop, when neither exists.
-22. Do not invent a change set.
+Build the change set from two sources. Combine both — never only one of them. A branch can carry
+committed-but-unpushed commits. It can carry a working-tree edit at the same time too. A push sends
+both. Skipping either source lets part of the real push go unreviewed.
+
+**Source A — the branch's own committed history.**
+
+1. Find the current branch with `git branch --show-current`.
+2. Find its upstream, and any pull request open for it.
+3. Fetch that pull request's diff with `gh pr diff`, a read-only lookup.
+4. No pull request tooling may be available, or no pull request may exist yet.
+5. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
+6. Add whichever diff this finds to the change set.
+7. This source can be empty.
+8. That happens when the branch is not ahead of that base at all.
+9. It is not an error — it just contributes nothing.
+
+**Source B — the working tree.**
+
+10. Run `git status --short --untracked-files=all`.
+11. That command may list staged or unstaged changes.
+12. Treat any such changes as part of the change set.
+13. Run `git diff HEAD` to capture them.
+14. `git diff HEAD` never reports an untracked file.
+15. `--untracked-files=all` matters here.
+16. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
+    the files inside it.
+17. `--untracked-files=all` instead lists every untracked file inside that directory on its own
+    `??` line.
+18. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
+19. Run `git diff --no-index /dev/null <path>` for each such `??` file path.
+20. Add that command's output to the change set too.
+21. This source can be empty too.
+22. That happens when the working tree is clean.
+23. A clean tree is the ordinary state right before a push, a pull request, or a merge.
+24. The intended change is already committed by then.
+25. An empty working tree is not a reason to skip Source A.
+
+**Combine, or stop.**
+
+26. Combine Source A and Source B into one change set.
+27. Report that there is nothing to review, and stop, only when both sources are empty.
+28. Do not invent a change set.
 
 ## Step 2: Review
 

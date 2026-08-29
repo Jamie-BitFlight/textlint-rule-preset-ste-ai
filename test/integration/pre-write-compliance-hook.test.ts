@@ -170,12 +170,11 @@ describe('block-noncompliant-prose hook', () => {
   // 60s test budget, and that it leaves no `.ste-ai-hook-*` scratch file behind in the target
   // project when it does.
   //
-  // The target file here already exists on disk, so `isIgnoredByTextlint` runs its own
-  // `TEXTLINT_TIMEOUT_MS`-bounded probe against the stub before the before/after check even
-  // starts, and that probe's own timeout is what the elapsed-time assertion below now has to
-  // budget for on top of the first `countErrors` call's timeout -- two sequential 15s-bounded
-  // subprocess calls, not one, before the hook can fail open. `countErrors`'s second call (`after`)
-  // never runs: the first call's timeout throws past `main`'s own try, which fails open right away.
+  // `isIgnoredByTextlint` matches `.textlintignore` patterns directly (`minimatch`, no subprocess),
+  // so the stub `textlint` binary is only ever reached by `countErrors`'s own `before` call. That
+  // single `TEXTLINT_TIMEOUT_MS`-bounded call is what the elapsed-time assertion below budgets for;
+  // the `after` call never runs, since the first call's timeout throws past `main`'s own try, which
+  // fails open right away.
   it(
     'fails open, without hanging, when textlint itself hangs',
     () => {
@@ -203,10 +202,9 @@ describe('block-noncompliant-prose hook', () => {
         const elapsedMs = Date.now() - started;
 
         expect(result.status).toBe(0);
-        // Well under the 60s test budget -- two sequential ~15s hook-level timeouts (the ignore
-        // probe, then the first before/after check), not the test timeout, should be what ends
-        // this.
-        expect(elapsedMs).toBeLessThan(40_000);
+        // Well under the 60s test budget -- the hook's own single ~15s textlint timeout, not the
+        // test timeout, should be what ends this.
+        expect(elapsedMs).toBeLessThan(30_000);
         const leftovers = readdirSync(scratchProject).filter((name) =>
           name.startsWith('.ste-ai-hook-'),
         );
@@ -318,6 +316,32 @@ describe('block-noncompliant-prose hook', () => {
         tool_input: {
           file_path: ignoredTargetFile,
           content: `${originalContent}\n\nThis, sentence, has, way, too, many, commas, in, it, right, here, now.\n`,
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122, round 3): `isIgnoredByTextlint` used to return
+  // `false` outright whenever the real target did not exist yet, since it asked the real
+  // `textlint` CLI to lint the real path, and the CLI's own ignore matching (a filesystem walk)
+  // can never resolve a path nothing sits at. A brand-new file's first `Write` was therefore never
+  // ignore-checked, even when its path was already excluded. Reproduced directly against a fresh
+  // path this repository's own `.textlintignore` would exclude (matching `fixtures/original/**`)
+  // before `isIgnoredByTextlint` was switched to a `minimatch` pattern match that does not depend
+  // on the target existing. The hook itself never creates the real target file (only ever a
+  // randomly named scratch file beside it, and only past this ignore check), so there is nothing
+  // to clean up here even when the assertion fails.
+  it(
+    'ignores a first write to a new path already excluded by .textlintignore',
+    () => {
+      const newIgnoredPath = `${repoRoot}fixtures/original/ste-ai-hook-first-write-test.md`;
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: newIgnoredPath,
+          content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
         },
       });
       expect(result.status).toBe(0);

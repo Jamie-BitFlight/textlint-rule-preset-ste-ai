@@ -12,7 +12,8 @@ Check the current change set for breaches of this project's own way-of-working r
 check before the change gets pushed. Run it before the change becomes a pull request. Run it
 before the change gets merged.
 
-The rules this check looks for live in a small set of files, each nearest to the changed file:
+The rules this check looks for live in a small set of file categories. Each is resolved along the
+changed file's own directory ancestry, not only its nearest match:
 
 - `.claude/rules/*.md`
 - `.cursor/rules/*.md` and `.cursor/rules/*.mdc`
@@ -29,41 +30,51 @@ both. Skipping either source lets part of the real push go unreviewed.
 **Source A — the branch's own committed history.**
 
 1. Find the current branch with `git branch --show-current`.
-2. Find its upstream, and any pull request open for it.
-3. Fetch that pull request's diff with `gh pr diff`, a read-only lookup.
-4. No pull request tooling may be available, or no pull request may exist yet.
-5. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
-6. Add whichever diff this finds to the change set.
-7. This source can be empty.
-8. That happens when the branch is not ahead of that base at all.
-9. It is not an error — it just contributes nothing.
+2. Find a base branch to diff against.
+3. Prefer the branch's own upstream tracking branch.
+4. An upstream may not exist.
+5. Find an open pull request for this branch instead.
+6. `gh pr view --json baseRefName` finds it, with a read-only lookup.
+7. Use that pull request's base branch.
+8. Use `git diff <base-branch>...HEAD` against that base, always.
+9. Never use `gh pr diff` as this source.
+10. `gh pr diff` only ever reflects what was last pushed to the remote pull request.
+11. A local commit made after that push stays invisible to it.
+12. `git diff <base-branch>...HEAD` reflects the real local state instead, every local commit
+    included.
+13. Add whichever diff this finds to the change set.
+14. This source can be empty.
+15. That happens when the branch is not ahead of that base at all.
+16. It is not an error — it just contributes nothing.
+17. Neither an upstream nor an open pull request may exist either.
+18. This source is then simply unavailable, the same as if it were empty.
 
 **Source B — the working tree.**
 
-10. Run `git status --short --untracked-files=all`.
-11. That command may list staged or unstaged changes.
-12. Treat any such changes as part of the change set.
-13. Run `git diff HEAD` to capture them.
-14. `git diff HEAD` never reports an untracked file.
-15. `--untracked-files=all` matters here.
-16. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
+19. Run `git status --short --untracked-files=all`.
+20. That command may list staged or unstaged changes.
+21. Treat any such changes as part of the change set.
+22. Run `git diff HEAD` to capture them.
+23. `git diff HEAD` never reports an untracked file.
+24. `--untracked-files=all` matters here.
+25. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
     the files inside it.
-17. `--untracked-files=all` instead lists every untracked file inside that directory on its own
+26. `--untracked-files=all` instead lists every untracked file inside that directory on its own
     `??` line.
-18. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
-19. Run `git diff --no-index /dev/null <path>` for each such `??` file path.
-20. Add that command's output to the change set too.
-21. This source can be empty too.
-22. That happens when the working tree is clean.
-23. A clean tree is the ordinary state right before a push, a pull request, or a merge.
-24. The intended change is already committed by then.
-25. An empty working tree is not a reason to skip Source A.
+27. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
+28. Run `git diff --no-index /dev/null <path>` for each such `??` file path.
+29. Add that command's output to the change set too.
+30. This source can be empty too.
+31. That happens when the working tree is clean.
+32. A clean tree is the ordinary state right before a push, a pull request, or a merge.
+33. The intended change is already committed by then.
+34. An empty working tree is not a reason to skip Source A.
 
 **Combine, or stop.**
 
-26. Combine Source A and Source B into one change set.
-27. Report that there is nothing to review, and stop, only when both sources are empty.
-28. Do not invent a change set.
+35. Combine Source A and Source B into one change set.
+36. Report that there is nothing to review, and stop, only when both sources are empty.
+37. Do not invent a change set.
 
 ## Step 2: Review
 

@@ -392,6 +392,104 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Regression (independent review of PR #122, round 5): `tryLoadMinimatch` resolved `minimatch`
+  // only from `configDir` itself. That works for a flat, hoisted npm install (every transitive
+  // dependency copied up to the project's own top-level `node_modules`), but not an isolated
+  // install (pnpm's default): there, `configDir/node_modules` holds only the project's own direct
+  // dependencies (`textlint`, if declared) -- never `textlint`'s own dependency on `glob`, nor
+  // `glob`'s own dependency on `minimatch`. Reproduced directly with the constructed layout below
+  // (each package's `node_modules` populated only with its own declared dependencies, `minimatch`
+  // absent from the project root) before `tryLoadMinimatch` was changed to walk the real
+  // dependency chain instead: `configDir` to `textlint` to `glob` to `minimatch`.
+  //
+  // The stub `textlint` binary here is not just a placeholder: it fabricates a lint finding that
+  // exists only on its *second* invocation (a call counter written to a state file), so a hook run
+  // that fails to resolve `minimatch` and falls through to the ordinary before/after check reaches
+  // that fabricated finding and blocks (exit 2) -- distinguishing "the ignore check silently
+  // failed and the hook proceeded anyway" from "the ignore check correctly short-circuited before
+  // ever invoking textlint" (exit 0), which a stub that always failed open could not distinguish.
+  it(
+    'resolves minimatch through an isolated (pnpm-style) dependency layout',
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-isolated-deps-'));
+      try {
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        writeFileSync(join(scratchProject, '.textlintignore'), 'ignored.md\n');
+
+        const binDir = join(scratchProject, 'node_modules', '.bin');
+        mkdirSync(binDir, { recursive: true });
+        const stubTextlintPath = join(binDir, 'textlint');
+        writeFileSync(
+          stubTextlintPath,
+          [
+            '#!/usr/bin/env bash',
+            'STATE="$(dirname "$0")/../../.call-count"',
+            'N=0',
+            'if [ -f "$STATE" ]; then N=$(cat "$STATE"); fi',
+            'N=$((N+1))',
+            'echo "$N" > "$STATE"',
+            'if [ "$N" = "1" ]; then',
+            '  echo \'[{"filePath":"x","messages":[]}]\'',
+            'else',
+            '  echo \'[{"filePath":"x","messages":[{"ruleId":"stub-rule","message":"stub new finding","severity":2,"line":1,"column":1}]}]\'',
+            'fi',
+            '',
+          ].join('\n'),
+        );
+        chmodSync(stubTextlintPath, 0o755);
+
+        // Isolated layout: scratchProject/node_modules holds only `textlint`. `textlint`'s own
+        // node_modules holds `glob`. `glob`'s own node_modules holds `minimatch`, never hoisted to
+        // the project root. `minimatch` here is a minimal standalone stand-in, not the real
+        // package: this test is about whether `tryLoadMinimatch`'s resolution chain reaches
+        // whatever sits at that path, not about the real package's own matching logic (the real
+        // package is exercised elsewhere, via this repository's own flat install) -- and the real
+        // package pulls in its own further transitive dependency (`brace-expansion`), which a bare
+        // copy of just its own directory would leave unresolvable, unrelated to what this test
+        // means to prove.
+        const textlintDir = join(scratchProject, 'node_modules', 'textlint');
+        mkdirSync(textlintDir, { recursive: true });
+        writeFileSync(join(textlintDir, 'package.json'), JSON.stringify({ name: 'textlint' }));
+        const globDir = join(textlintDir, 'node_modules', 'glob');
+        mkdirSync(globDir, { recursive: true });
+        writeFileSync(join(globDir, 'package.json'), JSON.stringify({ name: 'glob' }));
+        const minimatchDir = join(globDir, 'node_modules', 'minimatch');
+        mkdirSync(minimatchDir, { recursive: true });
+        writeFileSync(
+          join(minimatchDir, 'package.json'),
+          JSON.stringify({ name: 'minimatch', main: 'index.js' }),
+        );
+        writeFileSync(
+          join(minimatchDir, 'index.js'),
+          'exports.minimatch = (targetPath, pattern) => targetPath === pattern;\n',
+        );
+
+        // `cwd` must be `scratchProject`, not `repoRoot`: `isIgnoredByTextlint` reads
+        // `.textlintignore` from `process.cwd()` and computes the target's path relative to it, so
+        // running from `repoRoot` would look at this repository's own ignore file instead of the
+        // scratch project's.
+        const result = spawnSync('node', [`${repoRoot}${hookScript}`], {
+          cwd: scratchProject,
+          input: JSON.stringify({
+            tool_name: 'Write',
+            tool_input: {
+              file_path: join(scratchProject, 'ignored.md'),
+              content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+            },
+          }),
+          encoding: 'utf8',
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     'leaves no scratch file behind after blocking',
     () => {

@@ -129,22 +129,46 @@ function findTextlintBin(startDir) {
   }
 }
 
-/** Best-effort `require('minimatch')`, resolved starting from `searchFromDir` rather than from
- * this hook script's own location. `minimatch` is not a declared dependency of this repository or
- * of a host project this plugin's hook might run inside -- it is only ever present as a
- * transitive dependency of `glob` (itself pulled in by `textlint`). A bare `require('minimatch')`
- * resolves relative to this file's own directory and its ancestors, which is wrong once this hook
- * runs from an installed plugin's own location: that tree holds none of the target project's
- * dependencies, so the bare form always failed there even though the target project's own
- * `textlint` install carries `minimatch` transitively -- reproduced directly with a copy of this
- * plugin run outside this repository, against a target project with its own `textlint`.
- * `searchFromDir` must be a directory inside the target project (`findSteAiConfigDir`'s own
- * `configDir` is what the caller passes), so Node's normal node_modules ancestor walk from there
- * finds it. Returns `undefined` when it cannot be resolved even that way, so the caller can fail
- * open instead of crashing the whole hook on an unmet `require`. */
-function tryLoadMinimatch(searchFromDir) {
+/** Resolves `id`'s own directory, starting the search from `searchFromDir`. `undefined` when `id`
+ * cannot be found that way. */
+function tryResolvePackageDir(id, searchFromDir) {
   try {
-    return require(require.resolve('minimatch', { paths: [searchFromDir] })).minimatch;
+    return path.dirname(require.resolve(`${id}/package.json`, { paths: [searchFromDir] }));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Best-effort `require('minimatch')`, resolved by walking the real dependency chain --
+ * `configDir` (the target project) to `textlint` to `glob` to `minimatch` -- instead of assuming a
+ * flat, hoisted `node_modules` layout, or resolving relative to this hook script's own location.
+ * `minimatch` is not a declared dependency of this repository, or of a host project this plugin's
+ * hook might run inside; it is only ever present as a transitive dependency of `glob` (itself
+ * pulled in by `textlint`).
+ *
+ * A flat/hoisted install (plain npm, most projects) resolves fine from `configDir` alone, since
+ * Node's own resolution already walks every ancestor directory looking for `node_modules`. An
+ * isolated install (pnpm's default) does not hoist a transitive dependency at all --
+ * `configDir/node_modules` holds only the project's own direct dependencies (`textlint`, if
+ * declared), never `textlint`'s own dependency on `glob`, nor `glob`'s own dependency on
+ * `minimatch`. Each of those is reachable only by resolving from the OWNING package's own
+ * directory: `configDir` finds `textlint`, `textlint`'s own directory finds `glob`, `glob`'s own
+ * directory finds `minimatch`. This chain is a strict superset of the flat case -- each hop still
+ * falls through to an ancestor walk from wherever the previous hop landed -- so it is the only
+ * resolution attempted, and each hop degrades gracefully to the previous directory when it fails,
+ * rather than aborting the chain outright.
+ *
+ * Verified against this repository's own real (flat, hoisted) install, and against a constructed
+ * isolated layout (each package's `node_modules` populated only with its own declared
+ * dependencies, `minimatch` absent from the project root) that reproduces a bare
+ * `require('minimatch')`, and even a `configDir`-only resolution, failing there -- the full chain
+ * is what closes it. Returns `undefined` when it cannot be resolved even this way, so the caller
+ * can fail open instead of crashing the whole hook on an unmet `require`. */
+function tryLoadMinimatch(configDir) {
+  const textlintDir = tryResolvePackageDir('textlint', configDir) ?? configDir;
+  const globDir = tryResolvePackageDir('glob', textlintDir) ?? textlintDir;
+  try {
+    return require(require.resolve('minimatch', { paths: [globDir] })).minimatch;
   } catch {
     return undefined;
   }

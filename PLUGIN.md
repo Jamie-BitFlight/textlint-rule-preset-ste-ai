@@ -1,9 +1,8 @@
 # ste-ai-compliance plugin
 
-This repository is also a Claude Code plugin. It gives an agent three things. Each thing helps in
-a project that uses the `preset-ste-ai` textlint preset. The first thing is a compliance-reviewing
-agent. The second is a pre-push skill that runs it. The third is a hook that enforces the preset
-in advance.
+This repository is also a Claude Code plugin. Each part below helps in a project that uses the
+`preset-ste-ai` textlint preset. It ships a compliance-reviewing agent. It ships a pre-push skill
+that runs the agent. It ships a hook that enforces the preset in advance.
 
 ## What it provides
 

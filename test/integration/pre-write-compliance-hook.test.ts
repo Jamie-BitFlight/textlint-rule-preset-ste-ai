@@ -417,6 +417,49 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Regression (independent review of PR #122, round 4): `tryLoadMinimatch` used a bare
+  // `require('minimatch')`, which resolves relative to this hook script's own file location and
+  // its ancestors -- correct only by coincidence when the hook happens to run from inside this
+  // repository's own checkout. Once installed as a real Claude Code plugin (see PLUGIN.md's
+  // "Installing this plugin elsewhere"), the hook script lives in the plugin's own location, not
+  // the target project's, so that ancestry holds none of the target project's dependencies even
+  // though the target project's own `textlint` install carries `minimatch` transitively through
+  // `glob`. `isIgnoredByTextlint` would then always fail to resolve `minimatch`, silently treat
+  // every target as not ignored, and let the hook block a write an ordinary `textlint` run would
+  // skip. Reproduced directly here by copying the hook script to a scratch directory with no
+  // `node_modules` of its own anywhere in its ancestry, spawning it from there (`cwd` still this
+  // repository, exactly as Claude Code would run an installed plugin's hook against a real
+  // project), and confirming it still recognizes this repository's own `examples/sample.md` as
+  // ignored -- before `tryLoadMinimatch` was changed to resolve starting from the target
+  // project's own `configDir` instead of from the hook script's location.
+  it(
+    "resolves minimatch from the target project, not the hook script's own location",
+    () => {
+      const scratchHookDir = mkdtempSync(join(tmpdir(), 'ste-ai-hook-copied-elsewhere-'));
+      try {
+        const copiedHookPath = join(scratchHookDir, 'block-noncompliant-prose.cjs');
+        writeFileSync(copiedHookPath, readFileSync(`${repoRoot}${hookScript}`, 'utf8'));
+        const ignoredTargetFile = `${repoRoot}examples/sample.md`;
+        const originalContent = readFileSync(ignoredTargetFile, 'utf8');
+        const result = spawnSync('node', [copiedHookPath], {
+          cwd: repoRoot,
+          input: JSON.stringify({
+            tool_name: 'Write',
+            tool_input: {
+              file_path: ignoredTargetFile,
+              content: `${originalContent}\n\nThis, sentence, has, way, too, many, commas, in, it, right, here, now.\n`,
+            },
+          }),
+          encoding: 'utf8',
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(scratchHookDir, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     'leaves no scratch file behind after blocking',
     () => {

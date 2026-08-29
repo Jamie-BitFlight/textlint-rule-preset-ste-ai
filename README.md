@@ -73,8 +73,8 @@ consistent with the project's own approved, preferred, and unapproved terms. A r
 supply its own `approvedTerms` list on top of whichever pack is active. A repository can also
 replace the bundled provisional pack entirely with its own `rulePack`.
 
-That serves four distinct consumer surfaces, at different stages of readiness. They are not the same
-shape, and should not be conflated.
+That serves several distinct consumer surfaces, at different stages of readiness. They are not the
+same shape, and should not be conflated.
 
 **1. Pre-commit hooks — works today**. Husky, prek, and the Python `pre-commit` framework can all
 invoke this via `npx`. Each can lint documentation files before a commit lands. Both pieces this needs

@@ -168,14 +168,22 @@ function findTextlintBin(startDir) {
   }
 }
 
-/** Best-effort `require('minimatch')`. `minimatch` is not a declared dependency of this
- * repository, or of a host project this plugin's hook might run inside -- it is only ever present
- * as a transitive dependency of `glob` (itself pulled in by `textlint`, found through
- * `findTextlintBin`'s own walk). Returns `undefined` when it cannot be resolved, so the caller can
- * fail open instead of crashing the whole hook on an unmet `require`. */
-function tryLoadMinimatch() {
+/** Best-effort `require('minimatch')`, resolved starting from `searchFromDir` rather than from
+ * this hook script's own location. `minimatch` is not a declared dependency of this repository or
+ * of a host project this plugin's hook might run inside -- it is only ever present as a
+ * transitive dependency of `glob` (itself pulled in by `textlint`). A bare `require('minimatch')`
+ * resolves relative to this file's own directory and its ancestors, which is wrong once this hook
+ * runs from an installed plugin's own location: that tree holds none of the target project's
+ * dependencies, so the bare form always failed there even though the target project's own
+ * `textlint` install carries `minimatch` transitively -- reproduced directly with a copy of this
+ * plugin run outside this repository, against a target project with its own `textlint`.
+ * `searchFromDir` must be a directory inside the target project (`findSteAiConfigDir`'s own
+ * `configDir` is what the caller passes), so Node's normal node_modules ancestor walk from there
+ * finds it. Returns `undefined` when it cannot be resolved even that way, so the caller can fail
+ * open instead of crashing the whole hook on an unmet `require`. */
+function tryLoadMinimatch(searchFromDir) {
   try {
-    return require('minimatch').minimatch;
+    return require(require.resolve('minimatch', { paths: [searchFromDir] })).minimatch;
   } catch {
     return undefined;
   }
@@ -210,8 +218,8 @@ function loadIgnorePatterns(ignoreFilePath) {
  * Verified directly against the real CLI for every case this repository's own `.textlintignore`
  * declares before relying on this: `examples/sample.md` and `examples/rule-pack/sample.md` both
  * agree ignored; `README.md` and `docs/architecture.md` both agree not ignored. */
-function isIgnoredByTextlint(cwd, realFilePath) {
-  const minimatch = tryLoadMinimatch();
+function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
+  const minimatch = tryLoadMinimatch(minimatchSearchDir);
   if (minimatch === undefined) return false;
   const relativePath = path.relative(cwd, realFilePath).split(path.sep).join('/');
   const patterns = [
@@ -366,7 +374,7 @@ async function main() {
     return;
   }
 
-  if (isIgnoredByTextlint(process.cwd(), filePath)) {
+  if (isIgnoredByTextlint(process.cwd(), found.configDir, filePath)) {
     process.exit(0);
     return;
   }

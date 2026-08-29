@@ -269,8 +269,25 @@ function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
     '**/node_modules/**',
     ...loadIgnorePatterns(path.join(cwd, '.textlintignore')),
   ];
+  // `glob`'s own `Ignore#ignored` (what textlint's ignore matching actually walks through) checks
+  // every directory level it descends through on the way to a file, not only the file's own full
+  // path -- a directory-style pattern like `generated/` only ever matches literally against a
+  // *directory* segment's own trailing-slash form during that walk, so `generated/doc.md` is
+  // excluded because `generated` itself matched, never because the full file path did. Matching
+  // only the full `relativePath` (as this function did before) therefore misses every
+  // directory-style pattern entirely -- reproduced directly: `minimatch('generated/doc.md',
+  // 'generated/')` is `false`, though a real `textlint` run with that ignore pattern skips every
+  // file beneath `generated/`. Testing every path prefix (each ancestor directory, plus the full
+  // path itself) against each pattern reproduces that walk without needing to actually walk the
+  // filesystem.
+  const segments = relativePath.split('/');
+  const candidates = [];
+  for (let i = 1; i <= segments.length; i++) {
+    const prefix = segments.slice(0, i).join('/');
+    candidates.push(prefix, `${prefix}/`);
+  }
   return patterns.some((pattern) =>
-    minimatch(relativePath, pattern, { dot: true, nonegate: true }),
+    candidates.some((candidate) => minimatch(candidate, pattern, { dot: true, nonegate: true })),
   );
 }
 
@@ -293,11 +310,28 @@ function countErrors(textlintBin, configPath, realFilePath, content) {
   );
   fs.writeFileSync(scratchPath, content, 'utf8');
 
+  // The scratch file's own synthetic name can accidentally collide with a `.textlintignore`
+  // pattern the real target never matches (a dotfile-style pattern such as `.*.md`, for one) --
+  // reproduced directly: content that reports `ste-ai/punctuation-constraints` when linted as
+  // `doc.md` silently reports nothing when linted as the scratch file's own hidden name under
+  // that pattern. `isIgnoredByTextlint` already decided ignore status against the *real* target
+  // path before this function is ever called, so the CLI's own independent ignore-file matching
+  // on the scratch path itself must never re-decide it -- pointing `--ignore-path` at a path this
+  // hook never creates disables that matching for this invocation without disabling ignore
+  // handling for any other `textlint` run. Verified directly: the same content the real CLI
+  // reports a finding for under its true name still reports it when linted this way, where the
+  // default `--ignore-path` would have silently reported none.
+  const noIgnorePath = `${scratchPath}.no-ignore-file`;
+
   return new Promise((resolve, reject) => {
-    const child = spawn(textlintBin, ['--config', configPath, '--format', 'json', scratchPath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-    });
+    const child = spawn(
+      textlintBin,
+      ['--config', configPath, '--ignore-path', noIgnorePath, '--format', 'json', scratchPath],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
+      },
+    );
     pending = { scratchPath, child };
 
     const clearTimers = () => {

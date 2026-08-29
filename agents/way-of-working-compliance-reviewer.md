@@ -106,14 +106,21 @@ happen even within the same review.
 
 A `.claude/rules/*.md` or `.cursor/rules/*.mdc` file can open with frontmatter that scopes it.
 Read that frontmatter before adding the file to a changed file's governing set. Add the file when
-it carries no such frontmatter at all. Add the file when the frontmatter marks it `alwaysApply:
-true`, even without a `globs` field. Match the changed file's own path against the frontmatter's
-`globs` field otherwise. Add the file when a glob matches. Skip the file when the frontmatter
-names one or more globs and none match. Skip the file too when the frontmatter has neither
-`alwaysApply: true` nor any `globs`. Those are Cursor's own agent-requested and manual-only rule
-shapes. A human or a separate agent attaches either kind on purpose. This reviewer never infers
-either kind from a changed file's path alone. `.claude/rules/*.md` carries no `alwaysApply` field
-at all. This distinction is `.mdc` only.
+it carries no such frontmatter at all. Each format scopes itself through its own field, never the
+other format's.
+
+`.claude/rules/*.md` scopes itself through a `paths` field. Match the changed file's own path
+against it. Add the file when a `paths` glob matches. Skip the file when `paths` names one or more
+globs and none match.
+
+`.cursor/rules/*.mdc` scopes itself through `globs` and `alwaysApply` instead — `.claude/rules/*.md`
+carries neither field. Add the file when the frontmatter marks it `alwaysApply: true`, even without
+a `globs` field. Match the changed file's own path against the frontmatter's `globs` field
+otherwise. Add the file when a glob matches. Skip the file when the frontmatter names one or more
+globs and none match. Skip the file too when the frontmatter has neither `alwaysApply: true` nor
+any `globs`. Those are Cursor's own agent-requested and manual-only rule shapes. A human or a
+separate agent attaches either kind on purpose. This reviewer never infers either kind from a
+changed file's path alone.
 
 Read every rule file this way resolves. Read each one only once per review, even if several
 changed files resolve to the same rule file.

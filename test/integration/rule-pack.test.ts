@@ -933,3 +933,68 @@ describe('rule pack: limits, contractions, path resolution, and the autofix gate
     });
   });
 });
+
+describe('rule pack: untrusted text reaching a rendered message is neutralised (#123)', () => {
+  // A control character or an embedded double-quote in supplier-controlled text can rewrite how a
+  // terminal reads surrounding output, or make fabricated text look like it has escaped the
+  // message's own quoting -- the same class of finding PR #116 fixed for `meta.sourceRef`, but
+  // here on `message`, the field actually rendered by `src/textlint/adapter.ts`'s `formatMessage`
+  // and the CLI's human-output branch. Escape sequences, not literal glyphs: BACKSPACE stands in
+  // for a control character, RIGHT-TO-LEFT OVERRIDE for a bidi override.
+  const CONTROL_CHAR = '\u0008';
+  const BIDI_OVERRIDE = '\u202e';
+  const FORGED = 'widget"; forged citation' + CONTROL_CHAR + BIDI_OVERRIDE;
+
+  it('sanitizes preferred-terminology\'s "to" before it reaches the message and fix rationale', () => {
+    const result = analyse('Use the gadget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'gadget', to: FORGED, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+    // The message wraps the value in its own double quotes; an embedded quote must not survive.
+    expect(diagnostic?.message?.match(/"/g)).toHaveLength(4);
+    expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.rationale).not.toContain(BIDI_OVERRIDE);
+  });
+
+  it("sanitizes unapproved-vocabulary's alternatives before they reach the message", () => {
+    const result = analyse('Utilise the bracket.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [{ term: 'utilise', alternatives: [FORGED], safeSubstitution: true }],
+          preferred: [],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
+    // The raw alternative is unaffected outside rendered text: it is still a real suggestion.
+    expect(diagnostic?.suggestions).toEqual([FORGED]);
+  });
+
+  it('sanitizes a project-configured (non-pack) additional entry the same way', () => {
+    // `options.additional` is operator-supplied, not pack-supplied, but it feeds the identical
+    // interpolation site -- the sanitizer must not be conditioned on where the string came from.
+    const result = analyseTextDeterministic('Leverage the API.\n', {
+      config: {
+        rules: { 'unapproved-vocabulary': { additional: { leverage: [FORGED] } } },
+      },
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+  });
+});

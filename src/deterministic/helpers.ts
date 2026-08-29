@@ -1,6 +1,72 @@
 import { proseWords } from '../core/document.js';
 import type { Sentence, SourceRange, TextBlock, Word } from '../core/types.js';
 
+/**
+ * Remove characters that make a supplier-controlled string actively dangerous once it is
+ * interpolated into rendered output (a diagnostic `message`, a fix `rationale`) — not merely
+ * unusual-looking ones.
+ *
+ * Rule-pack text fields such as `preferred.to`, `unapproved.alternatives` and `note` carry no
+ * format constraint in `src/rule-pack/schema.ts`. Unlike `metadata.id` (`src/core/rule-pack-id.ts`),
+ * free display text cannot be reduced to an allowed character set without breaking legitimate
+ * non-English terms, so this strips categories of character rather than a fixed list — closing the
+ * class the way the id allowlist does, instead of chasing individual characters. Removed:
+ * `\p{Cc}`/`\p{Cf}` (C0/C1 controls, zero-width and bidirectional-override characters) and
+ * `\p{Zl}`/`\p{Zp}` (line/paragraph separators), any of which can rewrite how surrounding terminal
+ * or log output reads.
+ */
+export function stripUnsafeCharacters(text: string): string {
+  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '');
+}
+
+/**
+ * As {@link stripUnsafeCharacters}, and also replaces a literal `"` with `'`.
+ *
+ * Use this only where the caller interpolates the result directly inside a double-quoted phrase in
+ * the message template itself (`` `Use "${...}" instead of…` ``) — an embedded `"` would otherwise
+ * let fabricated pack text visually escape that quoting. Free-standing text that the template does
+ * not wrap in its own quotes (a `note` appended after the quoted phrase) should use
+ * {@link stripUnsafeCharacters} instead: that text's own internal quoting (`Ambiguous: "it is" or
+ * "it has".`) is legitimate authored prose, not an escape attempt, and rewriting it changes
+ * correct, trusted message text for no safety benefit.
+ */
+export function sanitizeQuotedValue(text: string): string {
+  return stripUnsafeCharacters(text).replace(/"/g, "'");
+}
+
+/**
+ * Group the keys of a term map by case-insensitive equality and report every group whose members
+ * do not all resolve to the same value.
+ *
+ * `termPattern()` matches case-insensitively, so `Use` and `use` claim the same source span; the
+ * first one in object key order silently wins and the other's mapping never applies. That is only
+ * a real conflict when the two keys disagree about the replacement — `{ Use: ['employ'], use:
+ * ['employ'] }` is redundant but not contradictory.
+ */
+export function findCaseConflicts<T>(
+  entries: Readonly<Record<string, T>>,
+  valuesEqual: (a: T, b: T) => boolean,
+): string[][] {
+  const groups = new Map<string, [key: string, value: T][]>();
+  for (const [key, value] of Object.entries(entries)) {
+    const lower = key.toLowerCase();
+    const group = groups.get(lower);
+    if (group === undefined) groups.set(lower, [[key, value]]);
+    else group.push([key, value]);
+  }
+  const conflicts: string[][] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const first = group[0];
+    if (first === undefined) continue;
+    const [, firstValue] = first;
+    if (group.some(([, value]) => !valuesEqual(value, firstValue))) {
+      conflicts.push(group.map(([key]) => key));
+    }
+  }
+  return conflicts;
+}
+
 /** Build a whole-word, case-insensitive matcher for a term or multi-word phrase. */
 export function termPattern(term: string): RegExp {
   const escaped = term

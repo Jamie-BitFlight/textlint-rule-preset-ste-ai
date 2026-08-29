@@ -7,23 +7,48 @@ import type {
   RuleMetadata,
   TextFix,
 } from '../../core/types.js';
-import { excerpt, findTerm, matchCapitalisation } from '../helpers.js';
+import {
+  excerpt,
+  findCaseConflicts,
+  findTerm,
+  matchCapitalisation,
+  sanitizeQuotedValue,
+  stripUnsafeCharacters,
+} from '../helpers.js';
 
 // ---------------------------------------------------------------------------
 // unapproved-vocabulary
 // ---------------------------------------------------------------------------
 
-const unapprovedOptionsSchema = z.object({
-  /** Additional terms to treat as unapproved: `{ "leverage": ["use"] }`. */
-  additional: z.record(z.string(), z.array(z.string())).default({}),
-  /** Terms from the pack to ignore in this project. */
-  allow: z.array(z.string()).default([]),
-  /**
-   * Ask the semantic subsystem whether a flagged word is used in a sense the pack permits.
-   * Off by default so the rule stays purely deterministic unless the operator opts in.
-   */
-  adjudicateSense: z.boolean().default(false),
-});
+const unapprovedOptionsSchema = z
+  .object({
+    /** Additional terms to treat as unapproved: `{ "leverage": ["use"] }`. */
+    additional: z.record(z.string(), z.array(z.string())).default({}),
+    /** Terms from the pack to ignore in this project. */
+    allow: z.array(z.string()).default([]),
+    /**
+     * Ask the semantic subsystem whether a flagged word is used in a sense the pack permits.
+     * Off by default so the rule stays purely deterministic unless the operator opts in.
+     */
+    adjudicateSense: z.boolean().default(false),
+  })
+  .superRefine((options, ctx) => {
+    // `additional` keys are matched case-insensitively (`findTerm` → `termPattern`), so `Use` and
+    // `use` claim the same span; JSON key order would otherwise decide which alternatives list
+    // applies. Reject only when the conflicting keys actually disagree (#125).
+    for (const group of findCaseConflicts(
+      options.additional,
+      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    )) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['additional'],
+        message:
+          `${group.map((key) => `"${key}"`).join(' and ')} are case-equivalent keys that ` +
+          'resolve to the same source span but map to different alternatives.',
+      });
+    }
+  });
 
 const unapprovedMeta: RuleMetadata = {
   id: 'unapproved-vocabulary',
@@ -78,14 +103,16 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
               fix = {
                 range: match.range,
                 text: matchCapitalisation(match.text, suggestion),
-                rationale: `Rule pack marks "${entry.term}" → "${suggestion}" as meaning-preserving.`,
+                rationale:
+                  `Rule pack marks "${sanitizeQuotedValue(entry.term)}" → ` +
+                  `"${sanitizeQuotedValue(suggestion)}" as meaning-preserving.`,
                 safety: 'deterministic-meaning-preserving',
               };
             }
 
             const alternativeText =
               alternatives.length > 0
-                ? ` Use ${alternatives.map((a) => `"${a}"`).join(' or ')}.`
+                ? ` Use ${alternatives.map((a) => `"${sanitizeQuotedValue(a)}"`).join(' or ')}.`
                 : ' The rule pack supplies no approved alternative; rewrite the sentence.';
 
             diagnostics.push(
@@ -134,11 +161,24 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
 // preferred-terminology
 // ---------------------------------------------------------------------------
 
-const preferredOptionsSchema = z.object({
-  /** Extra mappings: `{ "log in": "sign in" }`. Never fixed automatically. */
-  additional: z.record(z.string(), z.string()).default({}),
-  allow: z.array(z.string()).default([]),
-});
+const preferredOptionsSchema = z
+  .object({
+    /** Extra mappings: `{ "log in": "sign in" }`. Never fixed automatically. */
+    additional: z.record(z.string(), z.string()).default({}),
+    allow: z.array(z.string()).default([]),
+  })
+  .superRefine((options, ctx) => {
+    // Same case-insensitive span-matching conflict as `unapproved-vocabulary` above (#125).
+    for (const group of findCaseConflicts(options.additional, (a, b) => a === b)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['additional'],
+        message:
+          `${group.map((key) => `"${key}"`).join(' and ')} are case-equivalent keys that ` +
+          'resolve to the same source span but map to different replacements.',
+      });
+    }
+  });
 
 const preferredMeta: RuleMetadata = {
   id: 'preferred-terminology',
@@ -185,14 +225,16 @@ export const preferredTerminologyRule: DeterministicRule<z.output<typeof preferr
               ? {
                   range: match.range,
                   text: replacement,
-                  rationale: `Rule pack marks "${entry.from}" → "${entry.to}" as a spelling choice.`,
+                  rationale:
+                    `Rule pack marks "${sanitizeQuotedValue(entry.from)}" → ` +
+                    `"${sanitizeQuotedValue(entry.to)}" as a spelling choice.`,
                   safety: 'deterministic-meaning-preserving',
                 }
               : undefined;
             diagnostics.push(
               buildDiagnostic(preferredMeta, policy, {
                 category: 'deterministic-violation',
-                message: `Use "${entry.to}" instead of "${match.text}".`,
+                message: `Use "${sanitizeQuotedValue(entry.to)}" instead of "${match.text}".`,
                 range: match.range,
                 evidence: excerpt(sentence.raw),
                 suggestions: [replacement],
@@ -252,7 +294,9 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
               ? {
                   range: match.range,
                   text: replacement,
-                  rationale: `"${entry.from}" expands unambiguously to "${entry.to}".`,
+                  rationale:
+                    `"${sanitizeQuotedValue(entry.from)}" expands unambiguously to ` +
+                    `"${sanitizeQuotedValue(entry.to)}".`,
                   safety: 'deterministic-meaning-preserving',
                 }
               : undefined;
@@ -260,8 +304,11 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
               buildDiagnostic(contractionMeta, policy, {
                 category: 'deterministic-violation',
                 message:
-                  `Do not use the contraction "${match.text}". Write "${replacement}".` +
-                  (entry.safeSubstitution ? '' : ` ${entry.note ?? 'Confirm the intended sense.'}`),
+                  `Do not use the contraction "${match.text}". ` +
+                  `Write "${sanitizeQuotedValue(replacement)}".` +
+                  (entry.safeSubstitution
+                    ? ''
+                    : ` ${entry.note === undefined ? 'Confirm the intended sense.' : stripUnsafeCharacters(entry.note)}`),
                 range: match.range,
                 evidence: excerpt(sentence.raw),
                 suggestions: [replacement],

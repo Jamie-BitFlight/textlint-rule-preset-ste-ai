@@ -226,6 +226,89 @@ describe('preferred-terminology', () => {
   });
 });
 
+/** Runs a fixed trivial document, exposing notices that the `run()` helper above discards. */
+function runRaw(config: SteAiConfigInput) {
+  const resolved = resolveConfig(config);
+  const doc = analyseDocument({ id: 't', format: 'markdown', text: 'Use the tool.\n' });
+  return runDeterministicRules({
+    doc,
+    rules: deterministicRules,
+    config: resolved,
+    pack: provisionalRulePack,
+  });
+}
+
+/**
+ * `additional` keys are matched case-insensitively (`termPattern()` in `src/deterministic/
+ * helpers.ts`), so `Use` and `use` claim the same span. Before #125's fix, JSON key order silently
+ * decided which alternatives list applied.
+ */
+describe('case-equivalent "additional" keys are rejected, not silently order-dependent (#125)', () => {
+  it('rejects conflicting case-equivalent keys in unapproved-vocabulary, both key orders', () => {
+    const orderA = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['apply'] } },
+      },
+    });
+    const orderB = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { use: ['apply'], Use: ['employ'] } },
+      },
+    });
+
+    for (const result of [orderA, orderB]) {
+      expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(false);
+      const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+      expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
+      expect(notice?.message).toContain('"Use"');
+      expect(notice?.message).toContain('"use"');
+    }
+  });
+
+  it('accepts case-equivalent keys that resolve to the same alternatives', () => {
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['employ'] } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+    expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
+  });
+
+  it('rejects conflicting case-equivalent keys in preferred-terminology, both key orders', () => {
+    const orderA = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: 'employ', use: 'apply' } },
+      },
+    });
+    const orderB = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { use: 'apply', Use: 'employ' } },
+      },
+    });
+
+    for (const result of [orderA, orderB]) {
+      expect(result.diagnostics.some((d) => d.ruleId === 'preferred-terminology')).toBe(false);
+      const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+      expect(notice?.detail).toEqual({ ruleId: 'preferred-terminology' });
+    }
+  });
+
+  it('does not reject unrelated rules when one rule’s additional map conflicts', () => {
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['apply'] } },
+      },
+    });
+
+    // The malformed rule is skipped; every other rule still ran (mirrors the `unknown-rule-id`
+    // degrade-not-fail contract in `test/unit/config-strictness.test.ts`).
+    expect(result.notices.filter((n) => n.level === 'error')).toHaveLength(1);
+    expect(result.diagnostics.some((d) => d.ruleId === 'no-contractions')).toBe(false);
+  });
+});
+
 describe('no-contractions', () => {
   const id = 'no-contractions';
 

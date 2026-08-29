@@ -148,6 +148,11 @@ autofix gate also passes. The bundled pack marks just six entries safe: `utilise
 - The bundled list is deliberately small. It is not a controlled vocabulary and does not pretend to
   be one.
 
+**Configuration validation** A project's `additional` map is matched case-insensitively, the same
+way as the pack's own dictionary. Two keys that differ only by case, such as `Use` and `use`, would
+otherwise match the same span. The rule now rejects such a pair when they map to different
+alternatives. It reports `rule-options-invalid` and skips the rule. Every other rule still runs.
+
 ### preferred-terminology
 
 **Triggers** on the pack's `dictionary.preferred` mappings plus project `additional` entries.
@@ -156,6 +161,9 @@ autofix gate also passes. The bundled pack marks just six entries safe: `utilise
 
 **Known failure modes** Project `additional` entries never carry a fix, because the linter cannot
 know whether a project-specific swap is meaning-preserving.
+
+**Configuration validation** Same case-insensitive key-conflict check as `unapproved-vocabulary`
+above, applied to this rule's own `additional` map.
 
 ### no-contractions
 

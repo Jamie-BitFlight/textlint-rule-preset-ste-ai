@@ -147,9 +147,12 @@ vite.config.ts.timestamp-*
 .cache/
 
 # .claude/ itself is NOT ignored: it's the standard home for project-level Claude Code
-# configuration (settings.json, commands, agents) that belongs in version control. Only the
-# transient, tool-generated worktrees an isolated agent creates under it are ignored here.
+# configuration (settings.json, commands, agents) that belongs in version control. Two things
+# under it are personal or transient instead, so they stay out: the worktrees an isolated agent
+# creates, and settings.local.json, Claude Code's own convention for a machine- or session-local
+# override (e.g. a contributor's own hook wiring) that was never meant to be shared.
 .claude/worktrees/
+.claude/settings.local.json
 
 # Working artefacts for the test-suite benchmarking work (baselines, analysis reports, plans).
 # Evidence that matters is carried in the pull request description, not committed here.

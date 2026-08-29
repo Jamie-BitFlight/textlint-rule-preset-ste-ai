@@ -90,10 +90,22 @@ export interface SteRuleOptions {
  * with `approvedTerms: [undefined]` colliding with `approvedTerms: []`. `JSON.stringify` itself
  * renders an array's `undefined` entry as the string `"null"`; matching that same array semantics
  * here keeps the two configurations distinct.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `ebe9e36`): the fix above still
+ * used `Array.prototype.map`, which skips a *hole* rather than visiting it -- so a sparse array
+ * (`Array(1)`, one hole, no `undefined` ever assigned) produced `[]` from `.map().join()` the same
+ * way `[]` itself does, reproduced directly with both promises identical and fulfilled. Indexing by
+ * `length` instead of using `.map` visits every slot, hole or not, and `arr[i]` reads a hole as
+ * `undefined` -- the same value this function already serialises as `'null'`.
  */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map((entry) => (entry === undefined ? 'null' : stableStringify(entry))).join(',')}]`;
+    const entries = [];
+    for (let i = 0; i < value.length; i += 1) {
+      const entry = value[i];
+      entries.push(entry === undefined ? 'null' : stableStringify(entry));
+    }
+    return `[${entries.join(',')}]`;
   }
   if (!isPlainObject(value)) return JSON.stringify(value);
   const entries = Object.keys(value)

@@ -235,4 +235,29 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
     );
     expect(promiseA).not.toBe(promiseB);
   });
+
+  // Regression (`chatgpt-codex-connector`, P2, on PR #117, commit `ebe9e36`): the fix above still
+  // used `Array.prototype.map`, which skips a hole in a sparse array rather than visiting it, so
+  // `Array(1)` (one hole, never assigned) serialised the same as `[]` -- a different collision than
+  // an explicit `[undefined]` entry, which `.map` does visit.
+  it('does not share a cache entry between a sparse array hole and an empty array', () => {
+    const text = 'Utilise the bracket.\n';
+    // eslint-disable-next-line no-sparse-arrays -- the hole itself is the point of this case.
+    const sparse: unknown[] = Array(1);
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', { approvedTerms: sparse }]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['no-contractions', { approvedTerms: [] }]]),
+    );
+    expect(promiseA).not.toBe(promiseB);
+  });
 });

@@ -58,9 +58,9 @@ The second source is the working tree. Run `git status --short --untracked-files
 files inside it. Staged or unstaged changes exist when that command lists any. Run `git diff HEAD`
 to capture them. `git diff HEAD` never reports an untracked file. It misses one even when
 `git status --short --untracked-files=all` lists it with a leading `??`. Run
-`git diff --no-index -- /dev/null <path>` for each such path. The `--` matters: an untracked
-filename that starts with a dash otherwise parses as an option, not a path. Add that output to
-the change set too.
+`git diff --no-index -- /dev/null <path>` for each such path. The `--` matters. Without it, an
+untracked path starting with `-` (`-dash.md`) parses as an option instead of a path. The command
+fails outright in that case. Add that output to the change set too.
 
 This second source can be empty too. That happens when the working tree is clean. A clean tree is
 the ordinary state right before a push. It is also ordinary right before a pull request or a merge.
@@ -104,24 +104,16 @@ A category with no match anywhere in the ancestry contributes nothing for that f
 files in different subdirectories can end up governed by different sets of rule files. This can
 happen even within the same review.
 
-A `.claude/rules/*.md` or `.cursor/rules/*.mdc` file can open with frontmatter that scopes it to
-certain paths — Cursor's own `globs` field is the common case. Read that frontmatter before adding
-the file to a changed file's governing set. Match the changed file's own path against the
-frontmatter's globs. Skip the file for this changed file when the globs are present and none
-match. Add the file when the frontmatter has no such field, an empty one, or an explicit
-always-apply marker.
-
-A `.cursor/rules/*.mdc` file's own `alwaysApply` field decides this before `globs` does. Check it
-first. `alwaysApply: true` means the rule applies to every file, with or without `globs`. Add it
-unconditionally in that case.
-
-`alwaysApply: false`, or the field's absence, is Cursor's own default. Treat a default value with
-no `globs` field either as Cursor's agent-requested or manual-attach mode. Neither activates
-automatically. A person or an assistant pulls a rule like that in on purpose. No file the change
-touches does. Cursor would not have flagged a diff against a rule like that. This reviewer must
-not either. Skip such a file entirely. Treat it the same as an unmatched `globs` pattern.
-
-`.claude/rules/*.md` carries no `alwaysApply` field at all. This distinction is `.mdc` only.
+A `.claude/rules/*.md` or `.cursor/rules/*.mdc` file can open with frontmatter that scopes it.
+Read that frontmatter before adding the file to a changed file's governing set. Add the file when
+it carries no such frontmatter at all. Add the file when the frontmatter marks it `alwaysApply:
+true`, even without a `globs` field. Match the changed file's own path against the frontmatter's
+`globs` field otherwise. Add the file when a glob matches. Skip the file when the frontmatter
+names one or more globs and none match. Skip the file too when the frontmatter has neither
+`alwaysApply: true` nor any `globs`. Those are Cursor's own agent-requested and manual-only rule
+shapes. A human or a separate agent attaches either kind on purpose. This reviewer never infers
+either kind from a changed file's path alone. `.claude/rules/*.md` carries no `alwaysApply` field
+at all. This distinction is `.mdc` only.
 
 Read every rule file this way resolves. Read each one only once per review, even if several
 changed files resolve to the same rule file.

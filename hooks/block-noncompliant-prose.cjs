@@ -36,6 +36,15 @@ const { spawn } = require('node:child_process');
  * directly with a stub binary that sleeps, see `test/integration/pre-write-compliance-hook.test.ts`. */
 const TEXTLINT_TIMEOUT_MS = 15_000;
 
+/** How long, after `killGroup(child, 'SIGTERM')` fires at `TEXTLINT_TIMEOUT_MS`, this hook waits
+ * for `close` before escalating to `SIGKILL`. `SIGTERM` is a request a process (or a rule/plugin
+ * it loads) can trap or ignore outright -- reproduced directly with a stub `textlint` that runs
+ * `trap '' TERM` before sleeping: the original single-`SIGTERM` timer left the hook alive past its
+ * own documented 15s limit, still blocking every subsequent Write/Edit, until an external `timeout`
+ * wrapper killed the whole hook process. `SIGKILL` cannot be trapped or ignored by any process, so
+ * this grace period is what actually bounds the hook's own worst-case runtime. */
+const SIGKILL_GRACE_MS = 3_000;
+
 /**
  * The `textlint` child process currently running, if any, and the scratch file it is reading
  * from. Read by the `SIGTERM`/`SIGINT` handlers below so a caller that kills this hook (the
@@ -241,7 +250,16 @@ function loadIgnorePatterns(ignoreFilePath) {
  *
  * Verified directly against the real CLI for every case this repository's own `.textlintignore`
  * declares before relying on this: `examples/sample.md` and `examples/rule-pack/sample.md` both
- * agree ignored; `README.md` and `docs/architecture.md` both agree not ignored. */
+ * agree ignored; `README.md` and `docs/architecture.md` both agree not ignored.
+ *
+ * `nonegate: true` matches `glob`'s own ignore matching exactly -- both `glob.js` and its
+ * `ignore.js` helper hardcode that option on every ignore-pattern `Minimatch` instance they build.
+ * Without it, minimatch's default negation semantics turn a `.textlintignore` entry like
+ * `!kept.md` into "ignore everything except `kept.md`", the opposite of what `glob`'s own (and
+ * therefore textlint's own) ignore matching does with that same line: treat the leading `!` as a
+ * literal character in a literal pattern, which no ordinary filename starts with. Verified
+ * directly: `minimatch('other.md', '!kept.md')` is `true` without `nonegate`, `false` with it --
+ * matching `glob`'s hardcoded choice. */
 function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
   const minimatch = tryLoadMinimatch(minimatchSearchDir);
   if (minimatch === undefined) return false;
@@ -251,24 +269,10 @@ function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
     '**/node_modules/**',
     ...loadIgnorePatterns(path.join(cwd, '.textlintignore')),
   ];
-  // `nonegate: true` matches how `glob`'s own `ignore` option processes these patterns (what
-  // textlint's ignore matching actually runs on) -- a leading `!` in an *ignore* pattern is not
-  // negation there, unlike a `.gitignore` line. Without it, `minimatch` treats a `!`-prefixed
-  // pattern as "match everything except this," so one such line in `.textlintignore` -- verified
-  // directly with a bare `!kept.md` pattern -- silently treats every *other* path as ignored too.
   return patterns.some((pattern) =>
     minimatch(relativePath, pattern, { dot: true, nonegate: true }),
   );
 }
-
-/** How long, after {@link TEXTLINT_TIMEOUT_MS}'s own `SIGTERM` fires, this hook waits before
- * escalating to `SIGKILL`. `SIGTERM` is a request a process can trap or ignore; `SIGKILL` cannot
- * be. Without this escalation, a `textlint` process (or a rule/plugin subprocess) that traps
- * `SIGTERM` never dies, `'close'` never fires, and the hook hangs indefinitely past its own
- * documented timeout -- reproduced directly with a stub that runs `trap '' TERM` before sleeping:
- * the hook was still running well past `TEXTLINT_TIMEOUT_MS`, only ending when an external
- * `timeout` wrapper killed it. */
-const SIGKILL_GRACE_MS = 2_000;
 
 /**
  * Runs `textlint` against `content` (written to a scratch file beside `realFilePath` so relative
@@ -278,6 +282,8 @@ const SIGKILL_GRACE_MS = 2_000;
  * external signal can both actually interrupt a hung child -- see {@link pending}'s doc comment.
  * `detached: true` plus {@link killGroup} is what makes that interruption reach a child that
  * itself forks a grandchild (a shell-script `textlint` shim, or a hung rule's own subprocess).
+ * `SIGKILL_GRACE_MS` is what makes the timeout bound this function's real runtime even when the
+ * child (or something it loads) traps or ignores the initial `SIGTERM`.
  */
 function countErrors(textlintBin, configPath, realFilePath, content) {
   const dir = path.dirname(realFilePath);
@@ -294,19 +300,22 @@ function countErrors(textlintBin, configPath, realFilePath, content) {
     });
     pending = { scratchPath, child };
 
+    const clearTimers = () => {
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
+    };
+
     let stdout = '';
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
     });
     child.on('error', (error) => {
-      clearTimeout(termTimer);
-      clearTimeout(killTimer);
+      clearTimers();
       cleanupPending();
       reject(error);
     });
     child.on('close', () => {
-      clearTimeout(termTimer);
-      clearTimeout(killTimer);
+      clearTimers();
       cleanupPending();
       // textlint exits non-zero when it finds any error-severity message; its JSON report is
       // still on stdout in that case, and an empty stdout (a crash before any report was
@@ -325,6 +334,9 @@ function countErrors(textlintBin, configPath, realFilePath, content) {
     let killTimer;
     const termTimer = setTimeout(() => {
       killGroup(child, 'SIGTERM');
+      // A trapped or ignored SIGTERM leaves `close` unfired forever -- reproduced directly with a
+      // stub `textlint` running `trap '' TERM` before sleeping. SIGKILL cannot be trapped, so this
+      // second timer is what actually bounds the wait once SIGTERM alone does not end it.
       killTimer = setTimeout(() => {
         killGroup(child, 'SIGKILL');
       }, SIGKILL_GRACE_MS);

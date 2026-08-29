@@ -284,6 +284,55 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Regression (independent review of PR #122, round 6): the timeout handler sent one `SIGTERM`
+  // and then waited on `close` forever, so a `textlint` (or a rule/plugin it loads) that traps or
+  // ignores `SIGTERM` left the hook running well past its own documented 15s limit -- reproduced
+  // directly with a stub that runs `trap '' TERM` before sleeping: the hook stayed alive until an
+  // external `timeout` wrapper killed it, confirmed still blocking well past 15s. `SIGKILL` cannot
+  // be trapped or ignored by any process, so escalating to it after `SIGKILL_GRACE_MS` is what
+  // actually bounds the hook's own worst-case runtime; this case pins that the hook now fails open
+  // within `TEXTLINT_TIMEOUT_MS + SIGKILL_GRACE_MS` (with headroom) even against a trapping child.
+  it(
+    'escalates to SIGKILL and fails open when textlint traps SIGTERM',
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-sigterm-trap-'));
+      try {
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
+        writeFileSync(stubTextlintPath, "#!/usr/bin/env bash\ntrap '' TERM\nsleep 60\n");
+        chmodSync(stubTextlintPath, 0o755);
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const started = Date.now();
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: {
+            file_path: targetPath,
+            content: 'New content, with, way, too, many, commas, right, here, now.\n',
+          },
+        });
+        const elapsedMs = Date.now() - started;
+
+        expect(result.status).toBe(0);
+        // 15s (TEXTLINT_TIMEOUT_MS) + 3s (SIGKILL_GRACE_MS), with headroom -- well short of the
+        // stub's own 60s sleep, proving SIGKILL actually ended it rather than the sleep completing.
+        expect(elapsedMs).toBeLessThan(25_000);
+        const leftovers = readdirSync(scratchProject).filter((name) =>
+          name.startsWith('.ste-ai-hook-'),
+        );
+        expect(leftovers).toEqual([]);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     'ignores a markdown file outside any ste-ai-configured project',
     () => {
@@ -551,6 +600,105 @@ describe('block-noncompliant-prose hook', () => {
           encoding: 'utf8',
         });
         expect(result.status).toBe(0);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122, round 6): `isIgnoredByTextlint` called `minimatch`
+  // without `nonegate: true`, so a `.textlintignore` entry starting with `!` (such as `!kept.md`)
+  // was read with minimatch's default negation semantics -- "ignore every path except `kept.md`"
+  // -- the opposite of what `glob`'s own ignore matching does with that same line: both `glob.js`
+  // and its `ignore.js` helper hardcode `nonegate: true` on every ignore-pattern `Minimatch`
+  // instance, treating a leading `!` as a literal character nothing ordinarily matches. Reproduced
+  // directly: `minimatch('other.md', '!kept.md')` is `true` without `nonegate`, `false` with it.
+  // This case pins the fixed behavior: a `!`-prefixed ignore entry no longer makes every other file
+  // appear ignored.
+  it(
+    "matches a leading-`!` .textlintignore entry the way glob's own nonegate semantics do",
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-nonegate-'));
+      try {
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        writeFileSync(join(scratchProject, '.textlintignore'), '!kept.md\n');
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        // Reports a finding only on its *second* invocation (a call counter written to a state
+        // file), so exit code alone distinguishes the two possible outcomes: reaching this stub at
+        // all (correct -- `other.md` is not ignored) blocks with the fabricated new finding
+        // (exit 2), while the negation bug this pins against short-circuits before the stub is
+        // ever invoked (exit 0). A stub reporting the same finding on both calls could not tell
+        // those two outcomes apart, since both would exit 0.
+        writeFileSync(
+          join(scratchProject, 'node_modules', '.bin', 'textlint'),
+          [
+            '#!/usr/bin/env bash',
+            'STATE="$(dirname "$0")/../../.call-count"',
+            'N=0',
+            'if [ -f "$STATE" ]; then N=$(cat "$STATE"); fi',
+            'N=$((N+1))',
+            'echo "$N" > "$STATE"',
+            'if [ "$N" = "1" ]; then',
+            '  echo \'[{"filePath":"x","messages":[]}]\'',
+            'else',
+            '  echo \'[{"filePath":"x","messages":[{"ruleId":"stub-rule","message":"stub new finding","severity":2,"line":1,"column":1}]}]\'',
+            'fi',
+            '',
+          ].join('\n'),
+        );
+        chmodSync(join(scratchProject, 'node_modules', '.bin', 'textlint'), 0o755);
+
+        // A resolvable `minimatch` stand-in that actually implements the `nonegate` option this
+        // case exists to pin -- without it, `tryLoadMinimatch` cannot resolve any `minimatch` at
+        // all from this scratch directory (it shares no `node_modules` ancestry with this
+        // repository), so `isIgnoredByTextlint` would fail open to "not ignored" regardless of
+        // whether the option is passed, and this case could not tell the fixed behavior from the
+        // bug (verified directly: without this stand-in, the case passed even against the
+        // pre-fix hook, because both paths hit that same unrelated fail-open). This stand-in
+        // implements only the literal-vs-negation distinction the real `glob`/`minimatch` make for
+        // a leading `!`, nothing more -- real `minimatch`'s own glob-matching correctness is
+        // exercised elsewhere, via this repository's own flat install.
+        const minimatchDir = join(scratchProject, 'node_modules', 'minimatch');
+        mkdirSync(minimatchDir, { recursive: true });
+        writeFileSync(
+          join(minimatchDir, 'package.json'),
+          JSON.stringify({ name: 'minimatch', main: 'index.js' }),
+        );
+        writeFileSync(
+          join(minimatchDir, 'index.js'),
+          [
+            'exports.minimatch = (targetPath, pattern, options) => {',
+            '  const nonegate = options && options.nonegate === true;',
+            "  if (pattern.startsWith('!') && !nonegate) {",
+            '    return targetPath !== pattern.slice(1);',
+            '  }',
+            '  return targetPath === pattern;',
+            '};',
+            '',
+          ].join('\n'),
+        );
+
+        // `cwd` must be `scratchProject`, not `repoRoot`: `isIgnoredByTextlint` reads
+        // `.textlintignore` from `process.cwd()` and computes the target's path relative to it.
+        const result = spawnSync('node', [`${repoRoot}${hookScript}`], {
+          cwd: scratchProject,
+          input: JSON.stringify({
+            tool_name: 'Write',
+            tool_input: {
+              file_path: join(scratchProject, 'other.md'),
+              content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+            },
+          }),
+          encoding: 'utf8',
+        });
+        // Nonegate semantics: `!kept.md` never matches `other.md`, so `other.md` is not ignored
+        // and reaches the ordinary before/after check, which the stub's second-call finding
+        // blocks.
+        expect(result.status).toBe(2);
       } finally {
         rmSync(scratchProject, { recursive: true, force: true });
       }

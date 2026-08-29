@@ -26,7 +26,8 @@ export const END = '<!-- pack-control-surface:end -->';
 
 const DESCRIPTIONS: Readonly<Record<string, string>> = {
   metadata: 'Identity, declared authority, licence, and the conformance claim.',
-  'metadata.id': "The identifier `trustedRulePackIds` must match. Not the pack's name or path.",
+  'metadata.id':
+    "The identifier `trustedRulePackIds` must match. Not the pack's name or path. Letters, digits, and `._:@/+-` only.",
   'metadata.name': 'A human-readable label. Cosmetic. Nothing matches on it.',
   'metadata.version': "The pack's own version string, for the audit trail.",
   'metadata.authority':

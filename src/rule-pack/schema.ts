@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RULE_PACK_ID_MAX_LENGTH, RULE_PACK_ID_PATTERN } from '../core/rule-pack-id.js';
 
 /**
  * Rule-pack schema — the **only** supported route by which normative controlled-language data
@@ -25,8 +26,34 @@ import { z } from 'zod';
 export const ruleStatusSchema = z.enum(['normative', 'supplementary', 'provisional']);
 export const severitySchema = z.enum(['info', 'warning', 'error']);
 
+/**
+ * `id` is a match key, compared by exact string membership against `trustedRulePackIds`
+ * (`src/rule-pack/loader.ts`'s `verifiedAuthority`/`packPermitsConformanceClaim`) and, for the one
+ * bundled pack, by object identity (`src/core/runner.ts`). It is never displayed as prose on its
+ * own — the withheld-citation message in `runner.ts` interpolates it, which only stays safe
+ * because `RULE_PACK_ID_PATTERN` (`src/core/rule-pack-id.ts`) excludes every character that could
+ * make it read as something other than an id: no space (so it cannot be a phrase, PR #116 round
+ * 5/10), no `"` (so it cannot break out of the quoted template, round 7), no control character or
+ * Unicode line/paragraph separator (round 5/10 again), no bidirectional-override character.
+ * `metadata.name`, `metadata.notice` and `metadata.source` remain unconstrained free text for
+ * anything meant to be read.
+ *
+ * `runner.ts` also checks this same pattern directly, at the point it interpolates the id, rather
+ * than trusting that every `RulePack` it receives passed through this schema (round 11: a caller
+ * of the public `runDeterministicRules` API can hand it a pack literal that never went through
+ * `parseRulePack` at all).
+ */
+const rulePackIdSchema = z
+  .string()
+  .min(1)
+  .max(RULE_PACK_ID_MAX_LENGTH)
+  .regex(
+    RULE_PACK_ID_PATTERN,
+    'must start with a letter, digit, or @, and contain only letters, digits, and . _ : @ / + -',
+  );
+
 export const rulePackMetadataSchema = z.object({
-  id: z.string().min(1),
+  id: rulePackIdSchema,
   name: z.string().min(1),
   version: z.string().min(1),
   /**

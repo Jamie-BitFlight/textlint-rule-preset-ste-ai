@@ -3,11 +3,17 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vite-plus/test';
 import { analyseTextDeterministic } from '../../src/analysis/analyse.js';
+import { resolveConfig } from '../../src/core/config.js';
+import { analyseDocument } from '../../src/core/document.js';
+import { runDeterministicRules } from '../../src/core/runner.js';
+import { deterministicRules } from '../../src/deterministic/index.js';
+import type { RulePack } from '../../src/core/types.js';
 import {
   RulePackError,
   packPermitsConformanceClaim,
   parseRulePack,
 } from '../../src/rule-pack/loader.js';
+import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 /**
  * The rule pack is this package's only extension point, and until this file existed it had no test
@@ -117,6 +123,287 @@ describe('rule pack: the trust gate', () => {
     const diagnostic = only(VOCABULARY_DOC, { rulePack: pack() }, 'unapproved-vocabulary');
 
     expect(diagnostic.ruleStatus).toBe('supplementary');
+  });
+
+  it("withholds an untrusted pack's fabricated citation instead of printing it verbatim (#66)", () => {
+    // A pack's `sourceRef` is free text the supplier controls. Printing it verbatim next to a
+    // `supplementary` tag lets an untrusted pack fabricate a specific-looking citation (e.g. a
+    // standard clause number) that most readers will not weigh against the tag.
+    const diagnostic = only(VOCABULARY_DOC, { rulePack: pack() }, 'unapproved-vocabulary');
+
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("withholds the citation even when the pack declares 'supplementary' directly", () => {
+    // Codex review on PR #116: gating the citation on whether `ruleStatus` was actually *downgraded*
+    // let an untrusted pack bypass the check just by declaring `status: "supplementary"` up front —
+    // `verifiedRuleStatus` only ever touches a `"normative"` declaration, so a directly-declared
+    // `"supplementary"` was never downgraded and its citation sailed through unexamined. The gate
+    // must withhold an untrusted pack's citation for *any* declared status that isn't the rule's own
+    // built-in default, not only a declaration of `"normative"`.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'supplementary',
+              sourceRef: 'ACME-DOC-1 clause 4',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('supplementary');
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("withholds the citation even when the declared status matches the rule's own default", () => {
+    // Codex review on PR #116, round 2: matching `status` was not enough either. Every shipped
+    // rule's own `meta.status` is `provisional`, so an untrusted pack could declare `provisional`
+    // too and still supply a fabricated citation — the status matched, but the citation text was
+    // still the pack's own unverified claim, not something the rule's own code already asserted.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'provisional',
+              sourceRef: 'ACME-DOC-1 clause 4',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).not.toMatchObject({ sourceRef: 'ACME-DOC-1 clause 4' });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it("withholds the citation even when it repeats the bundled pack's own sourceRef text verbatim", () => {
+    // Codex review on PR #116, round 4: comparing `sourceRef` text against `rule.meta.sourceRef`
+    // was still not enough. An untrusted pack can copy that citation string verbatim while
+    // supplying entirely different rule-governing data — here, a dictionary entry the bundled pack
+    // never lists — so the diagnostic would carry a citation naming a documentation section that
+    // describes different data than what actually fired. Reproduces Codex's own proof: a
+    // supplier-invented term with the bundled pack's exact `unapproved-vocabulary` citation
+    // attached.
+    const diagnostic = only(
+      'Florp the widget.\n',
+      {
+        rulePack: pack({
+          dictionary: {
+            approved: [],
+            unapproved: [{ term: 'florp', alternatives: ['widget'] }],
+            preferred: [],
+          },
+          rules: [
+            {
+              ruleId: 'unapproved-vocabulary',
+              status: 'provisional',
+              sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+            },
+          ],
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).not.toMatchObject({
+      sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+    });
+    expect(diagnostic.meta?.['sourceRef']).toContain(PACK_ID);
+  });
+
+  it('honours the real bundled default pack, unmodified, with no rulePack configured', () => {
+    // The only citation that needs no trust is the one actually produced by the literal bundled
+    // singleton `provisionalRulePack` — identified in `runner.ts` by `pack === provisionalRulePack`,
+    // genuine reference identity with that one object, never by comparing any text or any field a
+    // supplied pack could copy. Confirms the positive case: the real default keeps working with no
+    // `rulePack` configured at all.
+    const diagnostic = only(VOCABULARY_DOC, {}, 'unapproved-vocabulary');
+
+    expect(diagnostic.ruleStatus).toBe('provisional');
+    expect(diagnostic.meta).toMatchObject({
+      sourceRef: 'provisional:docs/provisional-rules.md#unapproved-vocabulary',
+    });
+  });
+
+  it('withholds the citation from a spread copy of the bundled pack, even though every field matches (#66, round 8)', () => {
+    // Codex review on PR #116, round 8: `isBundledDefault` (the mechanism used before this test)
+    // was a plain field on the `RulePack` object, so `{ ...provisionalRulePack, rules: forged }`
+    // carried it through object spread along with every other own property — proven directly
+    // before this fix: a caller of the public `runDeterministicRules` API who spreads the bundled
+    // pack and overrides its `rules`/`dictionary` got the forged data trusted as if it were the
+    // real bundled pack's own. Reference identity is the one property spread cannot copy, because
+    // spread always allocates a new object; this pins that the new object is never trusted.
+    const forgedPack: RulePack = {
+      ...provisionalRulePack,
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          status: 'normative',
+          sourceRef: 'FORGED CITATION: not the real bundled pack data',
+          enabled: true,
+        },
+      ],
+      dictionary: {
+        approved: [],
+        unapproved: [{ term: 'florp', alternatives: ['widget'], safeSubstitution: false }],
+        preferred: [],
+      },
+    };
+    expect(forgedPack).not.toBe(provisionalRulePack);
+
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: 'The florp is broken.\n' });
+    const result = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config: resolveConfig({}),
+      pack: forgedPack,
+    });
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+
+    expect(diagnostic?.ruleStatus).toBe('supplementary');
+    expect(diagnostic?.meta).not.toMatchObject({
+      sourceRef: 'FORGED CITATION: not the real bundled pack data',
+    });
+  });
+
+  it('rejects in-place mutation of the bundled default pack (#66, round 9)', () => {
+    // Codex review on PR #116, round 9: `pack === provisionalRulePack` (reference identity) does
+    // not stop a caller from mutating that exact object's own properties in place — the reference
+    // stays the same while what it points at changes. Verified directly before this fix: an
+    // unfrozen singleton let `provisionalRulePack.rules = forgedRules` through, and a subsequent
+    // run trusted the forged citation. `core/default-pack.ts` now deep-freezes the singleton, so
+    // this assignment throws in strict-mode ESM instead of silently succeeding.
+    expect(Object.isFrozen(provisionalRulePack)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.rules)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.dictionary)).toBe(true);
+    expect(Object.isFrozen(provisionalRulePack.dictionary.unapproved)).toBe(true);
+
+    const originalRules = provisionalRulePack.rules;
+    const mutable = provisionalRulePack as { rules: unknown };
+
+    expect(() => {
+      mutable.rules = [
+        {
+          ruleId: 'unapproved-vocabulary',
+          status: 'normative',
+          sourceRef: 'FORGED CITATION via in-place mutation',
+          enabled: true,
+        },
+      ];
+    }).toThrow(/read only property|not extensible|frozen/i);
+    expect(provisionalRulePack.rules).toBe(originalRules);
+  });
+
+  it("rejects an untrusted pack's id at the schema boundary instead of sanitizing it for display (#66, rounds 5, 7, 10)", () => {
+    // Three successive Codex review rounds on PR #116 each found a character `displaySafePackId`'s
+    // denylist (since removed) did not strip: a newline (round 5), an embedded `"` that broke out
+    // of the marker's quoted template (round 7), then a Unicode line separator, U+2028, which some
+    // renderers treat as a line break the same way a newline is (round 10). Each let an untrusted
+    // pack's own id push a fabricated citation into view. A denylist regex is an open-ended
+    // problem — there is always one more character class to add. `rulePackIdSchema`
+    // (`src/rule-pack/schema.ts`) allowlists the id's character set at parse time instead, so none
+    // of these three, or any future variant, ever reaches `runner.ts` at all.
+    const baseMetadata = {
+      name: 'Acme test pack',
+      version: '1.0.0',
+      authority: 'normative',
+      licence: 'Proprietary — test fixture',
+      source: 'Authored for this test. Not derived from any standard.',
+      conformanceClaim: 'declared-by-supplier',
+    };
+    const badIds = [
+      'evil\n"a fabricated citation"',
+      'evil ASD-STE100 Issue 8, Rule 3.1',
+      'has a space',
+      'x'.repeat(200),
+    ];
+    for (const id of badIds) {
+      const error = caughtError(() =>
+        parseRulePack(pack({ metadata: { ...baseMetadata, id } }), 'test'),
+      );
+      expect(error, `expected id ${JSON.stringify(id)} to be rejected`).toBeInstanceOf(
+        RulePackError,
+      );
+    }
+  });
+
+  it('accepts a safe id and interpolates it directly into the withheld-citation marker', () => {
+    const diagnostic = only(VOCABULARY_DOC, { rulePack: pack() }, 'unapproved-vocabulary');
+
+    expect(diagnostic.meta?.['sourceRef']).toBe(
+      `unverified citation from untrusted rule pack "${PACK_ID}"`,
+    );
+  });
+
+  it('accepts an npm-scope-style id such as "@acme/std" (#66, round 11)', () => {
+    // Codex review on PR #116, round 11: the first version of this pattern required the *first*
+    // character to be alphanumeric, so a scoped id like `@acme/std` — the convention this file's
+    // own design docs already document for a future layered pack — was rejected even though `@`
+    // is allowed everywhere else in the same id. `RULE_PACK_ID_PATTERN`
+    // (`src/core/rule-pack-id.ts`) now allows `@` to lead too.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          metadata: {
+            id: '@acme/std',
+            name: 'Acme test pack',
+            version: '1.0.0',
+            authority: 'normative',
+            licence: 'Proprietary — test fixture',
+            source: 'Authored for this test. Not derived from any standard.',
+            conformanceClaim: 'declared-by-supplier',
+          },
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.meta?.['sourceRef']).toBe(
+      'unverified citation from untrusted rule pack "@acme/std"',
+    );
+  });
+
+  it("omits a direct-runner caller's id when it does not pass the same allowlist (#66, round 11)", () => {
+    // Codex review on PR #116, round 11: `rulePackMetadataSchema`'s allowlist protects only the
+    // `parseRulePack` path (a JSON file or an inline config object). A caller of the public
+    // `runDeterministicRules` API can construct a `RulePack`-shaped object by hand and skip that
+    // schema entirely — proven directly before this fix: a hand-built pack with a newline-and-quote
+    // id, passed straight to `runDeterministicRules`, still leaked into `sourceRef` unescaped.
+    // `runner.ts` now checks `isSafeRulePackId` at the interpolation site itself, so this is safe
+    // regardless of how `pack` reached it.
+    const forgedPack: RulePack = {
+      ...provisionalRulePack,
+      metadata: { ...provisionalRulePack.metadata, id: 'evil\n"a fabricated citation"' },
+    };
+    expect(forgedPack).not.toBe(provisionalRulePack);
+
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: VOCABULARY_DOC });
+    const result = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config: resolveConfig({}),
+      pack: forgedPack,
+    });
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+
+    expect(diagnostic?.meta?.['sourceRef']).toBe(
+      'unverified citation from untrusted rule pack "<id omitted: does not match the expected pack-id format>"',
+    );
   });
 
   it('honours a declared status only once the operator names the pack as trusted', () => {

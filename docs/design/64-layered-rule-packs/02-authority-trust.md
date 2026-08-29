@@ -105,7 +105,7 @@ The same principle is restated in config: `src/core/config.ts:126-132`:
 | ------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `src/rule-pack/loader.ts:80-82` | `packPermitsConformanceClaim`                        | whether output may use conformance wording                                      |
 | `src/rule-pack/loader.ts:96-97` | `verifiedAuthority`                                  | run-level authority scalar                                                      |
-| `src/core/runner.ts:139-146`    | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
+| `src/core/runner.ts`            | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
 | `src/analysis/analyse.ts:292`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on `review-required` diagnostics                                   |
 | `src/analysis/analyse.ts:607`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on every semantic diagnostic                                       |
 | `src/cli/main.ts:190-196`       | both loader functions                                | `packAuthority`, `declaredAuthority`, `conformanceClaim` per file in CLI output |
@@ -146,21 +146,36 @@ provenance:{...}})` yields `{"a":"x"}` — unknown keys are **stripped**, silent
 These are real today, with a single pack, and layering multiplies each of them. Flagged here because
 they are inside the trust boundary I own.
 
-1. **An untrusted pack's `sourceRef` is written to diagnostics verbatim.** `src/core/runner.ts:96-112`
-   caps `status` through `verifiedRuleStatus` but assigns
-   `meta: { ...processed.meta, sourceRef: packSpec?.sourceRef ?? '' }` (line 110) **unconditionally**
-   whenever `packSpec !== undefined`. An untrusted pack can therefore put the string
-   `"ASD-STE100 Issue 8, Writing Rule 3.1"` onto a diagnostic that reports `supplementary`. The
-   authority scalar is capped; the citation is not.
+1. **Fixed for a single pack, three rounds.** An untrusted pack's `sourceRef` reached diagnostics
+   verbatim. (#66.) `src/core/runner.ts` first withheld a citation only when `verifiedRuleStatus`
+   downgraded a `"normative"` declaration. A pack could declare `status: "supplementary"` directly
+   instead. That declaration was never downgraded. Its citation reached the diagnostic unexamined.
+   The fix moved to gating on the declared status. A pack entry that only restated the rule's own
+   built-in `provisional` status made no claim. Its citation always reached the diagnostic. That gate
+   still had a hole. Every shipped rule's own status already is `provisional`. A pack could declare
+   `provisional` and still supply a fabricated citation. The fix moved again. It compared the
+   citation text instead. A pack entry's `sourceRef` reached the diagnostic only when it repeated
+   `rule.meta.sourceRef` verbatim. That gate had a hole too. An untrusted pack could copy the exact
+   citation string. It could still replace the data behind it. A fabricated dictionary entry, a
+   loosened limit, either one. A citation naming this repository's own documentation could then sit
+   next to a finding that documentation never describes. The gate now compares identity instead. It
+   does not check any field a pack declares or any text it copies. A pack entry's citation reaches
+   the diagnostic in two cases only. `pack` is
+   the literal bundled-default object, which no supplied pack can ever be. Or the pack is named in
+   `trustedRulePackIds`. This closes the single-pack
+   case. The multi-layer attribution problem below (attack 5) is unaffected. This fix has no
+   `EntryProvenance`. It cannot say _which_ layer made a claim, once layering lands.
 2. **Documentation understates the trust condition.** `docs/rule-pack-import.md:51` says
    "`packPermitsConformanceClaim()` returns true only for 'normative' + not 'none'." and the table at
    `docs/rule-pack-import.md:135` gives `true` if `conformanceClaim !== 'none'`. Both omit condition
    3 — the `trustedRulePackIds` requirement — i.e. the documented function is _more permissive than
    the implemented one_. Safe in practice (the code is stricter than the doc), wrong as a contract.
-3. **No test covers the trust boundary.** `grep -rln "authority\|conformance\|rulePack" test/`
-   returns nothing across all 27 files under `test/`. `verifiedAuthority`,
-   `packPermitsConformanceClaim` and `verifiedRuleStatus` are unexercised. (Testing is out of scope
-   for this spec; recording the gap is not.)
+3. **Fixed: the trust boundary now has direct test coverage.** (#67.)
+   `test/integration/rule-pack.test.ts` pins the trust gate, the status split, and
+   `packPermitsConformanceClaim` end-to-end. `test/unit/rule-pack-loader.test.ts` calls
+   `resolveRulePack`, `loadRulePackFromFile`, `parseRulePack` and `verifiedAuthority` directly. This
+   spec still lacks one thing: coverage of the _layered_ trust model below. That model does not exist
+   yet.
 4. **Config already overrides pack limits with no record.** `options.maxSentencesPerStep ??
 pack.limits.maxSentencesPerProceduralStep` (`structure-rules.ts:43`) and the equivalents in
    `sentence-length.ts:28-30` and `candidate-rules.ts:331` let operator config silently displace a
@@ -313,11 +328,11 @@ export interface ResolvedLayer {
 `ComposedRulePack`. Rules read `entry.provenance` where they already read `entry.term`,
 `entry.alternatives` etc. and pass it through to `buildDiagnostic`.
 
-The single-layer case is not special-cased: with no layers configured, the compositor produces a
-`ComposedRulePack` of exactly one layer (`bundled`), every entry provenanced to
-`ste-ai-provisional@0.1.0` with `declaredAuthority: 'provisional'`, `trusted: false`,
-`verifiedAuthority: 'provisional'` (from `src/rule-pack/provisional-pack.ts:24-33`). One code path,
-no "layered mode" flag.
+The single-layer case is not special-cased. With no layers configured, the compositor produces a
+`ComposedRulePack` of exactly one layer (`bundled`). Every entry is provenanced to
+`ste-ai-provisional@0.1.0` with `declaredAuthority: 'provisional'` and `trusted: false`.
+`verifiedAuthority` is `'provisional'` too (from `provisionalRulePack.metadata`,
+`src/core/default-pack.ts`). One code path, no "layered mode" flag.
 
 ### Attachment rules at merge time
 
@@ -472,8 +487,8 @@ check completely. (This is a hole in the obvious definition; it is closed here d
 
 **Consequence the merge-algorithm spec must accommodate:** the bundled provisional layer declares
 `authority: 'provisional'` and `conformanceClaim: 'none'`
-(`src/rule-pack/provisional-pack.ts:27,31`). Under unanimity, if the bundled layer contributes
-anything at all, no run-level conformance claim is ever reachable. An operator holding a licensed
+(`provisionalRulePack.metadata`, `src/core/default-pack.ts`). Under unanimity, if the bundled layer
+contributes anything at all, no run-level conformance claim is ever reachable. An operator holding a licensed
 pack must therefore be able to **fully replace** the bundled layer, not merely extend it. This is a
 dependency on the merge spec's `replace` mode, flagged, not designed here. If `replace` cannot
 evacuate the bundled layer entirely, `stackPermitsConformanceClaim` is permanently `false` and
@@ -815,14 +830,29 @@ no record at all (`structure-rules.ts:43`, `sentence-length.ts:28-30`) — pre-e
 
 ### 5. Fabricated `sourceRef`
 
-_Attack._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
+_Attack, variant 1._ Untrusted layer supplies `rules: [{ruleId: "sentence-length-procedural", status:
 "normative", sourceRef: "ASD-STE100 Issue 8, Writing Rule 3.1"}]`. Status is capped to
-`supplementary` by `verifiedRuleStatus` (`runner.ts:139-146`) — but `runner.ts:110` assigns
-`meta.sourceRef` **unconditionally** whenever `packSpec !== undefined`. The fabricated citation lands
-on the diagnostic verbatim, next to a `supplementary` tag that most readers will not weigh against a
-specific-looking standard citation.
+`supplementary` by the local `verifiedRuleStatus` helper in `runner.ts`.
 
-_Naively:_ works **today**, with one pack. Layering adds six more suppliers who can do it.
+_Attack, variant 2._ Untrusted pack supplies `dictionary.unapproved: [{term: "florp", alternatives:
+["widget"]}]`. That word is not in the bundled dictionary. The pack also supplies `rules:
+[{ruleId: "unapproved-vocabulary", status: "provisional", sourceRef:
+"provisional:docs/provisional-rules.md#unapproved-vocabulary"}]`. That copies the bundled pack's own
+citation string exactly. An earlier fix compared that string against `rule.meta.sourceRef`. A match
+let the citation through. The finding on "florp" would then carry a citation naming this
+repository's own documentation. That section describes the bundled list. It states plainly that the
+list "is deliberately small". It does not include "florp". The citation matched. The data behind it
+did not.
+
+_Naively:_ **fixed for a single pack, both variants** (#66). `runner.ts` now withholds the citation
+in one case only. `pack` must be the literal bundled-default object, or the pack must be named in
+`trustedRulePackIds`. Identity decides the first case. No field a pack declares decides it. No text
+it copies decides it either. No supplied pack, however it shapes itself, can ever be that same
+object. So neither variant above can produce a citation the gate accepts. The fabricated citation in
+variant 1 is replaced with `unverified citation from untrusted rule pack "<id>"`. So is variant 2's,
+regardless of what it copied. Single-pack trust still cannot do one thing. It cannot name _which_
+layer made the claim, once several suppliers stack. That is the part layering still adds, six more
+suppliers deep. It is also the part this fix does not touch.
 
 _Stopped by:_ `sourceRef` becomes attributed, not asserted. It moves onto `EntryProvenance.sourceRef`
 (where it sits beside `packId`, `trusted`, and `verifiedAuthority`) and is rendered as
@@ -960,9 +990,10 @@ gain the per-entry provenance field as a fourth carrier.
 Two problems. The function is being replaced by `entryPermitsConformanceClaim` /
 `stackPermitsConformanceClaim`, so the name must change. And "on every run" is a promise about the
 unconditional line at `src/cli/main.ts:266` — which this spec proposes to derive rather than
-hard-code. The replacement must state the derived behaviour: the sentence is printed whenever
-`stackPermitsConformanceClaim` is false, which is every run of the shipped configuration, because the
-bundled layer declares `provisional`/`none` (`src/rule-pack/provisional-pack.ts:27,31`).
+hard-code. The replacement must state the derived behaviour. The sentence is printed whenever
+`stackPermitsConformanceClaim` is false. That is every run of the shipped configuration, because the
+bundled layer declares `provisional`/`none` (`provisionalRulePack.metadata`,
+`src/core/default-pack.ts`).
 
 ### 3. "What a passing run means" (lines 44-47) — the most important change
 
@@ -1028,9 +1059,9 @@ Not my file to change, but inside the authority contract I own, so recorded:
 ## Open questions
 
 1. **Can the bundled layer be fully evacuated?** Unanimity plus the bundled layer's
-   `provisional`/`none` metadata (`provisional-pack.ts:27,31`) means no run-level conformance claim
-   is reachable unless `replace` at the bundled layer removes it entirely. **Dependency on the merge
-   spec.** If it cannot, `stackPermitsConformanceClaim` is permanently `false` and should be
+   `provisional`/`none` metadata (`src/core/default-pack.ts`) means no run-level conformance claim
+   is reachable unless `replace` at the bundled layer removes it entirely. **Dependency on the
+   merge spec.** If it cannot, `stackPermitsConformanceClaim` is permanently `false` and should be
    documented as such rather than weakened.
 2. **Does the merge algorithm report per-field contributors?** A5 (weakest-wins for field-level
    merges) needs to know which layers contributed which surviving fields. If the merge output cannot

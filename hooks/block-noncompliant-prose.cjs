@@ -28,30 +28,69 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
 
 /** How long a single `textlint` invocation may run before this hook gives up on it and fails
  * open. Without this, a hung `textlint` process (or a hung custom rule/plugin it loads) blocks
- * `execFileSync` forever, which blocks every subsequent Write/Edit in the session -- reproduced
+ * this hook forever, which blocks every subsequent Write/Edit in the session -- reproduced
  * directly with a stub binary that sleeps, see `test/integration/pre-write-compliance-hook.test.ts`. */
 const TEXTLINT_TIMEOUT_MS = 15_000;
 
-/** The most recent scratch file this process has written and not yet cleaned up, if any. Read by
- * the `SIGTERM`/`SIGINT` handlers below so a caller that kills a hung `execFileSync` call (see
- * `TEXTLINT_TIMEOUT_MS`'s own doc comment -- the harness's own hook-level timeout, or a person's
- * Ctrl-C, are both plausible external killers) still gets the scratch file removed, rather than
- * leaving it behind in the real project directory the hook is running against. A `finally` block
- * alone does not run when the process is killed out from under it. */
-let pendingScratchFile;
+/**
+ * The `textlint` child process currently running, if any, and the scratch file it is reading
+ * from. Read by the `SIGTERM`/`SIGINT` handlers below so a caller that kills this hook (the
+ * harness's own hook-level timeout, or a person's Ctrl-C) still gets both the child and the
+ * scratch file cleaned up, rather than leaving either behind. A `finally` block alone does not
+ * run when the process is killed out from under it.
+ *
+ * PROVENANCE: an earlier version of this hook used `execFileSync` and relied on a `SIGTERM`/
+ * `SIGINT` handler to kill the child and clean up the scratch file on an external kill. That
+ * handler was dead code for exactly the scenario it existed to protect: `execFileSync` blocks the
+ * whole Node.js event loop synchronously for the duration of the child process, and a registered
+ * signal handler cannot run until the event loop is free to process it -- reproduced directly (an
+ * isolated repro with a bare `execFileSync('sleep', ['30'])` and a `SIGTERM` handler: the
+ * handler's own `console.error` never printed, confirmed still running 4s after the signal).
+ * Switching to async `spawn` keeps the event loop free while `textlint` runs, so a signal handler
+ * here can actually run -- and can kill the in-flight child directly, not just hope it exits on
+ * its own.
+ */
+let pending;
 
-function cleanupPendingScratchFile() {
-  if (pendingScratchFile === undefined) return;
+/**
+ * Kills `child`'s entire process group, not just `child` itself.
+ *
+ * `child.kill(signal)` only signals the immediate child. `textlint` -- or a rule/plugin it loads,
+ * or (in this hook's own test suite) a stub binary standing in for it -- can be a shell script
+ * that forks a grandchild (a real `bash script.sh` wrapping `sleep`, in the stub case); that
+ * grandchild inherits the same stdout/stderr pipes and keeps them open even after the immediate
+ * child (the shell) dies, so Node's `'close'` event -- what both the 15s timeout and cleanup wait
+ * on -- never fires. Reproduced directly: a bare `child.kill('SIGTERM')` against a
+ * `bash -c 'sleep 120'` child left `'close'` unfired for the full 120s; spawning with
+ * `detached: true` (making the child its own process-group leader) and killing the *group* via
+ * `process.kill(-child.pid, signal)` instead brought `'close'` back to ~1.5s. `-pid` is the
+ * documented `kill`/`process.kill` syntax for "the process group led by this pid," not a typo.
+ */
+function killGroup(child, signal) {
+  if (child.pid === undefined) return;
   try {
-    fs.unlinkSync(pendingScratchFile);
+    process.kill(-child.pid, signal);
+  } catch {
+    // ESRCH: the group is already gone. Best-effort only.
+  }
+}
+
+function cleanupPending() {
+  if (pending === undefined) return;
+  const { scratchPath, child } = pending;
+  pending = undefined;
+  if (child !== undefined && child.exitCode === null && child.signalCode === null) {
+    killGroup(child, 'SIGKILL');
+  }
+  try {
+    fs.unlinkSync(scratchPath);
   } catch {
     // Best-effort only -- the file may already be gone.
   }
-  pendingScratchFile = undefined;
 }
 
 // Registering a handler here suppresses Node's default terminate-immediately behaviour for these
@@ -60,7 +99,7 @@ function cleanupPendingScratchFile() {
 // (a timeout wrapper, a shell's Ctrl-C) sends first.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
-    cleanupPendingScratchFile();
+    cleanupPending();
     process.exit(0);
   });
 }
@@ -215,32 +254,60 @@ function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
   return patterns.some((pattern) => minimatch(relativePath, pattern, { dot: true }));
 }
 
-/** Runs textlint against `content` (written to a scratch file beside `realFilePath` so relative
- * config/plugin resolution behaves the same as linting the real file) and returns its error-count. */
+/**
+ * Runs `textlint` against `content` (written to a scratch file beside `realFilePath` so relative
+ * config/plugin resolution behaves the same as linting the real file) and returns its findings.
+ *
+ * Uses async `spawn` rather than `execFileSync` specifically so `TEXTLINT_TIMEOUT_MS` and an
+ * external signal can both actually interrupt a hung child -- see {@link pending}'s doc comment.
+ * `detached: true` plus {@link killGroup} is what makes that interruption reach a child that
+ * itself forks a grandchild (a shell-script `textlint` shim, or a hung rule's own subprocess).
+ */
 function countErrors(textlintBin, configPath, realFilePath, content) {
   const dir = path.dirname(realFilePath);
-  const scratch = path.join(
+  const scratchPath = path.join(
     dir,
     `.ste-ai-hook-${process.pid}-${Math.random().toString(36).slice(2)}.md`,
   );
-  fs.writeFileSync(scratch, content, 'utf8');
-  pendingScratchFile = scratch;
-  try {
-    const output = execFileSync(
-      textlintBin,
-      ['--config', configPath, '--format', 'json', scratch],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: TEXTLINT_TIMEOUT_MS },
-    );
-    return parseErrors(output);
-  } catch (error) {
-    // textlint exits non-zero when it finds any error-severity message; its JSON report is still
-    // on stdout in that case.
-    const stdout = error && typeof error.stdout === 'string' ? error.stdout : '';
-    if (stdout.trim() === '') throw error;
-    return parseErrors(stdout);
-  } finally {
-    cleanupPendingScratchFile();
-  }
+  fs.writeFileSync(scratchPath, content, 'utf8');
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(textlintBin, ['--config', configPath, '--format', 'json', scratchPath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    });
+    pending = { scratchPath, child };
+
+    let stdout = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      cleanupPending();
+      reject(error);
+    });
+    child.on('close', () => {
+      clearTimeout(timer);
+      cleanupPending();
+      // textlint exits non-zero when it finds any error-severity message; its JSON report is
+      // still on stdout in that case, and an empty stdout (a crash before any report was
+      // printed) is the only case this hook cannot make sense of.
+      if (stdout.trim() === '') {
+        reject(new Error(`textlint produced no output for ${scratchPath}`));
+        return;
+      }
+      try {
+        resolve(parseErrors(stdout));
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    const timer = setTimeout(() => {
+      killGroup(child, 'SIGTERM');
+    }, TEXTLINT_TIMEOUT_MS);
+  });
 }
 
 function parseErrors(jsonOutput) {
@@ -286,7 +353,7 @@ function applyEditInMemory(currentContent, oldString, newString, replaceAll) {
   );
 }
 
-function main() {
+async function main() {
   const raw = readStdin();
   if (!raw.trim()) process.exit(0);
 
@@ -295,27 +362,46 @@ function main() {
     event = JSON.parse(raw);
   } catch {
     process.exit(0);
+    return;
   }
   // `JSON.parse` accepts `null`, a number, a string, or an array as top-level valid JSON -- none
   // of those throw, but a bare property access on any of them either throws (on `null`) or is
   // simply always `undefined` (on the others). Reproduced directly: `echo 'null' | node
   // hooks/block-noncompliant-prose.cjs` used to throw an uncaught TypeError and exit 1, not the
   // documented fail-open exit 0.
-  if (typeof event !== 'object' || event === null) process.exit(0);
+  if (typeof event !== 'object' || event === null) {
+    process.exit(0);
+    return;
+  }
 
   const toolName = event.tool_name ?? '';
-  if (toolName !== 'Write' && toolName !== 'Edit') process.exit(0);
+  if (toolName !== 'Write' && toolName !== 'Edit') {
+    process.exit(0);
+    return;
+  }
 
   const filePath = event.tool_input?.file_path;
-  if (typeof filePath !== 'string' || !filePath.toLowerCase().endsWith('.md')) process.exit(0);
+  if (typeof filePath !== 'string' || !filePath.toLowerCase().endsWith('.md')) {
+    process.exit(0);
+    return;
+  }
 
   const found = findSteAiConfigDir(path.dirname(filePath));
-  if (found === undefined) process.exit(0);
+  if (found === undefined) {
+    process.exit(0);
+    return;
+  }
 
   const textlintBin = findTextlintBin(found.configDir);
-  if (textlintBin === undefined) process.exit(0);
+  if (textlintBin === undefined) {
+    process.exit(0);
+    return;
+  }
 
-  if (isIgnoredByTextlint(process.cwd(), found.configDir, filePath)) process.exit(0);
+  if (isIgnoredByTextlint(process.cwd(), found.configDir, filePath)) {
+    process.exit(0);
+    return;
+  }
 
   const currentContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
 
@@ -325,7 +411,10 @@ function main() {
   } else {
     const oldString = event.tool_input?.old_string;
     const newString = event.tool_input?.new_string;
-    if (typeof oldString !== 'string' || typeof newString !== 'string') process.exit(0);
+    if (typeof oldString !== 'string' || typeof newString !== 'string') {
+      process.exit(0);
+      return;
+    }
     wouldBeContent = applyEditInMemory(
       currentContent,
       oldString,
@@ -333,11 +422,14 @@ function main() {
       event.tool_input?.replace_all,
     );
   }
-  if (typeof wouldBeContent !== 'string') process.exit(0);
+  if (typeof wouldBeContent !== 'string') {
+    process.exit(0);
+    return;
+  }
 
   try {
-    const before = countErrors(textlintBin, found.configPath, filePath, currentContent);
-    const after = countErrors(textlintBin, found.configPath, filePath, wouldBeContent);
+    const before = await countErrors(textlintBin, found.configPath, filePath, currentContent);
+    const after = await countErrors(textlintBin, found.configPath, filePath, wouldBeContent);
     const newOnes = diffNewMessages(before, after);
 
     if (newOnes.length > 0) {
@@ -346,10 +438,10 @@ function main() {
         .map((m) => `  ${m.line}:${m.column}  ${m.message}  (${m.ruleId})`);
       process.stderr.write(
         `${[
-          '--- ste-ai: this edit adds new lint errors ---',
+          '--- ste-ai: this edit adds new lint findings ---',
           '',
           `File: ${filePath}`,
-          `Errors before: ${before.length}, after: ${after.length}`,
+          `Findings before: ${before.length}, after: ${after.length}`,
           '',
           ...lines,
           '',
@@ -359,6 +451,7 @@ function main() {
         ].join('\n')}\n`,
       );
       process.exit(2);
+      return;
     }
     process.exit(0);
   } catch {
@@ -368,4 +461,4 @@ function main() {
   }
 }
 
-main();
+void main();

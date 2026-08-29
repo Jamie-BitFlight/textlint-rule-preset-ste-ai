@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   mkdirSync,
@@ -205,6 +205,74 @@ describe('block-noncompliant-prose hook', () => {
         // Well under the 60s test budget -- the hook's own single ~15s textlint timeout, not the
         // test timeout, should be what ends this.
         expect(elapsedMs).toBeLessThan(30_000);
+        const leftovers = readdirSync(scratchProject).filter((name) =>
+          name.startsWith('.ste-ai-hook-'),
+        );
+        expect(leftovers).toEqual([]);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): the first `SIGTERM`/`SIGINT` handler was
+  // registered against a hook that still used `execFileSync`, which blocks the Node.js event
+  // loop for the whole child process's duration -- so the handler could never actually run while
+  // a child was in flight, reproduced directly with an isolated `execFileSync` + `SIGTERM` repro
+  // (the handler's own log line never printed). Switching to async `spawn`, `detached: true`, and
+  // a process-group kill (`process.kill(-child.pid, signal)`) fixed the underlying problem: a
+  // plain `child.kill()` only reaches the immediate child, not a shell-wrapping grandchild that
+  // keeps the stdout pipe open (this suite's own stub `textlint` is exactly such a shell script).
+  // This case pins the externally observable behavior the fix promises: a real `SIGTERM` sent to
+  // a hook that is mid-check kills it and its whole child tree promptly, leaving no scratch file
+  // behind, rather than running the hook's own hang-timeout out to completion.
+  it(
+    'exits promptly and cleans up its scratch file on SIGTERM',
+    async () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-sigterm-'));
+      try {
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
+        writeFileSync(stubTextlintPath, '#!/usr/bin/env bash\nsleep 120\n');
+        chmodSync(stubTextlintPath, 0o755);
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const child = spawn('node', [hookScript], { cwd: repoRoot });
+        child.stdin.end(
+          JSON.stringify({
+            tool_name: 'Write',
+            tool_input: {
+              file_path: targetPath,
+              content: 'New content, with, way, too, many, commas, right, here, now.\n',
+            },
+          }),
+        );
+
+        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+          (resolve) => {
+            child.on('close', (code, signal) => resolve({ code, signal }));
+          },
+        );
+
+        // Give the stub textlint's sleep a moment to actually start before killing the hook,
+        // rather than racing process startup.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        child.kill('SIGTERM');
+
+        const started = Date.now();
+        await exited;
+        const elapsedMs = Date.now() - started;
+
+        // Well under both the hook's own 15s textlint timeout and the stub's 120s sleep -- proves
+        // SIGTERM actually interrupted the in-flight child rather than the hook running either
+        // of those out to completion.
+        expect(elapsedMs).toBeLessThan(5_000);
         const leftovers = readdirSync(scratchProject).filter((name) =>
           name.startsWith('.ste-ai-hook-'),
         );

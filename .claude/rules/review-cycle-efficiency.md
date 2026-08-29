@@ -27,6 +27,9 @@ Save two separate diffs, not one. Store them in the gitignored `.tmp/scratch/` d
 store them inside `<files>` itself. A patch file inside that selection gets caught up in the
 checkout and apply steps below.
 
+Run `mkdir -p .tmp/scratch` first. A fresh clone or worktree has no `.tmp/` directory yet. A shell
+redirection into a missing directory fails outright, before the command behind it ever runs.
+
 Run `git diff --cached -- <files> > .tmp/scratch/staged.patch` for what was staged. Run
 `git diff -- <files> > .tmp/scratch/unstaged.patch` for what was not. Then revert the files with
 `git checkout HEAD -- <files>`. Do the intervening work.

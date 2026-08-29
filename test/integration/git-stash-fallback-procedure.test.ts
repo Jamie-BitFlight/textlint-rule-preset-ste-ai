@@ -1,20 +1,22 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
 
 /**
- * `.claude/rules/review-cycle-efficiency.md` documents two procedures for hiding uncommitted work
+ * `.claude/rules/review-cycle-efficiency.md` documents procedures for hiding uncommitted work
  * during intervening work, then restoring it exactly: `git stash push -u` / `git stash pop
- * --index`, and a two-patch fallback for when `git stash` is refused. Both procedures make a
+ * --index`, and a two-patch fallback for when `git stash` is refused. Each procedure makes a
  * specific, falsifiable claim -- a file with both staged and unstaged changes (`git status`'s `MM`)
  * comes back exactly as `MM`, not degraded to a single state -- which prior review rounds found
  * the file's own text got wrong (plain `git stash pop`, and a single-patch fallback restored with
- * `git apply --index`, both degrade `MM` to a single state). The fallback also makes a second
- * claim: restoring the staged half must not sweep in an unrelated file the intervening work
- * touched, which a broad `git add -- <files>` does and a scoped `git apply --index` on just the
- * staged patch does not.
+ * `git apply --index`, both degrade `MM` to a single state). The fallback also makes two further
+ * claims: restoring the staged half must not sweep in an unrelated file the intervening work
+ * touched (a broad `git add -- <files>` does, a scoped `git apply --index` on just the staged
+ * patch does not), and its own scratch directory must exist before the fallback's first shell
+ * redirection tries to write into it (a fresh clone or worktree has no `.tmp/` yet, since it is
+ * gitignored, and a redirection into a missing directory fails before the command behind it runs).
  *
  * Per this repo's own AGENTS.md ("A doc that describes runtime behaviour needs an executable
  * pin... Verify the replacement claim empirically before writing it. Run the thing."), these cases
@@ -46,8 +48,12 @@ beforeEach(() => {
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'test');
+  // Mirrors this repository's own root .gitignore (`.tmp/`), so the fallback's own scratch
+  // patches never show up as untracked entries in the status assertions below -- the same way
+  // they do not in the real repository the fallback procedure actually runs in.
+  writeFileSync(join(repoDir, '.gitignore'), '.tmp/\n');
   writeFileSync(join(repoDir, 'f.txt'), 'line1\n');
-  git('add', 'f.txt');
+  git('add', '.gitignore', 'f.txt');
   git('commit', '-q', '-m', 'init');
 });
 
@@ -173,5 +179,49 @@ describe('the documented two-patch fallback preserves a staged-and-unstaged file
 
     // f.txt is restored to MM; g.txt's intervening change stays unstaged, untouched.
     expect(statusShort()).toBe('MM f.txt\n M g.txt');
+  });
+
+  it('the documented shell redirection into .tmp/scratch/ fails outright without mkdir -p first -- this is the bug the rule warns against, not a recommended step', () => {
+    makeMmFile();
+    expect(existsSync(join(repoDir, '.tmp'))).toBe(false);
+
+    expect(() =>
+      execFileSync('sh', ['-c', 'git diff --cached -- f.txt > .tmp/scratch/staged.patch'], {
+        cwd: repoDir,
+        encoding: 'utf8',
+      }),
+    ).toThrow(/No such file or directory|Directory nonexistent/);
+  });
+
+  it('running the documented mkdir -p .tmp/scratch step first lets the same redirection succeed', () => {
+    makeMmFile();
+    expect(statusShort()).toBe('MM f.txt');
+
+    execFileSync(
+      'sh',
+      [
+        '-c',
+        'mkdir -p .tmp/scratch && ' +
+          'git diff --cached -- f.txt > .tmp/scratch/staged.patch && ' +
+          'git diff -- f.txt > .tmp/scratch/unstaged.patch',
+      ],
+      { cwd: repoDir, encoding: 'utf8' },
+    );
+
+    expect(existsSync(join(repoDir, '.tmp/scratch/staged.patch'))).toBe(true);
+    expect(existsSync(join(repoDir, '.tmp/scratch/unstaged.patch'))).toBe(true);
+
+    git('checkout', 'HEAD', '--', 'f.txt');
+    execFileSync(
+      'sh',
+      [
+        '-c',
+        'git apply --index --allow-empty .tmp/scratch/staged.patch && ' +
+          'git apply --allow-empty .tmp/scratch/unstaged.patch',
+      ],
+      { cwd: repoDir, encoding: 'utf8' },
+    );
+
+    expect(statusShort()).toBe('MM f.txt');
   });
 });

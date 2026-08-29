@@ -17,11 +17,22 @@ intervening work once it succeeds. Then run `git stash pop --index` to restore w
 `git stash pop`, without `--index`, drops a staged file back to merely modified. A file with both
 staged and unstaged changes needs `--index` to come back exactly as it was, not just to come back.
 
-If `git stash` is refused, use this fallback. Scope it to an already-tracked, non-binary file
-only.
+If `git stash` is refused, use this fallback. Scope it to an already-tracked, non-binary,
+conflict-free file only.
 
 `git stash push -u` already handles a new or a binary file correctly. Exhaust that path first.
 Escalate to a human for either case, instead of extending this fallback.
+
+Neither path handles a file with an unresolved merge conflict (`git status`'s `UU`). `git stash
+push -u` itself refuses one outright. It reports the file "needs merge."
+
+This fallback does worse. `git checkout HEAD -- <files>` silently resolves the conflict to
+`HEAD`'s own side. It discards the other side. It discards the conflict markers too. The
+"staged" diff this fallback captures first is not a normal patch at all. It is only the words
+`Unmerged path <file>`. `git apply` cannot replay that.
+
+Resolve the conflict before running either path. Escalate to a human when that resolution is not
+simply "do the intervening work."
 
 Save two separate diffs, not one. Store them in the gitignored `.tmp/scratch/` directory. Never
 store them inside `<files>` itself. A patch file inside that selection gets caught up in the

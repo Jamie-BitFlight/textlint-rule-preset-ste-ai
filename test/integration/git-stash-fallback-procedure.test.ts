@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
  * specific, falsifiable claim -- a file with both staged and unstaged changes (`git status`'s `MM`)
  * comes back exactly as `MM`, not degraded to a single state -- which prior review rounds found
  * the file's own text got wrong (plain `git stash pop`, and a single-patch fallback restored with
- * `git apply --index`, both degrade `MM` to a single state). The fallback also makes two further
+ * `git apply --index`, both degrade `MM` to a single state). The fallback also makes further
  * claims: restoring the staged half must not sweep in an unrelated file the intervening work
  * touched (a broad `git add -- <files>` does, a scoped `git apply --index` on just the staged
  * patch does not), and its own scratch directory must exist before the fallback's first shell
@@ -67,6 +67,22 @@ function makeMmFile(): void {
   writeFileSync(join(repoDir, 'f.txt'), 'line1\nstaged-change\n');
   git('add', 'f.txt');
   writeFileSync(join(repoDir, 'f.txt'), 'line1\nstaged-change\nunstaged-change\n');
+}
+
+/** Puts `f.txt` into `UU` (unmerged) state via a real conflicting merge. */
+function makeUnmergedFile(): void {
+  const startBranch = git('branch', '--show-current').trim();
+  git('checkout', '-q', '-b', 'other-branch');
+  writeFileSync(join(repoDir, 'f.txt'), 'line1\nother-branch-change\n');
+  git('commit', '-q', '-am', 'other branch change');
+  git('checkout', '-q', startBranch);
+  writeFileSync(join(repoDir, 'f.txt'), 'line1\nmain-branch-change\n');
+  git('commit', '-q', '-am', 'main branch change');
+  try {
+    git('merge', 'other-branch', '-q');
+  } catch {
+    // Expected: the merge conflicts. f.txt is now UU.
+  }
 }
 
 describe('git stash push/pop --index preserves a staged-and-unstaged file exactly', () => {
@@ -223,5 +239,36 @@ describe('the documented two-patch fallback preserves a staged-and-unstaged file
     );
 
     expect(statusShort()).toBe('MM f.txt');
+  });
+
+  // Regression (independent review of PR #120): neither the primary path nor this fallback
+  // handles a file with an unresolved merge conflict. `git stash push -u` itself refuses one
+  // outright ("needs merge"); this fallback does worse -- `git checkout HEAD -- <files>` silently
+  // resolves the conflict to HEAD's own side, discarding the other side and the conflict markers,
+  // and the "staged" diff it captured first is not a normal patch at all.
+  it('git stash push -u refuses an unmerged (UU) file outright', () => {
+    makeUnmergedFile();
+    expect(statusShort()).toBe('UU f.txt');
+    expect(() => git('stash', 'push', '-u', '-q')).toThrow(/could not write index/);
+  });
+
+  it('the fallback silently destroys an unmerged (UU) file instead of restoring it -- this is the bug the rule warns against, not a recommended step', () => {
+    makeUnmergedFile();
+    expect(statusShort()).toBe('UU f.txt');
+    const conflictedContent = readFileSync(join(repoDir, 'f.txt'), 'utf8');
+    expect(conflictedContent).toContain('<<<<<<<');
+
+    const stagedPatch = git('diff', '--cached', '--', 'f.txt');
+    // Not a normal, re-appliable patch -- just a marker line.
+    expect(stagedPatch).toContain('Unmerged path f.txt');
+
+    git('checkout', 'HEAD', '--', 'f.txt');
+
+    // The conflict is gone. So are the markers and the other branch's content -- silently
+    // resolved to HEAD's own side, with nothing left to restore from the captured "staged" patch.
+    const resolvedContent = readFileSync(join(repoDir, 'f.txt'), 'utf8');
+    expect(resolvedContent).not.toContain('<<<<<<<');
+    expect(resolvedContent).not.toContain('other-branch-change');
+    expect(statusShort()).toBe('');
   });
 });

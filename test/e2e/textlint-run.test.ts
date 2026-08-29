@@ -48,6 +48,7 @@ const markdownPlugin = asTextlintPluginCreator(
 );
 const textPlugin = asTextlintPluginCreator(textPluginModule, '@textlint/textlint-plugin-text');
 import { clearAnalysisCache } from '../../src/textlint/adapter.js';
+import { createSteTextlintRule } from '../../src/textlint/adapter.js';
 import { rules, rulesConfig } from '../../src/textlint/preset.js';
 
 /**
@@ -93,6 +94,58 @@ beforeEach(() => {
 });
 
 describe('textlint lint run', () => {
+  it('performs one complete analysis with every invoked rule option represented', async () => {
+    const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
+    const observer = {
+      analysisStarted: (configuredRules: (typeof starts)[number]) => starts.push(configuredRules),
+    };
+    const selected = ['no-contractions', 'abbreviation-introduction'] as const;
+    const result = await kernel.lintText('The ASD value is ready.\n', {
+      ...options([]),
+      rules: selected.map((ruleId) => ({
+        ruleId,
+        rule: createSteTextlintRule(ruleId, observer),
+        options: ruleId === 'abbreviation-introduction' ? { additionalWellKnown: ['ASD'] } : true,
+      })),
+    });
+
+    expect(result.messages.some((message) => message.ruleId === 'abbreviation-introduction')).toBe(
+      false,
+    );
+    expect(starts).toHaveLength(1);
+    expect(starts[0]?.get('abbreviation-introduction')).toEqual({ additionalWellKnown: ['ASD'] });
+    expect(starts[0]?.get('no-contractions')).toEqual({});
+  });
+
+  it('isolates simultaneous document lifecycles and their rule options', async () => {
+    const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
+    const observer = {
+      analysisStarted: (configuredRules: (typeof starts)[number]) => starts.push(configuredRules),
+    };
+    const lintWith = (known: string) =>
+      kernel.lintText(`The ${known} value is ready.\n`, {
+        ...options([]),
+        rules: [
+          {
+            ruleId: 'abbreviation-introduction',
+            rule: createSteTextlintRule('abbreviation-introduction', observer),
+            options: { additionalWellKnown: [known] },
+          },
+        ],
+      });
+
+    const [first, second] = await Promise.all([lintWith('ASD'), lintWith('MIT')]);
+
+    expect(first.messages).toHaveLength(0);
+    expect(second.messages).toHaveLength(0);
+    expect(starts).toHaveLength(2);
+    expect(
+      starts.map((configuredRules) => configuredRules.get('abbreviation-introduction')),
+    ).toEqual(
+      expect.arrayContaining([{ additionalWellKnown: ['ASD'] }, { additionalWellKnown: ['MIT'] }]),
+    );
+  });
+
   it('reports diagnostics with correct line and column for a markdown document', async () => {
     const text = ['# Setup', '', 'Prior to installation, remove the bracket.', ''].join('\n');
     const result = await kernel.lintText(text, options(['unapproved-vocabulary']));
@@ -403,6 +456,7 @@ describe('run-level notices, reported once regardless of which rules are enabled
     const notices = result.messages.filter((m) => m.message.includes('rule-options-invalid'));
     expect(notices).toHaveLength(1);
     expect(notices[0]?.message).toContain('abbreviation-introduction');
+    expect(notices[0]?.ruleId).toBe('abbreviation-introduction');
   });
 
   it('surfaces two distinct rule-specific notices together, neither dropped nor duplicated', async () => {
@@ -426,6 +480,10 @@ describe('run-level notices, reported once regardless of which rules are enabled
     expect(notices).toHaveLength(2);
     expect(notices.map((n) => n.message).join('\n')).toContain('abbreviation-introduction');
     expect(notices.map((n) => n.message).join('\n')).toContain('punctuation-constraints');
+    expect(notices.map((n) => n.ruleId).toSorted()).toEqual([
+      'abbreviation-introduction',
+      'punctuation-constraints',
+    ]);
   });
 });
 

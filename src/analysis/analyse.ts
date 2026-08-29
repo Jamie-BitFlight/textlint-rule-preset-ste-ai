@@ -1,8 +1,6 @@
 import { resolveConfig, type SteAiConfig, type SteAiConfigInput } from '../core/config.js';
-import { analyseDocument, STRUCTURAL_MARKER_KINDS } from '../core/document.js';
+import { analyseDocument, prepareDocument, STRUCTURAL_MARKER_KINDS } from '../core/document.js';
 import {
-  defaultProtectedRegionOptions,
-  extractProtectedRegions,
   type ProtectedPatternRejection,
   type ProtectedRegionOptions,
   screenExtraPatterns,
@@ -16,7 +14,7 @@ import {
   refuseInAdmonition,
   scanSuppressions,
 } from '../core/suppressions.js';
-import { maskRanges, mergeRanges, normalizeLineEndings } from '../core/text.js';
+import { maskRanges, mergeRanges } from '../core/text.js';
 import type {
   AnalysedDocument,
   BlockKind,
@@ -75,11 +73,11 @@ import { resolveOverlappingFixes } from '../core/runner.js';
 function readerBlocksFor(
   sourceDoc: SourceDocument,
   structureOptions: StructureOptions,
-  protectedRegionOptions: Partial<ProtectedRegionOptions>,
+  regions: ReturnType<typeof prepareDocument>['regions'],
 ): readonly TextBlock[] {
   const units: readonly TextUnit[] =
     sourceDoc.format === 'markdown'
-      ? readMarkdownUnitsSync(sourceDoc)
+      ? readMarkdownUnitsSync(sourceDoc, false)
       : readPlainTextUnitsSync(sourceDoc);
 
   // Same extraction `analyseDocument` runs for its own `fullMask`, computed here too because a
@@ -87,12 +85,6 @@ function readerBlocksFor(
   // opaque, non-structural-marker regions are kept — the structural markers (list/heading/
   // blockquote markers, table pipes, emphasis) stay visible, matching what `scanBlocks` does with
   // `buildStructuralMask` for the exact same purpose on the non-reader path.
-  const detectionText = normalizeLineEndings(sourceDoc.text);
-  const regions = extractProtectedRegions(detectionText, {
-    ...defaultProtectedRegionOptions,
-    format: sourceDoc.format,
-    ...protectedRegionOptions,
-  });
   const opaqueContentRanges = mergeRanges(
     regions.filter((r) => r.opaque && !STRUCTURAL_MARKER_KINDS.has(r.kind)).map((r) => r.range),
   );
@@ -268,10 +260,12 @@ function prepareRun(
     approvedTerms: [...config.approvedTerms, ...pack.approvedTechnicalTerms],
     extraPatterns: screenedPatterns.accepted,
   };
+  const preparation = prepareDocument(sourceDoc, protectedRegionOptions);
   const document = analyseDocument(sourceDoc, {
     protectedRegions: protectedRegionOptions,
     structure: structureOptions,
-    blocks: readerBlocksFor(sourceDoc, structureOptions, protectedRegionOptions),
+    blocks: readerBlocksFor(sourceDoc, structureOptions, preparation.regions),
+    preparation,
   });
 
   // Fix conflicts are resolved by each caller instead, once the suppressed findings are out of the

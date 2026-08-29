@@ -28,7 +28,7 @@ derive one from. `provisional` is carried mechanically, not just in prose:
 - the bundled pack's `metadata.authority: 'provisional'` and `conformanceClaim: 'none'`;
 - a CI step that fails if any rule reports a status other than `provisional`.
 
-Verified: `node dist/cli/main.js rules --json` → 14 rules, every `status` is `provisional`;
+Verified: `node dist/cli/main.js rules --json` → every rule's `status` is `provisional`;
 `node dist/cli/main.js lint … --json` → `conformance.claim: "none"`,
 `conformance.packAuthority: "provisional"`.
 
@@ -43,10 +43,10 @@ be mistaken for, and do not function as, a controlled dictionary.
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Core (framework-neutral) | domain types; protected-region extraction (28 passes); structural + full masking; block scanning with mode and admonition classification; sentence segmentation; word tokenisation; rule contract; autofix gate; runner                                                 |
 | Rule pack                | Zod schema, loader, bundled provisional pack — the single import boundary for licensed data                                                                                                                                                                             |
-| Deterministic rules      | 11 deciding rules + 3 candidate-only rules                                                                                                                                                                                                                              |
+| Deterministic rules      | a mix of deciding rules and candidate-only rules that defer to semantic adjudication                                                                                                                                                                                    |
 | Model client             | llama.cpp-compatible transport over `POST /v1/chat/completions`; LRU content-hash cache; typed retryable/non-retryable transport errors                                                                                                                                 |
 | Semantic                 | broker (concurrency, ordering, de-duplication, caching, timeout, cancellation, retry policy, bounded repair, tracing); 8 evaluators; versioned prompt assets; response schema with contradiction rejection; evidence-span mapping; independent rewrite-equivalence gate |
-| textlint                 | one analysis per document shared by all rules; preset of 14 independent rule modules; shared-config resolution with key-by-key option layering                                                                                                                          |
+| textlint                 | one analysis per document shared by every rule with no rule-specific options of its own and a matching `shared` override; preset of independent rule modules; shared-config resolution with key-by-key option layering                                                  |
 | CLI                      | `lint` (`--json`, `--deterministic-only`, `--semantic`, `--trace`, `--fail-on-review`), `rules`, `evaluators`                                                                                                                                                           |
 | Fixture tools            | manifest and annotation schemas; protected-literal extraction; corpus validator                                                                                                                                                                                         |
 | Evaluation               | confusion matrix, precision/recall/F1, uncertain rate, failure rate, latency percentiles, split enforcement                                                                                                                                                             |

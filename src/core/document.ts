@@ -65,6 +65,10 @@ const CONTENT_BEARING_KINDS: ReadonlySet<ProtectedRegionKind> = new Set([
   'approved-term',
 ]);
 
+function equalStringArrays(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export interface AnalyseOptions {
   readonly protectedRegions?: Partial<ProtectedRegionOptions>;
   readonly structure?: Partial<StructureOptions>;
@@ -80,6 +84,37 @@ export interface AnalyseOptions {
    * unaffected.
    */
   readonly blocks?: readonly TextBlock[];
+  /** Source-bound protected-region work prepared once by the production analysis layer. */
+  readonly preparation?: DocumentPreparation;
+}
+
+export interface DocumentPreparation {
+  readonly sourceText: string;
+  readonly format: SourceDocument['format'];
+  readonly protectedOptions: ProtectedRegionOptions;
+  readonly detectionText: string;
+  readonly regions: readonly ProtectedRegion[];
+}
+
+export function prepareDocument(
+  doc: SourceDocument,
+  options: Partial<ProtectedRegionOptions> = {},
+): DocumentPreparation {
+  const protectedOptions: ProtectedRegionOptions = {
+    ...defaultProtectedRegionOptions,
+    format: doc.format,
+    ...options,
+    approvedTerms: [...(options.approvedTerms ?? defaultProtectedRegionOptions.approvedTerms)],
+    extraPatterns: [...(options.extraPatterns ?? defaultProtectedRegionOptions.extraPatterns)],
+  };
+  const detectionText = normalizeLineEndings(doc.text);
+  return {
+    sourceText: doc.text,
+    format: doc.format,
+    protectedOptions,
+    detectionText,
+    regions: extractProtectedRegions(detectionText, protectedOptions),
+  };
 }
 
 /**
@@ -137,11 +172,6 @@ export function analyseDocument(
   doc: SourceDocument,
   options: AnalyseOptions = {},
 ): AnalysedDocument {
-  const protectedOptions: ProtectedRegionOptions = {
-    ...defaultProtectedRegionOptions,
-    format: doc.format,
-    ...options.protectedRegions,
-  };
   const structureOptions: StructureOptions = {
     ...defaultStructureOptions,
     format: doc.format,
@@ -150,9 +180,23 @@ export function analyseDocument(
 
   // Detection runs against a copy whose CRLF carriage returns are spaces. Length is preserved, so
   // every range is equally valid against `doc.text`, which is what all `raw` slices come from.
-  const detectionText = normalizeLineEndings(doc.text);
-
-  const regions = extractProtectedRegions(detectionText, protectedOptions);
+  const preparation = options.preparation ?? prepareDocument(doc, options.protectedRegions);
+  const expectedProtectedOptions: ProtectedRegionOptions = {
+    ...defaultProtectedRegionOptions,
+    format: doc.format,
+    ...options.protectedRegions,
+  };
+  const preparedOptions = preparation.protectedOptions;
+  if (
+    preparation.sourceText !== doc.text ||
+    preparation.format !== doc.format ||
+    preparedOptions.format !== expectedProtectedOptions.format ||
+    !equalStringArrays(preparedOptions.approvedTerms, expectedProtectedOptions.approvedTerms) ||
+    !equalStringArrays(preparedOptions.extraPatterns, expectedProtectedOptions.extraPatterns)
+  ) {
+    throw new Error('Document preparation does not belong to this source and configuration.');
+  }
+  const { detectionText, regions } = preparation;
   const opaqueRanges = opaqueRangesOf(regions);
   const structuralMask = buildStructuralMask(detectionText, regions);
   const fullMask = maskRanges(detectionText, opaqueRanges);

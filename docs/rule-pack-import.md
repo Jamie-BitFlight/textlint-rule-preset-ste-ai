@@ -33,53 +33,53 @@ A pack changes only what the schema exposes. Do not edit the table below by hand
 
 <!-- pack-control-surface:begin -->
 
-| Field                                      | What it controls                                                                             |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `approvedTechnicalTerms`                   | Literal names protected from matching, rewriting, and the heuristics.                        |
-| `contractions`                             | The contraction expansions `no-contractions` offers.                                         |
-| `contractions[].from`                      | The contraction.                                                                             |
-| `contractions[].note`                      | Optional context shown with the diagnostic.                                                  |
-| `contractions[].safeSubstitution`          | True only if the expansion is always safe to autofix.                                        |
-| `contractions[].to`                        | The expansion.                                                                               |
-| `dictionary`                               | The controlled-language word lists.                                                          |
-| `dictionary.approved`                      | Terms whose permitted sense the semantic evaluators may check.                               |
-| `dictionary.approved[].partsOfSpeech`      | Optional. Parts of speech the approval covers.                                               |
-| `dictionary.approved[].senses`             | Optional. Senses the approval covers.                                                        |
-| `dictionary.approved[].term`               | The approved term.                                                                           |
-| `dictionary.preferred`                     | Term mappings `preferred-terminology` reports.                                               |
-| `dictionary.preferred[].from`              | The discouraged term.                                                                        |
-| `dictionary.preferred[].note`              | Optional context shown with the diagnostic.                                                  |
-| `dictionary.preferred[].safeSubstitution`  | True only if the substitution is always safe.                                                |
-| `dictionary.preferred[].to`                | The preferred term.                                                                          |
-| `dictionary.unapproved`                    | Terms `unapproved-vocabulary` reports, with their alternatives.                              |
-| `dictionary.unapproved[].alternatives`     | Terms the diagnostic suggests instead.                                                       |
-| `dictionary.unapproved[].note`             | Optional context shown with the diagnostic.                                                  |
-| `dictionary.unapproved[].partOfSpeech`     | Optional. The part of speech this entry covers.                                              |
-| `dictionary.unapproved[].safeSubstitution` | True only if `alternatives[0]` cannot change technical meaning. Gates autofix.               |
-| `dictionary.unapproved[].term`             | The unapproved term.                                                                         |
-| `limits`                                   | The numeric thresholds. Grade levels, cluster length, step count.                            |
-| `limits.descriptiveMaxGradeLevel`          | As above, for descriptive sentences.                                                         |
-| `limits.maxNounClusterLength`              | Word-count limit `noun-cluster-candidate` reports.                                           |
-| `limits.maxSentencesPerProceduralStep`     | Sentence-count limit `list-instruction-structure` reports per numbered step.                 |
-| `limits.proceduralMaxGradeLevel`           | Grade level above which a procedural sentence is reported.                                   |
-| `limits.sentenceReadabilityFloorWords`     | Sentences shorter than this are never grade-scored.                                          |
-| `metadata`                                 | Identity, declared authority, licence, and the conformance claim.                            |
-| `metadata.authority`                       | The pack's declared authority. Capped at `supplementary` until the operator trusts the pack. |
-| `metadata.conformanceClaim`                | One of none, partial, or declared-by-supplier. Gates the `--json` conformance field.         |
-| `metadata.id`                              | The identifier `trustedRulePackIds` must match. Not the pack's name or path.                 |
-| `metadata.licence`                         | What the supplier asserts you may distribute, for the audit trail.                           |
-| `metadata.name`                            | A human-readable label. Cosmetic. Nothing matches on it.                                     |
-| `metadata.notice`                          | Optional notice text, for the audit trail.                                                   |
-| `metadata.retrievedAt`                     | Optional. When the source data was retrieved, for the audit trail.                           |
-| `metadata.source`                          | Where the data came from, per the supplier, for the audit trail.                             |
-| `metadata.version`                         | The pack's own version string, for the audit trail.                                          |
-| `rules`                                    | Per-rule authority and defaults.                                                             |
-| `rules[].enabled`                          | Whether the rule runs at all.                                                                |
-| `rules[].options`                          | Default options, below anything the user configures.                                         |
-| `rules[].ruleId`                           | Which registered rule the entry applies to.                                                  |
-| `rules[].severity`                         | Default severity, below anything the user configures.                                        |
-| `rules[].sourceRef`                        | The citation a deterministic diagnostic reports.                                             |
-| `rules[].status`                           | The authority a deterministic diagnostic reports.                                            |
+| Field                                      | What it controls                                                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `approvedTechnicalTerms`                   | Literal names protected from matching, rewriting, and the heuristics.                                             |
+| `contractions`                             | The contraction expansions `no-contractions` offers.                                                              |
+| `contractions[].from`                      | The contraction.                                                                                                  |
+| `contractions[].note`                      | Optional context shown with the diagnostic.                                                                       |
+| `contractions[].safeSubstitution`          | True only if the expansion is always safe to autofix.                                                             |
+| `contractions[].to`                        | The expansion.                                                                                                    |
+| `dictionary`                               | The controlled-language word lists.                                                                               |
+| `dictionary.approved`                      | Terms whose permitted sense the semantic evaluators may check.                                                    |
+| `dictionary.approved[].partsOfSpeech`      | Optional. Parts of speech the approval covers.                                                                    |
+| `dictionary.approved[].senses`             | Optional. Senses the approval covers.                                                                             |
+| `dictionary.approved[].term`               | The approved term.                                                                                                |
+| `dictionary.preferred`                     | Term mappings `preferred-terminology` reports.                                                                    |
+| `dictionary.preferred[].from`              | The discouraged term.                                                                                             |
+| `dictionary.preferred[].note`              | Optional context shown with the diagnostic.                                                                       |
+| `dictionary.preferred[].safeSubstitution`  | True only if the substitution is always safe.                                                                     |
+| `dictionary.preferred[].to`                | The preferred term.                                                                                               |
+| `dictionary.unapproved`                    | Terms `unapproved-vocabulary` reports, with their alternatives.                                                   |
+| `dictionary.unapproved[].alternatives`     | Terms the diagnostic suggests instead.                                                                            |
+| `dictionary.unapproved[].note`             | Optional context shown with the diagnostic.                                                                       |
+| `dictionary.unapproved[].partOfSpeech`     | Optional. The part of speech this entry covers.                                                                   |
+| `dictionary.unapproved[].safeSubstitution` | True only if `alternatives[0]` cannot change technical meaning. Gates autofix.                                    |
+| `dictionary.unapproved[].term`             | The unapproved term.                                                                                              |
+| `limits`                                   | The numeric thresholds. Grade levels, cluster length, step count.                                                 |
+| `limits.descriptiveMaxGradeLevel`          | As above, for descriptive sentences.                                                                              |
+| `limits.maxNounClusterLength`              | Word-count limit `noun-cluster-candidate` reports.                                                                |
+| `limits.maxSentencesPerProceduralStep`     | Sentence-count limit `list-instruction-structure` reports per numbered step.                                      |
+| `limits.proceduralMaxGradeLevel`           | Grade level above which a procedural sentence is reported.                                                        |
+| `limits.sentenceReadabilityFloorWords`     | Sentences shorter than this are never grade-scored.                                                               |
+| `metadata`                                 | Identity, declared authority, licence, and the conformance claim.                                                 |
+| `metadata.authority`                       | The pack's declared authority. Capped at `supplementary` until the operator trusts the pack.                      |
+| `metadata.conformanceClaim`                | One of none, partial, or declared-by-supplier. Gates the `--json` conformance field.                              |
+| `metadata.id`                              | The identifier `trustedRulePackIds` must match. Not the pack's name or path. Letters, digits, and `._:@/+-` only. |
+| `metadata.licence`                         | What the supplier asserts you may distribute, for the audit trail.                                                |
+| `metadata.name`                            | A human-readable label. Cosmetic. Nothing matches on it.                                                          |
+| `metadata.notice`                          | Optional notice text, for the audit trail.                                                                        |
+| `metadata.retrievedAt`                     | Optional. When the source data was retrieved, for the audit trail.                                                |
+| `metadata.source`                          | Where the data came from, per the supplier, for the audit trail.                                                  |
+| `metadata.version`                         | The pack's own version string, for the audit trail.                                                               |
+| `rules`                                    | Per-rule authority and defaults.                                                                                  |
+| `rules[].enabled`                          | Whether the rule runs at all.                                                                                     |
+| `rules[].options`                          | Default options, below anything the user configures.                                                              |
+| `rules[].ruleId`                           | Which registered rule the entry applies to.                                                                       |
+| `rules[].severity`                         | Default severity, below anything the user configures.                                                             |
+| `rules[].sourceRef`                        | The citation a deterministic diagnostic reports.                                                                  |
+| `rules[].status`                           | The authority a deterministic diagnostic reports.                                                                 |
 
 <!-- pack-control-surface:end -->
 
@@ -221,6 +221,21 @@ An imported pack is therefore untrusted until the operator names its `metadata.i
 normative standing is capped at `supplementary`. The match is on `metadata.id` alone. The pack name
 and the file path do not count.
 
+A rule entry's `sourceRef` is gated too, but not on anything the entry declares. Two earlier gates
+were tried and found insufficient. Matching the entry's declared `status` against the rule's own
+default was the first. Every shipped rule's own status already is `provisional`. An untrusted pack
+could declare `provisional` too, and still fabricate a citation. Matching the `sourceRef` text
+against the rule's own built-in citation was the second. An untrusted pack can copy that exact
+string. It can still supply different data underneath it — a fabricated dictionary entry, a loosened
+limit. The citation would then name a documentation section describing data other than what actually
+fired. Neither a declared field nor a copied string proves where the data came from.
+
+The citation reaches the diagnostic in exactly two cases now. The pack is the literal bundled
+default. Identity proves that, not any field or text it could copy. No supplied pack can
+ever be that same object. Or the operator has named the pack's `metadata.id` in
+`trustedRulePackIds`. Anything else reports `unverified citation from untrusted rule pack
+"<metadata.id>"` instead of the pack's own text.
+
 ## What status a diagnostic reports
 
 Two rule paths report status differently. This surprises pack authors, so read the table before you
@@ -229,11 +244,11 @@ write `rules[]`.
 A deterministic rule reports a violation directly. A candidate rule instead hands the passage to a
 semantic evaluator. The passage is reported as `review-required` when no evaluator ran.
 
-| Rule entry            | Deterministic diagnostic           | Candidate (`review-required`) |
-| --------------------- | ---------------------------------- | ----------------------------- |
-| listed in `rules[]`   | the entry's `status`, trust-capped | ignored. Pack-wide authority  |
-| absent from `rules[]` | `provisional`, the rule default    | pack-wide authority           |
-| `sourceRef` reported  | the entry's `sourceRef`            | never reported                |
+| Rule entry            | Deterministic diagnostic                   | Candidate (`review-required`) |
+| --------------------- | ------------------------------------------ | ----------------------------- |
+| listed in `rules[]`   | the entry's `status`, trust-capped         | ignored. Pack-wide authority  |
+| absent from `rules[]` | `provisional`, the rule default            | pack-wide authority           |
+| `sourceRef` reported  | the entry's `sourceRef`, also trust-capped | never reported                |
 
 Read the second column downwards. Omitting a rule from `rules[]` leaves it `provisional` even under
 a trusted normative pack. Read the third column downwards. Omitting a rule changes nothing there,

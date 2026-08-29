@@ -349,6 +349,63 @@ describe('rule pack: the trust gate', () => {
     );
   });
 
+  it('accepts an npm-scope-style id such as "@acme/std" (#66, round 11)', () => {
+    // Codex review on PR #116, round 11: the first version of this pattern required the *first*
+    // character to be alphanumeric, so a scoped id like `@acme/std` — the convention this file's
+    // own design docs already document for a future layered pack — was rejected even though `@`
+    // is allowed everywhere else in the same id. `RULE_PACK_ID_PATTERN`
+    // (`src/core/rule-pack-id.ts`) now allows `@` to lead too.
+    const diagnostic = only(
+      VOCABULARY_DOC,
+      {
+        rulePack: pack({
+          metadata: {
+            id: '@acme/std',
+            name: 'Acme test pack',
+            version: '1.0.0',
+            authority: 'normative',
+            licence: 'Proprietary — test fixture',
+            source: 'Authored for this test. Not derived from any standard.',
+            conformanceClaim: 'declared-by-supplier',
+          },
+        }),
+      },
+      'unapproved-vocabulary',
+    );
+
+    expect(diagnostic.meta?.['sourceRef']).toBe(
+      'unverified citation from untrusted rule pack "@acme/std"',
+    );
+  });
+
+  it("omits a direct-runner caller's id when it does not pass the same allowlist (#66, round 11)", () => {
+    // Codex review on PR #116, round 11: `rulePackMetadataSchema`'s allowlist protects only the
+    // `parseRulePack` path (a JSON file or an inline config object). A caller of the public
+    // `runDeterministicRules` API can construct a `RulePack`-shaped object by hand and skip that
+    // schema entirely — proven directly before this fix: a hand-built pack with a newline-and-quote
+    // id, passed straight to `runDeterministicRules`, still leaked into `sourceRef` unescaped.
+    // `runner.ts` now checks `isSafeRulePackId` at the interpolation site itself, so this is safe
+    // regardless of how `pack` reached it.
+    const forgedPack: RulePack = {
+      ...provisionalRulePack,
+      metadata: { ...provisionalRulePack.metadata, id: 'evil\n"a fabricated citation"' },
+    };
+    expect(forgedPack).not.toBe(provisionalRulePack);
+
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: VOCABULARY_DOC });
+    const result = runDeterministicRules({
+      doc,
+      rules: deterministicRules,
+      config: resolveConfig({}),
+      pack: forgedPack,
+    });
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+
+    expect(diagnostic?.meta?.['sourceRef']).toBe(
+      'unverified citation from untrusted rule pack "<id omitted: does not match the expected pack-id format>"',
+    );
+  });
+
   it('honours a declared status only once the operator names the pack as trusted', () => {
     const diagnostic = only(
       VOCABULARY_DOC,

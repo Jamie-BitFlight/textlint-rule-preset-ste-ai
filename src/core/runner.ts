@@ -1,6 +1,7 @@
 import type { SteAiConfig } from './config.js';
 import { provisionalRulePack } from './default-pack.js';
 import { gateFix, type DeterministicRule, type RuleInput } from './rule.js';
+import { isSafeRulePackId } from './rule-pack-id.js';
 import { rangesOverlap } from './text.js';
 import type {
   AnalysedDocument,
@@ -133,18 +134,23 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 // singleton object, which spread cannot preserve because spread always allocates a
                 // new object — proves the cited data is what the citation claims it is.
                 //
-                // `pack.metadata.id` is interpolated unescaped below. That is safe only because
-                // `rulePackIdSchema` (`src/rule-pack/schema.ts`) constrains every id to
-                // `[A-Za-z0-9][A-Za-z0-9._:@/+-]*`, max 128 characters — no space, no quote, no
-                // control character, no Unicode line/paragraph separator, nothing that could make
-                // an id read as prose or break out of the quoted template. A denylist strip
-                // (`displaySafePackId`, since removed) was tried here across three review rounds
-                // (PR #116, rounds 5, 7, 10) and lost each time to a fresh character class; an
-                // allowlist at the schema boundary closes the class instead of extending the list.
+                // `pack.metadata.id` is interpolated below only after passing `isSafeRulePackId`
+                // (`RULE_PACK_ID_PATTERN`: `[A-Za-z0-9@][A-Za-z0-9._:@/+-]*`, max 128 characters —
+                // no space, no quote, no control character, no Unicode line/paragraph separator,
+                // nothing that could make an id read as prose or break out of the quoted
+                // template). `rulePackMetadataSchema` (`src/rule-pack/schema.ts`) enforces the same
+                // pattern for every pack that reaches this point through `parseRulePack`, but a
+                // caller of the public `runDeterministicRules` API can hand it a `RulePack`-shaped
+                // object that never went through that schema (round 11) — this check makes the
+                // interpolation safe regardless of how `pack` got here, not just for the schema-
+                // validated path. A denylist strip (`displaySafePackId`, since removed) was tried
+                // here across three review rounds (PR #116, rounds 5, 7, 10) and lost each time to
+                // a fresh character class; an allowlist, checked at both the schema and this sink,
+                // closes the class instead of extending the list.
                 sourceRef:
                   pack === provisionalRulePack || packTrusted
                     ? packSpec.sourceRef
-                    : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
+                    : `unverified citation from untrusted rule pack "${isSafeRulePackId(pack.metadata.id) ? pack.metadata.id : '<id omitted: does not match the expected pack-id format>'}"`,
               },
             },
       );

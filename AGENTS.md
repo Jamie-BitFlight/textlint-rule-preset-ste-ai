@@ -2,7 +2,7 @@
 
 This file lists instructions for AI (artificial intelligence) agents in this repository. Claude
 Code reads `CLAUDE.md`, not this file. So `CLAUDE.md` in this repository is a bare `@AGENTS.md`
-import. Every instruction lives here, in one place.
+import. Every project-wide instruction lives here. Task-specific procedures live in skills.
 
 ## Documentation hygiene
 
@@ -28,6 +28,8 @@ import. Every instruction lives here, in one place.
    - This rule governs a document that gets committed. A line number is fine in chat. It is also
      fine in a dispatched subagent's prompt. Any exchange that does not get checked in is fine too.
 
+Before committing new prose to agent instructions, check the draft against this file.
+
 Prose-style rules for this repository live in `.claude/skills/ste-ai-prose-style/SKILL.md`.
 
 ## A doc that describes runtime behaviour needs an executable pin
@@ -46,6 +48,15 @@ A careful sentence is not enough, when a change touches a doc that describes beh
 Review findings can stop converging: each fix draws a new or reshaped one. That is the signal that
 the artefact under review is the wrong one. Stop editing the prose. Go fix what makes the prose
 unverifiable instead.
+
+## Review-cycle discipline
+
+Treat an anomalous mutation-test pass as a failed assertion. Fix the assertion immediately. Do
+not shelve the problem for a narrower mutation that happens to fail.
+
+Fetch opaque GitHub IDs, such as a comment or thread ID, immediately before use. Never use an ID
+from memory. Search a file for an identifier before binding a new top-level `const` or `function`
+with that name.
 
 ## Notice a problem, log it — never silently skip it
 
@@ -104,6 +115,10 @@ work destroyed by a reset.
 Exception: an agent needs to see the orchestrator's own uncommitted changes. Those changes need
 committing first, or transferring some other way. A worktree builds from a real git ref.
 Uncommitted state does not travel into it on its own.
+
+Run later independent work in another isolated worktree. Leave the source worktree unchanged. A
+task that needs the current uncommitted state depends on the current node. Finish the current node
+before starting that task.
 
 A fresh worktree does not sit on the source branch by default. It can default to the repository's
 main branch instead. Tell a dispatched agent to check out the source commit the task builds on. Do
@@ -207,6 +222,8 @@ Dispatch a subagent before merging, when the external reviewer has not produced 
 Dispatch with `isolation: "worktree"` per the section above. Tell the agent to `git checkout
 --detach` the pull request head commit first. Give it the base commit, so it can diff. Tell it
 explicitly that it is the review of record, so it reviews critically rather than confirming.
+Tell the agent to check the change against the target repository's own agent instructions and
+applicable skills. A generic code-quality review is not enough.
 Require the same evidence discipline the rest of this file demands. Cite the file and line. State
 uncertainty rather than guessing. Say what was checked when nothing was found. An empty review is
 otherwise indistinguishable from no review at all.

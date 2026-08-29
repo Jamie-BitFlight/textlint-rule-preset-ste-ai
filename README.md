@@ -150,10 +150,9 @@ in the underlying analysis. Tracked as
 **4. A blocking Claude Code `PreToolUse` hook gating an agent's own file writes — built, shipped
 as this repository's own plugin**. This repository is also a Claude Code plugin (see
 [`PLUGIN.md`](PLUGIN.md)). Its hook blocks `Write` and `Edit` when the would-be markdown content
-carries a lint finding the file did not already have. It compares findings by rule and message,
-not by count alone. Replacing one finding with a different one still blocks the write, even when
-the total count stays the same. The plugin also ships a way-of-working compliance agent and a
-pre-push skill.
+would carry a lint finding the file does not already have. A swapped finding blocks the write too,
+even when the total error count stays flat. The plugin also ships a way-of-working compliance
+agent and a pre-push skill.
 
 This is a different integration shape from surface 3. Surface 3 would gate outgoing chat text
 before it is sent, over stdin. That gap is still open, still tracked under issue #26. This hook

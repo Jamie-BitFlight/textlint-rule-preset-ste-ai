@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vite-plus/test';
 /**
  * `hooks/block-noncompliant-prose.cjs` is a Claude Code `PreToolUse` hook shipped by this
  * repository's own plugin (`.claude-plugin/plugin.json`): it blocks a `Write`/`Edit` call that
- * would make a markdown file's ste-ai lint error count worse than what is already on disk. It has
+ * would introduce a ste-ai lint finding a markdown file does not already carry, even when a
+ * different pre-existing finding drops out and the total error count does not rise. It has
  * no unit test of its own kind — it only runs as a subprocess fed a JSON event on stdin — so these
  * cases run the real script the same way Claude Code does, against this repository's own real
  * `.textlintrc.json` and `docs/architecture.md`.
@@ -48,10 +49,10 @@ function runHookRaw(stdin: string): { status: number | null; stderr: string } {
 
 // Each case here spawns the hook as a real subprocess, which itself spawns real `textlint` runs
 // (once or twice) -- inherently slower than the default test budget under full-suite parallel
-// load. Verified flaky at the default 20s timeout under a full-suite run, with `Test timed out in
-// 20000ms` failures and no assertion failures, while every isolated run of this file alone
-// passed -- CPU contention from the rest of the suite running concurrently, not a logic bug. 60s
-// leaves headroom.
+// load. Verified flaky at the default 20s timeout: 3 of 8 full-suite runs failed with
+// `Test timed out in 20000ms`, none with an assertion failure, while every isolated run of this
+// file alone passed -- CPU contention from the rest of the suite running concurrently, not a
+// logic bug. 60s leaves headroom.
 const SUBPROCESS_TEST_TIMEOUT_MS = 60_000;
 
 describe('block-noncompliant-prose hook', () => {
@@ -168,6 +169,12 @@ describe('block-noncompliant-prose hook', () => {
   // binary that sleeps. This case proves both that the hook now self-terminates well inside the
   // 60s test budget, and that it leaves no `.ste-ai-hook-*` scratch file behind in the target
   // project when it does.
+  //
+  // `isIgnoredByTextlint` matches `.textlintignore` patterns directly (`minimatch`, no subprocess),
+  // so the stub `textlint` binary is only ever reached by `countErrors`'s own `before` call. That
+  // single `TEXTLINT_TIMEOUT_MS`-bounded call is what the elapsed-time assertion below budgets for;
+  // the `after` call never runs, since the first call's timeout throws past `main`'s own try, which
+  // fails open right away.
   it(
     'fails open, without hanging, when textlint itself hangs',
     () => {
@@ -195,8 +202,8 @@ describe('block-noncompliant-prose hook', () => {
         const elapsedMs = Date.now() - started;
 
         expect(result.status).toBe(0);
-        // Well under the 60s test budget -- the hook's own 15s textlint timeout, not the test
-        // timeout, should be what ends this.
+        // Well under the 60s test budget -- the hook's own single ~15s textlint timeout, not the
+        // test timeout, should be what ends this.
         expect(elapsedMs).toBeLessThan(30_000);
         const leftovers = readdirSync(scratchProject).filter((name) =>
           name.startsWith('.ste-ai-hook-'),
@@ -213,10 +220,13 @@ describe('block-noncompliant-prose hook', () => {
   // registered against a hook that still used `execFileSync`, which blocks the Node.js event
   // loop for the whole child process's duration -- so the handler could never actually run while
   // a child was in flight, reproduced directly with an isolated `execFileSync` + `SIGTERM` repro
-  // (the handler's own log line never printed). Switching to async `spawn` fixed the underlying
-  // problem; this case pins the externally observable behavior the fix promises: a real `SIGTERM`
-  // sent to a hook that is mid-check kills it promptly and leaves no scratch file behind, rather
-  // than running the hook's own hang-timeout out to completion.
+  // (the handler's own log line never printed). Switching to async `spawn`, `detached: true`, and
+  // a process-group kill (`process.kill(-child.pid, signal)`) fixed the underlying problem: a
+  // plain `child.kill()` only reaches the immediate child, not a shell-wrapping grandchild that
+  // keeps the stdout pipe open (this suite's own stub `textlint` is exactly such a shell script).
+  // This case pins the externally observable behavior the fix promises: a real `SIGTERM` sent to
+  // a hook that is mid-check kills it and its whole child tree promptly, leaving no scratch file
+  // behind, rather than running the hook's own hang-timeout out to completion.
   it(
     'exits promptly and cleans up its scratch file on SIGTERM',
     async () => {
@@ -250,9 +260,8 @@ describe('block-noncompliant-prose hook', () => {
           },
         );
 
-        // The "before" pass now lints the real on-disk target directly, so give the stub
-        // textlint's sleep a moment to actually start before killing the hook, rather than
-        // racing process startup.
+        // Give the stub textlint's sleep a moment to actually start before killing the hook,
+        // rather than racing process startup.
         await new Promise((resolve) => setTimeout(resolve, 1000));
         child.kill('SIGTERM');
 
@@ -275,36 +284,80 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
-  // Regression (independent review of PR #122): a substring check (`raw.includes('preset-ste-ai')`)
-  // treated `"preset-ste-ai": false` the same as an enabled preset, so a project that explicitly
-  // disabled the preset -- while keeping other, unrelated textlint rules enabled -- still had this
-  // hook block on findings from those unrelated rules. Reproduced directly with this exact config
-  // and a stub `textlint` that always reports one finding.
   it(
-    'does not engage in a project that explicitly disables preset-ste-ai',
+    'ignores a markdown file outside any ste-ai-configured project',
+    () => {
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: '/tmp/no-ste-ai-project-marker/whatever.md',
+          content: 'This, sentence, has, way, too, many, commas, in, it.\n',
+        },
+      });
+      expect(result.status).toBe(0);
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): the config walk used to keep climbing past a
+  // config that did not mention `preset-ste-ai`, so a nested project's own opt-out config was
+  // silently overridden by a parent directory's config that did enable the preset. Reproduced
+  // directly with the layout below before `findSteAiConfigDir` was changed to stop at the first
+  // readable config instead of only the first matching one.
+  it(
+    "stops at a nested project's own textlint config instead of a parent's",
+    () => {
+      const parentProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-parent-'));
+      try {
+        writeFileSync(
+          join(parentProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const nestedProject = join(parentProject, 'nested-project');
+        mkdirSync(nestedProject, { recursive: true });
+        writeFileSync(join(nestedProject, '.textlintrc.json'), JSON.stringify({ rules: {} }));
+        const targetPath = join(nestedProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: {
+            file_path: targetPath,
+            content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+          },
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(parentProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122, round 2): the config match was a plain
+  // `raw.includes('preset-ste-ai')` substring search, so `"rules": { "preset-ste-ai": false }` —
+  // the ordinary way to disable any textlint rule — still counted as enabling this hook, because
+  // the preset's own name is still present in the file text even while turned off. Reproduced
+  // directly with the config below before `findSteAiConfigDir` was changed to parse the config and
+  // check the rule's actual value.
+  it(
+    'treats "preset-ste-ai": false as disabled, not merely mentioned',
     () => {
       const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-disabled-'));
       try {
-        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
         writeFileSync(
           join(scratchProject, '.textlintrc.json'),
-          JSON.stringify({ rules: { 'preset-ste-ai': false, 'some-other-rule': true } }),
+          JSON.stringify({ rules: { 'preset-ste-ai': false, 'no-todo': true } }),
         );
-        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
-        writeFileSync(
-          stubTextlintPath,
-          [
-            '#!/usr/bin/env bash',
-            'echo \'[{"messages":[{"ruleId":"some-other-rule","message":"stub finding","severity":2,"line":1,"column":1}]}]\'',
-          ].join('\n'),
-        );
-        chmodSync(stubTextlintPath, 0o755);
         const targetPath = join(scratchProject, 'doc.md');
         writeFileSync(targetPath, 'Existing content.\n');
 
         const result = runHook({
           tool_name: 'Write',
-          tool_input: { file_path: targetPath, content: 'New content.\n' },
+          tool_input: {
+            file_path: targetPath,
+            content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
+          },
         });
         expect(result.status).toBe(0);
       } finally {
@@ -314,19 +367,23 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
-  // Regression (independent review of PR #122): the "before"/"after" check ran against a
-  // randomly named scratch file, which `.textlintignore`'s exact-path entries (like this
-  // repository's own `examples/sample.md`, deliberately full of violations) do not recognise --
-  // so the hook blocked a write to a file an ordinary `textlint` invocation always skips.
+  // Regression (independent review of PR #122, round 2): the hook always linted a randomly named
+  // scratch file next to the real target, so a real target excluded by `.textlintignore` (this
+  // repository's own `examples/sample.md`, whose whole point is to carry deliberate violations —
+  // see `examples/README.md`) got checked under the scratch file's own, non-ignored identity
+  // instead. That let the hook block an edit that an ordinary `textlint examples/sample.md` run
+  // would silently skip. Reproduced directly against this repository's real ignore file before
+  // `isIgnoredByTextlint` was added.
   it(
-    'does not block a write to a file .textlintignore excludes',
+    'ignores a real target excluded by .textlintignore, even with many new commas',
     () => {
+      const ignoredTargetFile = `${repoRoot}examples/sample.md`;
+      const originalContent = readFileSync(ignoredTargetFile, 'utf8');
       const result = runHook({
         tool_name: 'Write',
         tool_input: {
-          file_path: `${repoRoot}examples/sample.md`,
-          content:
-            'This, sentence, has, way, too, many, commas, in, it, deliberately, added, here.\n',
+          file_path: ignoredTargetFile,
+          content: `${originalContent}\n\nThis, sentence, has, way, too, many, commas, in, it, right, here, now.\n`,
         },
       });
       expect(result.status).toBe(0);
@@ -334,14 +391,25 @@ describe('block-noncompliant-prose hook', () => {
     SUBPROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Regression (independent review of PR #122, round 3): `isIgnoredByTextlint` used to return
+  // `false` outright whenever the real target did not exist yet, since it asked the real
+  // `textlint` CLI to lint the real path, and the CLI's own ignore matching (a filesystem walk)
+  // can never resolve a path nothing sits at. A brand-new file's first `Write` was therefore never
+  // ignore-checked, even when its path was already excluded. Reproduced directly against a fresh
+  // path this repository's own `.textlintignore` would exclude (matching `fixtures/original/**`)
+  // before `isIgnoredByTextlint` was switched to a `minimatch` pattern match that does not depend
+  // on the target existing. The hook itself never creates the real target file (only ever a
+  // randomly named scratch file beside it, and only past this ignore check), so there is nothing
+  // to clean up here even when the assertion fails.
   it(
-    'ignores a markdown file outside any ste-ai-configured project',
+    'ignores a first write to a new path already excluded by .textlintignore',
     () => {
+      const newIgnoredPath = `${repoRoot}fixtures/original/ste-ai-hook-first-write-test.md`;
       const result = runHook({
         tool_name: 'Write',
         tool_input: {
-          file_path: '/tmp/no-ste-ai-project-marker/whatever.md',
-          content: 'This, sentence, has, way, too, many, commas, in, it.\n',
+          file_path: newIgnoredPath,
+          content: 'This, sentence, has, way, too, many, commas, in, it, right, here, now.\n',
         },
       });
       expect(result.status).toBe(0);

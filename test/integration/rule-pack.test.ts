@@ -980,7 +980,12 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
     expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
     expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
-    // The raw alternative is unaffected outside rendered text: it is still a real suggestion.
+    // `Diagnostic.suggestions` itself stays raw at this (core) layer: it is the value the
+    // textlint adapter's autofix path substitutes into the document verbatim, not display text.
+    // `src/textlint/adapter.ts` sanitizes its own copy only when it renders a suggestion as a
+    // message (`Replace with "..."`) -- see the e2e coverage in
+    // `test/e2e/textlint-run.test.ts`'s "sanitizes a rule-pack-controlled alternative in the
+    // rendered suggestion message" case, which exercises that render path directly.
     expect(diagnostic?.suggestions).toEqual([FORGED]);
   });
 

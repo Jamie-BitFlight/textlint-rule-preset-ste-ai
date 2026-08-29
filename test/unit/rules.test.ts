@@ -226,10 +226,18 @@ describe('preferred-terminology', () => {
   });
 });
 
-/** Runs a fixed trivial document, exposing notices that the `run()` helper above discards. */
+/**
+ * Runs a fixed document, exposing notices that the `run()` helper above discards. The second
+ * sentence carries a contraction so `no-contractions` -- unrelated to `additional`'s own conflict
+ * -- has something to genuinely find, not just something it happens not to flag.
+ */
 function runRaw(config: SteAiConfigInput) {
   const resolved = resolveConfig(config);
-  const doc = analyseDocument({ id: 't', format: 'markdown', text: 'Use the tool.\n' });
+  const doc = analyseDocument({
+    id: 't',
+    format: 'markdown',
+    text: "Use the tool. Don't touch the busbar.\n",
+  });
   return runDeterministicRules({
     doc,
     rules: deterministicRules,
@@ -303,9 +311,11 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     });
 
     // The malformed rule is skipped; every other rule still ran (mirrors the `unknown-rule-id`
-    // degrade-not-fail contract in `test/unit/config-strictness.test.ts`).
+    // degrade-not-fail contract in `test/unit/config-strictness.test.ts`). `no-contractions` has a
+    // real contraction to find in `runRaw`'s fixture text, so this proves it actually ran rather
+    // than merely failing to flag text it was never going to flag anyway.
     expect(result.notices.filter((n) => n.level === 'error')).toHaveLength(1);
-    expect(result.diagnostics.some((d) => d.ruleId === 'no-contractions')).toBe(false);
+    expect(result.diagnostics.some((d) => d.ruleId === 'no-contractions')).toBe(true);
   });
 });
 

@@ -47,7 +47,9 @@ The second source is the working tree. Run `git status --short --untracked-files
 files inside it. Staged or unstaged changes exist when that command lists any. Run `git diff HEAD`
 to capture them. `git diff HEAD` never reports an untracked file. It misses one even when
 `git status --short --untracked-files=all` lists it with a leading `??`. Run
-`git diff --no-index /dev/null <path>` for each such path. Add that output to the change set too.
+`git diff --no-index -- /dev/null <path>` for each such path. The `--` matters: an untracked
+filename that starts with a dash otherwise parses as an option, not a path. Add that output to
+the change set too.
 
 This second source can be empty too. That happens when the working tree is clean. A clean tree is
 the ordinary state right before a push. It is also ordinary right before a pull request or a merge.
@@ -97,6 +99,18 @@ the file to a changed file's governing set. Match the changed file's own path ag
 frontmatter's globs. Skip the file for this changed file when the globs are present and none
 match. Add the file when the frontmatter has no such field, an empty one, or an explicit
 always-apply marker.
+
+A `.cursor/rules/*.mdc` file's own `alwaysApply` field decides this before `globs` does. Check it
+first. `alwaysApply: true` means the rule applies to every file, with or without `globs`. Add it
+unconditionally in that case.
+
+`alwaysApply: false`, or the field's absence, is Cursor's own default. Treat a default value with
+no `globs` field either as Cursor's agent-requested or manual-attach mode. Neither activates
+automatically. A person or an assistant pulls a rule like that in on purpose. No file the change
+touches does. Cursor would not have flagged a diff against a rule like that. This reviewer must
+not either. Skip such a file entirely. Treat it the same as an unmatched `globs` pattern.
+
+`.claude/rules/*.md` carries no `alwaysApply` field at all. This distinction is `.mdc` only.
 
 Read every rule file this way resolves. Read each one only once per review, even if several
 changed files resolve to the same rule file.

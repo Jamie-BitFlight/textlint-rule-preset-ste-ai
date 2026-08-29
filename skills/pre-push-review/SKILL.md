@@ -51,19 +51,21 @@ both. Skipping either source lets part of the real push go unreviewed.
 17. `--untracked-files=all` instead lists every untracked file inside that directory on its own
     `??` line.
 18. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
-19. Run `git diff --no-index /dev/null <path>` for each such `??` file path.
-20. Add that command's output to the change set too.
-21. This source can be empty too.
-22. That happens when the working tree is clean.
-23. A clean tree is the ordinary state right before a push, a pull request, or a merge.
-24. The intended change is already committed by then.
-25. An empty working tree is not a reason to skip Source A.
+19. Run `git diff --no-index -- /dev/null <path>` for each such `??` file path.
+20. The `--` matters: an untracked filename that starts with a dash otherwise parses as an
+    option, not a path.
+21. Add that command's output to the change set too.
+22. This source can be empty too.
+23. That happens when the working tree is clean.
+24. A clean tree is the ordinary state right before a push, a pull request, or a merge.
+25. The intended change is already committed by then.
+26. An empty working tree is not a reason to skip Source A.
 
 **Combine, or stop.**
 
-26. Combine Source A and Source B into one change set.
-27. Report that there is nothing to review, and stop, only when both sources are empty.
-28. Do not invent a change set.
+27. Combine Source A and Source B into one change set.
+28. Report that there is nothing to review, and stop, only when both sources are empty.
+29. Do not invent a change set.
 
 ## Step 2: Review
 

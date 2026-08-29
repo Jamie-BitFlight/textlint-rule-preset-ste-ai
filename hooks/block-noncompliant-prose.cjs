@@ -227,8 +227,24 @@ function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
     '**/node_modules/**',
     ...loadIgnorePatterns(path.join(cwd, '.textlintignore')),
   ];
-  return patterns.some((pattern) => minimatch(relativePath, pattern, { dot: true }));
+  // `nonegate: true` matches how `glob`'s own `ignore` option processes these patterns (what
+  // textlint's ignore matching actually runs on) -- a leading `!` in an *ignore* pattern is not
+  // negation there, unlike a `.gitignore` line. Without it, `minimatch` treats a `!`-prefixed
+  // pattern as "match everything except this," so one such line in `.textlintignore` -- verified
+  // directly with a bare `!kept.md` pattern -- silently treats every *other* path as ignored too.
+  return patterns.some((pattern) =>
+    minimatch(relativePath, pattern, { dot: true, nonegate: true }),
+  );
 }
+
+/** How long, after {@link TEXTLINT_TIMEOUT_MS}'s own `SIGTERM` fires, this hook waits before
+ * escalating to `SIGKILL`. `SIGTERM` is a request a process can trap or ignore; `SIGKILL` cannot
+ * be. Without this escalation, a `textlint` process (or a rule/plugin subprocess) that traps
+ * `SIGTERM` never dies, `'close'` never fires, and the hook hangs indefinitely past its own
+ * documented timeout -- reproduced directly with a stub that runs `trap '' TERM` before sleeping:
+ * the hook was still running well past `TEXTLINT_TIMEOUT_MS`, only ending when an external
+ * `timeout` wrapper killed it. */
+const SIGKILL_GRACE_MS = 2_000;
 
 /**
  * Runs `textlint` against `content` (written to a scratch file beside `realFilePath` so relative
@@ -259,12 +275,14 @@ function countErrors(textlintBin, configPath, realFilePath, content) {
       stdout += chunk;
     });
     child.on('error', (error) => {
-      clearTimeout(timer);
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
       cleanupPending();
       reject(error);
     });
     child.on('close', () => {
-      clearTimeout(timer);
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
       cleanupPending();
       // textlint exits non-zero when it finds any error-severity message; its JSON report is
       // still on stdout in that case, and an empty stdout (a crash before any report was
@@ -280,8 +298,12 @@ function countErrors(textlintBin, configPath, realFilePath, content) {
       }
     });
 
-    const timer = setTimeout(() => {
+    let killTimer;
+    const termTimer = setTimeout(() => {
       killGroup(child, 'SIGTERM');
+      killTimer = setTimeout(() => {
+        killGroup(child, 'SIGKILL');
+      }, SIGKILL_GRACE_MS);
     }, TEXTLINT_TIMEOUT_MS);
   });
 }

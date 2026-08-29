@@ -178,15 +178,70 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
   });
 
   /**
-   * Regression (`chatgpt-codex-connector`, P2, on PR #117, second round): `cacheKey` hashed
-   * `JSON.stringify(config)` directly, which serialises object keys in insertion order. Two
-   * `shared` overrides with the same keys and values, only reordered, hashed to different keys and
-   * did not share an analysis -- reproduced directly (`diagnostics` field order reversed) before
-   * `cacheKey` was changed to a recursive-key-sort `stableStringify`. The reordering below is
-   * exactly that repro: `sharedA` and `sharedB` differ only in which of `diagnostics`' two nested
-   * fields is written first.
+   * Regression (`chatgpt-codex-connector`, P2, on PR #117, commit `ca643c6`): a still-later round
+   * reversed the recursive-key-sort fix this test originally pinned. Sorting an object's own keys
+   * for the cache key assumed key order is never behaviour-significant for the config shapes this
+   * function serialises -- false for `unapproved-vocabulary`/`preferred-terminology`'s `additional`
+   * option, whose entries `vocabulary.ts` reads via `Object.entries` and sorts only by term length
+   * (a stable sort, so same-length keys keep their insertion order); a same-length, case-variant
+   * pair (`Use`/`use`) then resolves to whichever key came first. Sorting keys alphabetically gave
+   * `{ Use: [...], use: [...] }` and `{ use: [...], Use: [...] }` -- two configs that genuinely
+   * suggest a different alternative for the same match -- the same cache key, reproduced directly:
+   * computed independently they suggest `"employ"` and `"apply"` respectively, but cached together
+   * the second call wrongly reused the first's answer. `stableStringify` now preserves each object's
+   * own key order instead of normalising it away, since a cache key must never collide two configs
+   * with different real behaviour, even at the cost of a config that is genuinely identical but
+   * built with fields in a different order no longer sharing a cache entry either -- a missed
+   * cache-share opportunity, not a wrong answer.
    */
-  it('shares one cache entry when two shared overrides differ only in key order', () => {
+  it('does not share a cache entry between an order-significant additional map built in reverse key order', async () => {
+    const text = 'Use the tool.\n';
+    const optionsA = { additional: { Use: ['employ'], use: ['apply'] } };
+    const optionsB = { additional: { use: ['apply'], Use: ['employ'] } };
+    clearAnalysisCache();
+    const resultA = await getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['unapproved-vocabulary', optionsA]]),
+    );
+    clearAnalysisCache();
+    const resultB = await getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['unapproved-vocabulary', optionsB]]),
+    );
+    expect(resultA.diagnostics[0]?.suggestions).toEqual(['employ']);
+    expect(resultB.diagnostics[0]?.suggestions).toEqual(['apply']);
+
+    clearAnalysisCache();
+    const promiseA = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['unapproved-vocabulary', optionsA]]),
+    );
+    const promiseB = getAnalysis(
+      text,
+      undefined,
+      baseDir,
+      undefined,
+      new Map([['unapproved-vocabulary', optionsB]]),
+    );
+    expect(promiseA).not.toBe(promiseB);
+  });
+
+  /**
+   * A `shared` override with the same keys and values, only reordered, no longer shares a cache
+   * entry -- the accepted tradeoff `stableStringify`'s own doc comment explains. This pins that the
+   * tradeoff is a missed cache-share opportunity (two distinct, independently-correct analyses),
+   * not a wrong answer: both calls still resolve to the same real diagnostics.
+   */
+  it('computes independently, but correctly, for two shared overrides differing only in key order', async () => {
     const text = 'Utilise the bracket.\n';
     const sharedA = {
       diagnostics: { reportSuppressed: true, severity: { 'review-required': 'info' as const } },
@@ -208,7 +263,11 @@ describe('getAnalysis merges a shared-config file with an inline shared option',
       sharedB,
       new Map([['punctuation-constraints', {}]]),
     );
-    expect(promiseA).toBe(promiseB);
+    expect(promiseA).not.toBe(promiseB);
+    const [resultA, resultB] = await Promise.all([promiseA, promiseB]);
+    expect(resultA.diagnostics.map((d) => d.category)).toEqual(
+      resultB.diagnostics.map((d) => d.category),
+    );
   });
 
   // Regression (`chatgpt-codex-connector`, P2, on PR #117, commit `21ebd8f`): `stableStringify`'s

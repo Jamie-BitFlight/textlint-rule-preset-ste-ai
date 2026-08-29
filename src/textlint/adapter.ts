@@ -15,11 +15,14 @@ import { loadSharedConfig } from './shared-config.js';
 /**
  * textlint adapter.
  *
- * The whole document is analysed once by the framework-neutral core and each textlint rule reports
- * the subset of diagnostics that carries its own rule id. Two consequences matter:
+ * The framework-neutral core analyses the document once per distinct effective configuration a
+ * rule ends up with — every rule with no rule-specific options of its own and a matching `shared`
+ * override shares that one analysis; a rule with its own non-empty options, or a differently
+ * configured `shared`, gets its own. Each textlint rule reports the subset of diagnostics from its
+ * own analysis that carries its own rule id. Two consequences matter for every analysis alike:
  *
  * - protected regions, sentence segmentation and the fix gate are applied once, identically, for
- *   every rule — a rule cannot disagree with its neighbours about what is code;
+ *   every rule sharing that analysis — a rule cannot disagree with its neighbours about what is code;
  * - offsets are absolute and are reported against the `Document` node, whose range starts at 0, so
  *   the relative padding textlint expects equals the absolute offset the core produced.
  *
@@ -77,11 +80,9 @@ export interface SteRuleOptions {
  * directly, so two rules with a semantically identical but differently-ordered `shared` override
  * hashed to different keys and did not share an analysis -- reproduced directly by constructing
  * two `shared` objects with the same `diagnostics` fields in reversed order and observing distinct
- * cache entries. This restores what the doc comment on `getAnalysis` actually claims: sharing keyed
- * on the configuration's *content*, not its literal serialised text. Sorting keys recursively is
- * sufficient and correct here because array order stays semantically significant (rule packs and
- * lists are never key-value data) and every value cache keys are built from is plain JSON-shaped
- * config, never a class instance with its own `toJSON`.
+ * cache entries. An earlier revision of this function sorted an object's own keys recursively to
+ * fix that -- see PROVENANCE below (commit `ca643c6`) for why that turned out to be unsound in
+ * general and was reverted in favour of preserving insertion order everywhere instead.
  *
  * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `21ebd8f`): an array entry of
  * `undefined` mapped through `stableStringify` returned the bare JS `undefined` value (`JSON
@@ -97,6 +98,24 @@ export interface SteRuleOptions {
  * way `[]` itself does, reproduced directly with both promises identical and fulfilled. Indexing by
  * `length` instead of using `.map` visits every slot, hole or not, and `arr[i]` reads a hole as
  * `undefined` -- the same value this function already serialises as `'null'`.
+ *
+ * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `ca643c6`): the object branch's
+ * key sort assumed key order is never behaviour-significant for the plain-JSON-shaped config this
+ * function serialises. That assumption is false for at least one real shape: `unapproved-vocabulary`
+ * and `preferred-terminology`'s own `additional` option is a `Record<string, string[] | string>`
+ * whose entries `src/deterministic/rules/vocabulary.ts` reads via `Object.entries` and sorts *only*
+ * by term length -- a stable sort, so two keys of equal length keep their original relative
+ * (insertion) order, and `termPattern`'s case-insensitive matching means a same-length, case-variant
+ * pair (`Use` / `use`) can both match the same span, with whichever key came first in the object
+ * winning. Sorting object keys alphabetically for the cache key therefore gave `{ Use: [...],
+ * use: [...] }` and `{ use: [...], Use: [...] }` -- two configs that genuinely suggest a different
+ * alternative for the same match -- the identical cache key, reproduced directly: the second call
+ * reused the first's cached (and, for the second config, wrong) diagnostic. Preserving each object's
+ * own key order, rather than normalising it away, is what keeps a cache key faithful to the actual
+ * value being cached -- the only way to guarantee two configs with different real behaviour never
+ * share a cache key, at the cost this function no longer helps two configs that are genuinely
+ * identical but built with fields in a different order (an already-known, merely-missed cache-share
+ * opportunity, not a wrong answer) share one either. Correctness has to win that tradeoff.
  */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
@@ -110,7 +129,6 @@ function stableStringify(value: unknown): string {
   if (!isPlainObject(value)) return JSON.stringify(value);
   const entries = Object.keys(value)
     .filter((key) => value[key] !== undefined)
-    .toSorted()
     .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
   return `{${entries.join(',')}}`;
 }

@@ -1,6 +1,6 @@
 {
   "name": "ste-ai-compliance",
-  "description": "Way-of-working compliance for AI agents writing in a project that uses the ste-ai preset — a haiku agent that reviews a diff against the nearest .claude/rules/, .cursor/rules/ (.md or .mdc), .agents/rules/, AGENTS.md, and CLAUDE.md files, a pre-push-review skill that runs it, and a hook that blocks an agent's own markdown writes when they fail this project's textlint config before the write lands.",
+  "description": "Way-of-working compliance for AI agents writing in a project that uses the ste-ai preset — a haiku agent that reviews a diff against every governing .claude/rules/, .cursor/rules/ (.md or .mdc), .agents/rules/, AGENTS.md, and CLAUDE.md file along each changed file's own directory ancestry, a pre-push-review skill that runs it, and a hook that blocks an agent's own markdown writes when they fail this project's textlint config before the write lands.",
   "version": "0.1.0",
   "author": {
     "name": "Jamie Nelson",

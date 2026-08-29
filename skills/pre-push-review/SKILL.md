@@ -12,7 +12,8 @@ Check the current change set for breaches of this project's own way-of-working r
 check before the change gets pushed. Run it before the change becomes a pull request. Run it
 before the change gets merged.
 
-The rules this check looks for live in a small set of files, each nearest to the changed file:
+The rules this check looks for live in a small set of file categories. Each is resolved along the
+changed file's own directory ancestry, not only its nearest match:
 
 - `.claude/rules/*.md`
 - `.cursor/rules/*.md` and `.cursor/rules/*.mdc`
@@ -29,43 +30,56 @@ both. Skipping either source lets part of the real push go unreviewed.
 **Source A — the branch's own committed history.**
 
 1. Find the current branch with `git branch --show-current`.
-2. Find its upstream, and any pull request open for it.
-3. Fetch that pull request's diff with `gh pr diff`, a read-only lookup.
-4. No pull request tooling may be available, or no pull request may exist yet.
-5. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
-6. Add whichever diff this finds to the change set.
-7. This source can be empty.
-8. That happens when the branch is not ahead of that base at all.
-9. It is not an error — it just contributes nothing.
+2. Find an open pull request for this branch with `gh pr view --json baseRefName`, a read-only
+   lookup.
+3. Use that pull request's own base branch as the diff base.
+4. No open pull request may exist for this branch.
+5. Use `git symbolic-ref refs/remotes/origin/HEAD --short` instead, in that case.
+6. That resolves the repository's own default branch, such as `origin/main`.
+7. Never use the branch's own upstream tracking branch as this base.
+8. A branch that tracks its own upstream, fully pushed, diffs against itself as empty.
+9. That loses the whole feature diff, even though the pull request still holds it.
+10. Use `git diff <base-branch>...HEAD` against whichever base this finds, always.
+11. Never use `gh pr diff` as this source.
+12. `gh pr diff` only ever reflects what was last pushed to the remote pull request.
+13. A local commit made after that push stays invisible to it.
+14. `git diff <base-branch>...HEAD` reflects the real local state instead, every local commit
+    included.
+15. Add whichever diff this finds to the change set.
+16. This source can be empty.
+17. That happens when the branch is not ahead of that base at all.
+18. It is not an error — it just contributes nothing.
+19. Neither an open pull request nor a resolvable default branch may exist either.
+20. This source is then simply unavailable, the same as if it were empty.
 
 **Source B — the working tree.**
 
-10. Run `git status --short --untracked-files=all`.
-11. That command may list staged or unstaged changes.
-12. Treat any such changes as part of the change set.
-13. Run `git diff HEAD` to capture them.
-14. `git diff HEAD` never reports an untracked file.
-15. `--untracked-files=all` matters here.
-16. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
+21. Run `git status --short --untracked-files=all`.
+22. That command may list staged or unstaged changes.
+23. Treat any such changes as part of the change set.
+24. Run `git diff HEAD` to capture them.
+25. `git diff HEAD` never reports an untracked file.
+26. `--untracked-files=all` matters here.
+27. Plain `git status --short` lists a wholly untracked directory as one `?? somedir/` line, not
     the files inside it.
-17. `--untracked-files=all` instead lists every untracked file inside that directory on its own
+28. `--untracked-files=all` instead lists every untracked file inside that directory on its own
     `??` line.
-18. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
-19. Run `git diff --no-index -- /dev/null <path>` for each such `??` file path.
-20. The `--` matters: an untracked filename that starts with a dash otherwise parses as an
+29. `git status --short --untracked-files=all` still lists an untracked file, with a leading `??`.
+30. Run `git diff --no-index -- /dev/null <path>` for each such `??` file path.
+31. The `--` matters: an untracked filename that starts with a dash otherwise parses as an
     option, not a path.
-21. Add that command's output to the change set too.
-22. This source can be empty too.
-23. That happens when the working tree is clean.
-24. A clean tree is the ordinary state right before a push, a pull request, or a merge.
-25. The intended change is already committed by then.
-26. An empty working tree is not a reason to skip Source A.
+32. Add that command's output to the change set too.
+33. This source can be empty too.
+34. That happens when the working tree is clean.
+35. A clean tree is the ordinary state right before a push, a pull request, or a merge.
+36. The intended change is already committed by then.
+37. An empty working tree is not a reason to skip Source A.
 
 **Combine, or stop.**
 
-27. Combine Source A and Source B into one change set.
-28. Report that there is nothing to review, and stop, only when both sources are empty.
-29. Do not invent a change set.
+38. Combine Source A and Source B into one change set.
+39. Report that there is nothing to review, and stop, only when both sources are empty.
+40. Do not invent a change set.
 
 ## Step 2: Review
 

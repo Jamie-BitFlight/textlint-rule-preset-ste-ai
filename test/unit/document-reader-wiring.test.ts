@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { analyseDocument } from '../../src/core/document.js';
+import { analyseDocument, prepareDocument } from '../../src/core/document.js';
 import type { TextBlock } from '../../src/core/types.js';
 
 /**
@@ -67,5 +67,32 @@ describe('analyseDocument blocks override', () => {
     // over the whole document text independently, exactly as today.
     expect(withOverride.protectedRegions).toEqual(withDefault.protectedRegions);
     expect(withOverride.maskedText).toBe(withDefault.maskedText);
+  });
+});
+
+describe('document preparation ownership', () => {
+  it('rejects reuse for equal text in a different format', () => {
+    const text = '```sh\nUtilise the tool.\n```\n';
+    const preparation = prepareDocument({ id: 'markdown', format: 'markdown', text });
+
+    expect(() => analyseDocument({ id: 'text', format: 'text', text }, { preparation })).toThrow(
+      'does not belong to this source and configuration',
+    );
+  });
+
+  it('rejects reuse with different protected-region options', () => {
+    const text = 'Use BitFlight carefully.\n';
+    const source = { id: 't', format: 'markdown' as const, text };
+    const preparation = prepareDocument(source, { approvedTerms: ['BitFlight'] });
+
+    expect(() => analyseDocument(source, { preparation })).toThrow(
+      'does not belong to this source and configuration',
+    );
+    expect(() =>
+      analyseDocument(source, {
+        preparation,
+        protectedRegions: { approvedTerms: ['BitFlight'], extraPatterns: ['carefully'] },
+      }),
+    ).toThrow('does not belong to this source and configuration');
   });
 });

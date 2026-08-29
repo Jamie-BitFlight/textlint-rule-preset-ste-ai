@@ -1,5 +1,7 @@
 import type { ZodType } from 'zod';
 import type { AutofixPolicy, DiagnosticPolicy } from './config.js';
+import type { SentencePosIndex } from './pos-tags.js';
+import type { WinkPosIndex } from './wink-tags.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -30,6 +32,9 @@ export interface RuleInput<TOptions extends object = object> {
    * necessarily this run's own.
    */
   readonly extraImperativeVerbs: readonly string[];
+  /** Lazy POS indexes owned by this deterministic run, never shared across configurations. */
+  readonly posIndexFor: (sentence: Sentence) => SentencePosIndex;
+  readonly winkIndexFor: (sentence: Sentence) => WinkPosIndex;
 }
 
 export interface RuleOutput {

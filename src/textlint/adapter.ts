@@ -7,19 +7,16 @@ import type {
 } from '@textlint/types';
 import { analyseText, type AnalysisResult } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
-import { contentHash } from '../core/text.js';
 import type { Diagnostic } from '../core/types.js';
-import { findDeterministicRule } from '../deterministic/index.js';
+import { deterministicRules, findDeterministicRule } from '../deterministic/index.js';
 import { loadSharedConfig } from './shared-config.js';
 
 /**
  * textlint adapter.
  *
- * The framework-neutral core analyses the document once per distinct effective configuration a
- * rule ends up with — every rule with no rule-specific options of its own and a matching `shared`
- * override shares that one analysis; a rule with its own non-empty options, or a differently
- * configured `shared`, gets its own. Each textlint rule reports the subset of diagnostics from its
- * own analysis that carries its own rule id. Two consequences matter for every analysis alike:
+ * In ordinary lint mode, every enabled rule registers its real options against the shared Document
+ * node before one complete analysis begins. Rules with incompatible global `shared` overrides form
+ * separate groups; rule-specific options do not. Each rule reports only diagnostics carrying its id.
  *
  * - protected regions, sentence segmentation and the fix gate are applied once, identically, for
  *   every rule sharing that analysis — a rule cannot disagree with its neighbours about what is code;
@@ -29,32 +26,34 @@ import { loadSharedConfig } from './shared-config.js';
  * No rule logic lives here.
  */
 
-interface AnalysisCacheEntry {
-  readonly promise: Promise<AnalysisResult>;
+interface RuleRegistration {
+  readonly ruleId: string;
+  readonly shared: SteAiConfigInput | undefined;
+  readonly ownOptions: Record<string, unknown>;
+  readonly observer: AnalysisLifecycleObserver | undefined;
 }
 
-const analysisCache = new Map<string, AnalysisCacheEntry>();
-const MAX_CACHE_ENTRIES = 32;
+export interface AnalysisLifecycleObserver {
+  analysisStarted(rules: ReadonlyMap<string, Readonly<Record<string, unknown>>>): void;
+}
+
+interface DocumentRun {
+  readonly registrations: Map<string, RuleRegistration>;
+  analyses?: Promise<ReadonlyMap<string, AnalysisResult>>;
+}
+
+const documentRuns = new WeakMap<object, DocumentRun>();
 
 /**
  * Which run-level notices have already been reported for a given Document AST node this run,
  * identified by `code` + `message`.
  *
  * Keyed by object identity on the outer map, not content: a fresh AST node is a fresh key, so this
- * needs no manual reset between lint runs the way {@link analysisCache} does (see
- * {@link clearAnalysisCache}) — an old node simply becomes unreachable and is collected once its
- * run ends.
+ * needs no manual reset between lint runs. An old node becomes unreachable with its analysis and is
+ * collected once its run ends.
  *
- * Deduplicates rather than gating on "has any rule reported yet" (an earlier version's design,
- * found broken in external review): `getAnalysis` computes a config scoped to whichever rule is
- * calling it — its own `perRuleOptions` entry merges in, every other rule's does not — so two
- * rules enabled in the same run can genuinely compute *different* `AnalysisResult`s, each with its
- * own distinct notices (e.g. a `rule-options-invalid` specific to the second rule's own bad
- * options, absent from the first rule's differently-scoped analysis). Gating on "the first rule to
- * arrive claims it" silently dropped every notice specific to a rule that was not first. Identity
- * by content, rather than object identity on the notice itself, is what lets the *same* notice
- * computed redundantly by several rules (e.g. one that depends only on `shared`, not on any rule's
- * own options) still collapse to one report, while distinct notices all surface.
+ * Content identity retains every distinct rule-specific configuration notice while collapsing the
+ * same run-level notice observed by several reporters.
  */
 const reportedRunNoticesFor = new WeakMap<object, Set<string>>();
 
@@ -71,51 +70,11 @@ export interface SteRuleOptions {
 }
 
 /**
- * `JSON.stringify` on a plain object serialises keys in insertion order, so two objects with
- * identical keys and values -- built by different code paths, or read from two `.textlintrc.json`
- * rule entries that happen to list the same fields in a different order -- can serialise
- * differently.
+ * Serialize a `shared` override for compatibility grouping.
  *
- * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117): `cacheKey` used plain `JSON.stringify`
- * directly, so two rules with a semantically identical but differently-ordered `shared` override
- * hashed to different keys and did not share an analysis -- reproduced directly by constructing
- * two `shared` objects with the same `diagnostics` fields in reversed order and observing distinct
- * cache entries. An earlier revision of this function sorted an object's own keys recursively to
- * fix that -- see PROVENANCE below (commit `ca643c6`) for why that turned out to be unsound in
- * general and was reverted in favour of preserving insertion order everywhere instead.
- *
- * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `21ebd8f`): an array entry of
- * `undefined` mapped through `stableStringify` returned the bare JS `undefined` value (`JSON
- * .stringify(undefined) === undefined`), which `Array.prototype.join` then rendered as `''` --
- * so `[undefined]` and `[]` serialised identically and collided in the cache, reproduced directly
- * with `approvedTerms: [undefined]` colliding with `approvedTerms: []`. `JSON.stringify` itself
- * renders an array's `undefined` entry as the string `"null"`; matching that same array semantics
- * here keeps the two configurations distinct.
- *
- * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `ebe9e36`): the fix above still
- * used `Array.prototype.map`, which skips a *hole* rather than visiting it -- so a sparse array
- * (`Array(1)`, one hole, no `undefined` ever assigned) produced `[]` from `.map().join()` the same
- * way `[]` itself does, reproduced directly with both promises identical and fulfilled. Indexing by
- * `length` instead of using `.map` visits every slot, hole or not, and `arr[i]` reads a hole as
- * `undefined` -- the same value this function already serialises as `'null'`.
- *
- * PROVENANCE (`chatgpt-codex-connector`, P2, on PR #117, commit `ca643c6`): the object branch's
- * key sort assumed key order is never behaviour-significant for the plain-JSON-shaped config this
- * function serialises. That assumption is false for at least one real shape: `unapproved-vocabulary`
- * and `preferred-terminology`'s own `additional` option is a `Record<string, string[] | string>`
- * whose entries `src/deterministic/rules/vocabulary.ts` reads via `Object.entries` and sorts *only*
- * by term length -- a stable sort, so two keys of equal length keep their original relative
- * (insertion) order, and `termPattern`'s case-insensitive matching means a same-length, case-variant
- * pair (`Use` / `use`) can both match the same span, with whichever key came first in the object
- * winning. Sorting object keys alphabetically for the cache key therefore gave `{ Use: [...],
- * use: [...] }` and `{ use: [...], Use: [...] }` -- two configs that genuinely suggest a different
- * alternative for the same match -- the identical cache key, reproduced directly: the second call
- * reused the first's cached (and, for the second config, wrong) diagnostic. Preserving each object's
- * own key order, rather than normalising it away, is what keeps a cache key faithful to the actual
- * value being cached -- the only way to guarantee two configs with different real behaviour never
- * share a cache key, at the cost this function no longer helps two configs that are genuinely
- * identical but built with fields in a different order (an already-known, merely-missed cache-share
- * opportunity, not a wrong answer) share one either. Correctness has to win that tradeoff.
+ * Object insertion order is preserved because some rule option maps resolve equal-length keys in
+ * insertion order. Arrays preserve JSON's `undefined` and sparse-slot semantics. The grouping key
+ * must never combine configurations that can produce different results.
  */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
@@ -131,11 +90,6 @@ function stableStringify(value: unknown): string {
     .filter((key) => value[key] !== undefined)
     .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
   return `{${entries.join(',')}}`;
-}
-
-function cacheKey(text: string, ruleId: string, options: unknown, baseDir: string): string {
-  void ruleId;
-  return contentHash(text, baseDir, stableStringify(options ?? {}));
 }
 
 /**
@@ -190,15 +144,7 @@ function validRulesOf(raw: unknown): Record<string, Record<string, unknown>> {
 }
 
 /**
- * Analyse the document once per (text, shared configuration) pair.
- *
- * An enabled rule with no rule-specific options of its own shares the entry with every other such
- * rule in the same run, provided their `shared` override also matches -- the common case, since
- * `shared` usually comes from one project-wide `.textlintrc.json` block rather than a per-rule one,
- * so a preset typically performs one analysis and, at most, one round of semantic requests for
- * those rules combined, rather than one per rule. A rule whose own options differ, or whose
- * `shared` override differs even with empty own options, gets a distinct entry scoped to it (see
- * `test/integration/shared-config-merge.test.ts`, which pins all three of these).
+ * Analyse one document with a complete caller-supplied map of per-rule options.
  */
 export function getAnalysis(
   text: string,
@@ -235,19 +181,8 @@ export function getAnalysis(
   for (const id of new Set([...Object.keys(fileRules), ...Object.keys(sharedRules)])) {
     mergedRules[id] = { ...fileRules[id], ...sharedRules[id] };
   }
-  // Every enabled rule calls `getAnalysis` with its own `perRuleOptions` entry, most often `{}` --
-  // no rule-specific options set beyond being enabled. Folding that entry's *key* into `mergedRules`
-  // unconditionally, even when its value is empty, made `cacheKey` sensitive to which rule was
-  // calling regardless of whether the call actually carried anything new: each call's `mergedRules`
-  // differed only by which rule's own (frequently empty) options object happened to be present as a
-  // key, so a preset with many rules produced one distinct cache entry per calling rule instead of
-  // one shared entry per document -- reproduced directly by instrumenting the cache with a trace
-  // against this repo's own real preset. Skipping a genuinely empty entry restores the doc comment's
-  // own claim -- one shared cache entry per document, regardless of which rule asks first -- without
-  // weakening the real fix this replaced (review found scoping a rule's *non-empty* own options into
-  // the merge, rather than sharing one unscoped config across every rule, was what closed a
-  // silently-dropped-notice defect; an empty entry never carried any of that information to begin
-  // with, so omitting it changes no rule's own effective options).
+  // Empty own-option bags carry no keys to merge. Non-empty bags are already aggregated across all
+  // invoked rules by the Document-run coordinator before this function is called.
   for (const [id, options] of perRuleOptions) {
     if (Object.keys(options).length === 0) continue;
     mergedRules[id] = { ...mergedRules[id], ...options };
@@ -262,28 +197,81 @@ export function getAnalysis(
     rules: mergedRules,
   };
 
-  const key = cacheKey(text, '*', config, resolvedBaseDir);
-  const existing = analysisCache.get(key);
-  if (existing !== undefined) return existing.promise;
-
-  const promise = analyseText(text, {
+  return analyseText(text, {
     ...(filePath === undefined ? {} : { path: filePath }),
     format: filePath !== undefined && /\.(txt|text)$/i.test(filePath) ? 'text' : 'markdown',
     config,
     baseDir: resolvedBaseDir,
   });
-  analysisCache.set(key, { promise });
-  while (analysisCache.size > MAX_CACHE_ENTRIES) {
-    const oldest = analysisCache.keys().next();
-    if (oldest.done === true) break;
-    analysisCache.delete(oldest.value);
-  }
-  return promise;
 }
 
-/** Test seam: clears the per-document analysis cache. */
+/** Compatibility seam. Run state is weakly owned by Document nodes and needs no explicit reset. */
 export function clearAnalysisCache(): void {
-  analysisCache.clear();
+  // Intentionally empty.
+}
+
+async function coordinatedAnalysis(
+  node: object,
+  registration: RuleRegistration,
+  text: string,
+  filePath: string | undefined,
+  baseDir: string | undefined,
+): Promise<AnalysisResult> {
+  let run = documentRuns.get(node);
+  if (run === undefined) {
+    run = { registrations: new Map() };
+    documentRuns.set(node, run);
+  }
+  run.registrations.set(registration.ruleId, registration);
+
+  // Textlint invokes all lint-mode Document listeners synchronously before awaiting them. Yielding
+  // once lets every enabled preset rule register its real options before any analysis begins.
+  await Promise.resolve();
+  run.analyses ??= analyseRegistrationGroups(run.registrations, text, filePath, baseDir);
+  const groupKey = stableStringify(registration.shared ?? {});
+  const analysis = (await run.analyses).get(groupKey);
+  if (analysis === undefined) {
+    throw new Error(`No analysis group was created for rule "${registration.ruleId}".`);
+  }
+  return analysis;
+}
+
+async function analyseRegistrationGroups(
+  registrations: ReadonlyMap<string, RuleRegistration>,
+  text: string,
+  filePath: string | undefined,
+  baseDir: string | undefined,
+): Promise<ReadonlyMap<string, AnalysisResult>> {
+  const groups = new Map<
+    string,
+    { shared: SteAiConfigInput | undefined; registrations: RuleRegistration[] }
+  >();
+  for (const registration of registrations.values()) {
+    const key = stableStringify(registration.shared ?? {});
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, { shared: registration.shared, registrations: [registration] });
+    } else {
+      group.registrations.push(registration);
+    }
+  }
+
+  const results = new Map<string, AnalysisResult>();
+  await Promise.all(
+    [...groups].map(async ([key, group]) => {
+      const invoked = new Set(group.registrations.map(({ ruleId }) => ruleId));
+      const options = new Map<string, Record<string, unknown>>();
+      for (const rule of deterministicRules) {
+        if (!invoked.has(rule.meta.id)) options.set(rule.meta.id, { enabled: false });
+      }
+      for (const registration of group.registrations) {
+        options.set(registration.ruleId, registration.ownOptions);
+      }
+      group.registrations[0]?.observer?.analysisStarted(options);
+      results.set(key, await getAnalysis(text, filePath, baseDir, group.shared, options));
+    }),
+  );
+  return results;
 }
 
 /**
@@ -324,7 +312,10 @@ export function toTextlintSeverity(severity: Diagnostic['severity']): TextlintRu
  * The same reporter is used for `linter` and `fixer`: a fix is attached whenever the core decided
  * one survives the autofix gate, and textlint only applies fixes in `--fix` mode.
  */
-export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
+export function createSteTextlintRule(
+  ruleId: string,
+  observer?: AnalysisLifecycleObserver,
+): TextlintRuleModule {
   const coreRule = findDeterministicRule(ruleId);
   if (coreRule === undefined) {
     throw new Error(`No core rule with id "${ruleId}".`);
@@ -355,12 +346,12 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
       [Syntax.Document]: async (node) => {
         const text = getSource(node);
         const nodeStart = node.range[0];
-        const analysis = await getAnalysis(
+        const analysis = await coordinatedAnalysis(
+          node,
+          { ruleId, shared: sharedConfig, ownOptions, observer },
           text,
           context.getFilePath(),
           context.getConfigBaseDir(),
-          sharedConfig,
-          new Map([[ruleId, ownOptions]]),
         );
 
         for (const diagnostic of analysis.diagnostics) {
@@ -414,6 +405,8 @@ export function createSteTextlintRule(ruleId: string): TextlintRuleModule {
         let reportedForNode = reportedRunNoticesFor.get(node);
         for (const notice of analysis.notices) {
           if (notice.level === 'info') continue;
+          const noticeRuleId = notice.detail?.['ruleId'];
+          if (typeof noticeRuleId === 'string' && noticeRuleId !== ruleId) continue;
           const identity = JSON.stringify([notice.code, notice.message]);
           if (reportedForNode?.has(identity) === true) continue;
           if (reportedForNode === undefined) {

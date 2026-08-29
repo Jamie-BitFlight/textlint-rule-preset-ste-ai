@@ -127,7 +127,7 @@ loosen.
 
 This follows `01`'s recommendation. Its argument stands: `limits` is required in `rulePackSchema`. A
 most-restrictive-wins rule would therefore pin the bundled pack's values (see
-`provisionalRulePack.limits` in `src/rule-pack/provisional-pack.ts`) as a ceiling. No organisation
+`provisionalRulePack.limits`, defined in `src/core/default-pack.ts`) as a ceiling. No organisation
 could raise that ceiling.
 
 This is an accepted cost, recorded here so it is not rediscovered as a surprise. A product or locale

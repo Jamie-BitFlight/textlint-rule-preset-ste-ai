@@ -132,10 +132,19 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 // Only `pack === provisionalRulePack` — genuine reference identity with the one
                 // singleton object, which spread cannot preserve because spread always allocates a
                 // new object — proves the cited data is what the citation claims it is.
+                //
+                // `pack.metadata.id` is interpolated unescaped below. That is safe only because
+                // `rulePackIdSchema` (`src/rule-pack/schema.ts`) constrains every id to
+                // `[A-Za-z0-9][A-Za-z0-9._:@/+-]*`, max 128 characters — no space, no quote, no
+                // control character, no Unicode line/paragraph separator, nothing that could make
+                // an id read as prose or break out of the quoted template. A denylist strip
+                // (`displaySafePackId`, since removed) was tried here across three review rounds
+                // (PR #116, rounds 5, 7, 10) and lost each time to a fresh character class; an
+                // allowlist at the schema boundary closes the class instead of extending the list.
                 sourceRef:
                   pack === provisionalRulePack || packTrusted
                     ? packSpec.sourceRef
-                    : `unverified citation from untrusted rule pack "${displaySafePackId(pack.metadata.id)}"`,
+                    : `unverified citation from untrusted rule pack "${pack.metadata.id}"`,
               },
             },
       );
@@ -201,32 +210,6 @@ function verifiedRuleStatus(
 ): RulePack['metadata']['authority'] {
   if (declared !== 'normative') return declared;
   return trustedRulePackIds.includes(pack.metadata.id) ? 'normative' : 'supplementary';
-}
-
-/**
- * Longest `metadata.id` fragment embedded in the "unverified citation" marker. `rulePackSchema`
- * places no length limit on `id` (`z.string().min(1)`), so an untrusted pack could otherwise use
- * its own id to inflate every diagnostic it triggers.
- */
-const UNTRUSTED_PACK_ID_DISPLAY_LIMIT = 80;
-
-/**
- * `pack.metadata.id` is free text the supplier controls, with no format constraint (Codex review
- * on PR #116): a newline or control character embedded in it reaches the "unverified citation"
- * marker verbatim, letting an untrusted pack push that marker's own warning text off-screen and
- * leave only its fabricated citation visible — the same attack #66 closed for `sourceRef` itself,
- * reopened through the id used to explain why `sourceRef` was withheld. Strips every C0/C1 control
- * character (not only newlines: any character in that range can be gathered into an ANSI escape
- * sequence acting on terminal state), caps the length, and strips `"` (round 2 of this finding):
- * the marker wraps the id in double quotes, so an embedded one can visually appear to close that
- * quote early and start a second, unrelated-looking clause.
- */
-function displaySafePackId(id: string): string {
-  // eslint-disable-next-line no-control-regex -- deliberately stripping control chars from untrusted supplier input
-  const stripped = id.replace(/[\u0000-\u001f\u007f-\u009f"]/g, ' ').trim();
-  return stripped.length > UNTRUSTED_PACK_ID_DISPLAY_LIMIT
-    ? `${stripped.slice(0, UNTRUSTED_PACK_ID_DISPLAY_LIMIT)}…`
-    : stripped;
 }
 
 function stripControlKeys(userConfig: Record<string, unknown>): Record<string, unknown> {

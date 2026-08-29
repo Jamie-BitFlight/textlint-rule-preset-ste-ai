@@ -328,11 +328,11 @@ export interface ResolvedLayer {
 `ComposedRulePack`. Rules read `entry.provenance` where they already read `entry.term`,
 `entry.alternatives` etc. and pass it through to `buildDiagnostic`.
 
-The single-layer case is not special-cased: with no layers configured, the compositor produces a
-`ComposedRulePack` of exactly one layer (`bundled`), every entry provenanced to
-`ste-ai-provisional@0.1.0` with `declaredAuthority: 'provisional'`, `trusted: false`,
-`verifiedAuthority: 'provisional'` (from `src/rule-pack/provisional-pack.ts:24-33`). One code path,
-no "layered mode" flag.
+The single-layer case is not special-cased. With no layers configured, the compositor produces a
+`ComposedRulePack` of exactly one layer (`bundled`). Every entry is provenanced to
+`ste-ai-provisional@0.1.0` with `declaredAuthority: 'provisional'` and `trusted: false`.
+`verifiedAuthority` is `'provisional'` too (from `provisionalRulePack.metadata`,
+`src/core/default-pack.ts`). One code path, no "layered mode" flag.
 
 ### Attachment rules at merge time
 
@@ -487,8 +487,8 @@ check completely. (This is a hole in the obvious definition; it is closed here d
 
 **Consequence the merge-algorithm spec must accommodate:** the bundled provisional layer declares
 `authority: 'provisional'` and `conformanceClaim: 'none'`
-(`src/rule-pack/provisional-pack.ts:27,31`). Under unanimity, if the bundled layer contributes
-anything at all, no run-level conformance claim is ever reachable. An operator holding a licensed
+(`provisionalRulePack.metadata`, `src/core/default-pack.ts`). Under unanimity, if the bundled layer
+contributes anything at all, no run-level conformance claim is ever reachable. An operator holding a licensed
 pack must therefore be able to **fully replace** the bundled layer, not merely extend it. This is a
 dependency on the merge spec's `replace` mode, flagged, not designed here. If `replace` cannot
 evacuate the bundled layer entirely, `stackPermitsConformanceClaim` is permanently `false` and
@@ -990,9 +990,10 @@ gain the per-entry provenance field as a fourth carrier.
 Two problems. The function is being replaced by `entryPermitsConformanceClaim` /
 `stackPermitsConformanceClaim`, so the name must change. And "on every run" is a promise about the
 unconditional line at `src/cli/main.ts:266` — which this spec proposes to derive rather than
-hard-code. The replacement must state the derived behaviour: the sentence is printed whenever
-`stackPermitsConformanceClaim` is false, which is every run of the shipped configuration, because the
-bundled layer declares `provisional`/`none` (`src/rule-pack/provisional-pack.ts:27,31`).
+hard-code. The replacement must state the derived behaviour. The sentence is printed whenever
+`stackPermitsConformanceClaim` is false. That is every run of the shipped configuration, because the
+bundled layer declares `provisional`/`none` (`provisionalRulePack.metadata`,
+`src/core/default-pack.ts`).
 
 ### 3. "What a passing run means" (lines 44-47) — the most important change
 
@@ -1058,9 +1059,9 @@ Not my file to change, but inside the authority contract I own, so recorded:
 ## Open questions
 
 1. **Can the bundled layer be fully evacuated?** Unanimity plus the bundled layer's
-   `provisional`/`none` metadata (`provisional-pack.ts:27,31`) means no run-level conformance claim
-   is reachable unless `replace` at the bundled layer removes it entirely. **Dependency on the merge
-   spec.** If it cannot, `stackPermitsConformanceClaim` is permanently `false` and should be
+   `provisional`/`none` metadata (`src/core/default-pack.ts`) means no run-level conformance claim
+   is reachable unless `replace` at the bundled layer removes it entirely. **Dependency on the
+   merge spec.** If it cannot, `stackPermitsConformanceClaim` is permanently `false` and should be
    documented as such rather than weakened.
 2. **Does the merge algorithm report per-field contributors?** A5 (weakest-wins for field-level
    merges) needs to know which layers contributed which surviving fields. If the merge output cannot

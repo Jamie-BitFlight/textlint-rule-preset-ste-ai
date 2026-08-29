@@ -25,8 +25,29 @@ import { z } from 'zod';
 export const ruleStatusSchema = z.enum(['normative', 'supplementary', 'provisional']);
 export const severitySchema = z.enum(['info', 'warning', 'error']);
 
+/**
+ * `id` is a match key, compared by exact string membership against `trustedRulePackIds`
+ * (`src/rule-pack/loader.ts`'s `verifiedAuthority`/`packPermitsConformanceClaim`) and, for the one
+ * bundled pack, by object identity (`src/core/runner.ts`). It is never displayed as prose on its
+ * own — the withheld-citation message in `runner.ts` interpolates it directly, unescaped, which
+ * only stays safe because this pattern excludes every character that could make it read as
+ * something other than an id: no space (so it cannot be a phrase, PR #116 round 5/10), no `"` (so
+ * it cannot break out of the quoted template, round 7), no control character or Unicode line/
+ * paragraph separator (round 5/10 again), no bidirectional-override character. `metadata.name`,
+ * `metadata.notice` and `metadata.source` remain unconstrained free text for anything meant to be
+ * read.
+ */
+const rulePackIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/,
+    'must start with a letter or digit, and contain only letters, digits, and . _ : @ / + -',
+  );
+
 export const rulePackMetadataSchema = z.object({
-  id: z.string().min(1),
+  id: rulePackIdSchema,
   name: z.string().min(1),
   version: z.string().min(1),
   /**

@@ -308,15 +308,16 @@ describe('rule pack: the trust gate', () => {
     expect(provisionalRulePack.rules).toBe(originalRules);
   });
 
-  it("strips control characters and caps the length of an untrusted pack's id in the citation", () => {
-    // Codex review on PR #116, round 5: the withheld-citation marker embedded `pack.metadata.id`
-    // verbatim. `metadata.id` is `z.string().min(1)` with no format or length constraint, so an
-    // untrusted pack could put a newline in its own id to push the marker's warning text
-    // off-screen and leave only a fabricated citation visible after it — reopening the same class
-    // of attack #66 closed for `sourceRef` itself, through the field used to explain why
-    // `sourceRef` was withheld.
-    const evilMetadata = {
-      id: 'evil\n"a fabricated citation"',
+  it("rejects an untrusted pack's id at the schema boundary instead of sanitizing it for display (#66, rounds 5, 7, 10)", () => {
+    // Three successive Codex review rounds on PR #116 each found a character `displaySafePackId`'s
+    // denylist (since removed) did not strip: a newline (round 5), an embedded `"` that broke out
+    // of the marker's quoted template (round 7), then a Unicode line separator, U+2028, which some
+    // renderers treat as a line break the same way a newline is (round 10). Each let an untrusted
+    // pack's own id push a fabricated citation into view. A denylist regex is an open-ended
+    // problem — there is always one more character class to add. `rulePackIdSchema`
+    // (`src/rule-pack/schema.ts`) allowlists the id's character set at parse time instead, so none
+    // of these three, or any future variant, ever reaches `runner.ts` at all.
+    const baseMetadata = {
       name: 'Acme test pack',
       version: '1.0.0',
       authority: 'normative',
@@ -324,27 +325,28 @@ describe('rule pack: the trust gate', () => {
       source: 'Authored for this test. Not derived from any standard.',
       conformanceClaim: 'declared-by-supplier',
     };
-    const diagnostic = only(
-      VOCABULARY_DOC,
-      { rulePack: pack({ metadata: evilMetadata }) },
-      'unapproved-vocabulary',
-    );
+    const badIds = [
+      'evil\n"a fabricated citation"',
+      'evil ASD-STE100 Issue 8, Rule 3.1',
+      'has a space',
+      'x'.repeat(200),
+    ];
+    for (const id of badIds) {
+      const error = caughtError(() =>
+        parseRulePack(pack({ metadata: { ...baseMetadata, id } }), 'test'),
+      );
+      expect(error, `expected id ${JSON.stringify(id)} to be rejected`).toBeInstanceOf(
+        RulePackError,
+      );
+    }
+  });
 
-    const sourceRef = String(diagnostic.meta?.['sourceRef']);
-    expect(sourceRef).not.toContain('\n');
-    expect(sourceRef).toContain('evil');
-    // Codex review, round 7: an id containing `"` can otherwise make the marker's own wrapper
-    // quote look like it closes early, with the id's own fabricated text appearing to follow it as
-    // a separate, unrelated-looking clause. Only two `"` are expected: the wrapper's own pair.
-    expect(sourceRef.match(/"/g)).toHaveLength(2);
+  it('accepts a safe id and interpolates it directly into the withheld-citation marker', () => {
+    const diagnostic = only(VOCABULARY_DOC, { rulePack: pack() }, 'unapproved-vocabulary');
 
-    // A very long id must not let the pack inflate every diagnostic it triggers.
-    const longIdDiagnostic = only(
-      VOCABULARY_DOC,
-      { rulePack: pack({ metadata: { ...evilMetadata, id: 'x'.repeat(500) } }) },
-      'unapproved-vocabulary',
+    expect(diagnostic.meta?.['sourceRef']).toBe(
+      `unverified citation from untrusted rule pack "${PACK_ID}"`,
     );
-    expect(String(longIdDiagnostic.meta?.['sourceRef']).length).toBeLessThan(200);
   });
 
   it('honours a declared status only once the operator names the pack as trusted', () => {

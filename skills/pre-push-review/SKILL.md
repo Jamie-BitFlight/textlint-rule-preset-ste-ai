@@ -22,20 +22,35 @@ The rules this check looks for live in a small set of files, each nearest to the
 
 ## Step 1: Find the change set to review
 
-1. Run `git status --short`.
-2. That command may list staged or unstaged changes.
-3. Treat any such changes as the change set.
-4. Run `git diff HEAD` to capture the change set.
-5. The working tree may instead be clean.
-6. Fall back to the current pull request's diff in that case.
-7. Find the current branch with `git branch --show-current`.
-8. Find its upstream, and any pull request open for it.
-9. Fetch that pull request's diff, using the repository's own GitHub tooling.
-10. No pull request tooling may be available.
-11. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
-12. Neither a working-tree change set nor an open pull request diff may exist.
-13. Report that there is nothing to review, and stop, when neither exists.
-14. Do not invent a change set.
+1. Run `git status --short -uall`.
+2. That command lists staged and unstaged changes.
+3. It also lists every untracked file on its own line.
+4. Use `-uall` for this.
+5. The default untracked-files mode instead collapses a wholly untracked directory to one
+   `?? newdir/` line.
+6. A collapsed directory line breaks a literal `git diff --no-index /dev/null newdir/` command.
+7. No file lives at that exact path.
+8. Treat every such change as part of the change set.
+9. Treat a tracked change and an untracked change the same way.
+10. Run `git diff HEAD` to capture the tracked part of the change set.
+11. That command emits nothing for an untracked (`??`) path.
+12. Capture each untracked path from step 3 as its own patch instead.
+13. Use `git diff --no-index -- /dev/null <path>` for each one.
+14. Add every such patch to the change set.
+15. Do this once per untracked file.
+16. Do not do it once per untracked top-level entry.
+17. An untracked directory is not itself a diffable path.
+18. The working tree may instead be clean.
+19. It may have no staged, unstaged, or untracked entries at all.
+20. Fall back to the current pull request's diff in that case.
+21. Find the current branch with `git branch --show-current`.
+22. Find its upstream, and any pull request open for it.
+23. Fetch that pull request's diff, using the repository's own GitHub tooling.
+24. No pull request tooling may be available.
+25. Use `git diff <base-branch>...HEAD` instead, against the branch's merge base.
+26. Neither a working-tree change set nor an open pull request diff may exist.
+27. Report that there is nothing to review, and stop, when neither exists.
+28. Do not invent a change set.
 
 ## Step 2: Review
 

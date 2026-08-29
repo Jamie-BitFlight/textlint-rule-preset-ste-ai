@@ -32,7 +32,20 @@ second is an instruction to check the current change set.
 
 You may receive neither. Find the change set yourself in that case. Run `git status --short`
 first. Staged or unstaged changes exist when that command lists any. Run `git diff HEAD` to
-capture them. Neither may exist. Report that there is nothing to review, and stop, in that case.
+capture them.
+
+The working tree may instead be clean. This is the common case when you run after a commit, not
+before one. Do not stop there.
+
+Fall back to a pull request diff in that case. Find the current branch with `git branch
+--show-current`. Find its upstream. Find any pull request open for it. Fetch that diff using the
+repository's own GitHub tooling.
+
+No pull request tooling may be available. No pull request may be open either. Use `git diff
+<base-branch>...HEAD` instead. Diff against the branch's merge base.
+
+Three sources exist now: the working tree, an open pull request, and the merge-base diff. Report
+that there is nothing to review, and stop, only once none of the three produced a change set.
 
 ## Step 1: List every changed file
 
@@ -53,16 +66,22 @@ At each directory level, check for five things:
 4. `AGENTS.md`.
 5. `CLAUDE.md`.
 
-Treat each of these five categories on its own. For each category, find the nearest directory
-level with any match. That is the level closest to the changed file, not the repository root.
+Treat each of these five categories on its own. For each category, collect every match at every
+directory level. Walk from the file's own directory up to the repository root. Do not stop at the
+nearest level.
+
+A nested file only overrides an ancestor file on a genuine conflict. It does not override the
+whole ancestor file. A root `AGENTS.md` rule the nested file never addresses stays fully in force.
+Resolve a real conflict in the nested file's favor. A real conflict is one where the two files
+give incompatible instructions on the same point.
 
 `AGENTS.md` and `CLAUDE.md` each name a single file. `.claude/rules/*.md`, `.cursor/rules/*.md`,
 and `.agents/rules/*.md` are globs instead. A directory can hold several matching files at once.
-Every file matching the glob at the nearest level counts, not only one of them.
+Every file matching the glob at every level counts, not only one of them.
 
 A category with no match anywhere in the ancestry contributes nothing for that file. Two changed
-files in different subdirectories can end up governed by different rule files. This can happen
-even within the same review.
+files in different subdirectories can end up governed by different rule sets. This can happen even
+within the same review.
 
 Read every rule file this way resolves. Read each one only once per review, even if several
 changed files resolve to the same rule file.

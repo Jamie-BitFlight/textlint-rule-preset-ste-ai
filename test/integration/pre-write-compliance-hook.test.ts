@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   mkdirSync,
@@ -48,10 +48,10 @@ function runHookRaw(stdin: string): { status: number | null; stderr: string } {
 
 // Each case here spawns the hook as a real subprocess, which itself spawns real `textlint` runs
 // (once or twice) -- inherently slower than the default test budget under full-suite parallel
-// load. Verified flaky at the default 20s timeout: 3 of 8 full-suite runs failed with
-// `Test timed out in 20000ms`, none with an assertion failure, while every isolated run of this
-// file alone passed -- CPU contention from the other 37 files running concurrently, not a logic
-// bug. 60s leaves headroom.
+// load. Verified flaky at the default 20s timeout under a full-suite run, with `Test timed out in
+// 20000ms` failures and no assertion failures, while every isolated run of this file alone
+// passed -- CPU contention from the rest of the suite running concurrently, not a logic bug. 60s
+// leaves headroom.
 const SUBPROCESS_TEST_TIMEOUT_MS = 60_000;
 
 describe('block-noncompliant-prose hook', () => {
@@ -205,6 +205,131 @@ describe('block-noncompliant-prose hook', () => {
       } finally {
         rmSync(scratchProject, { recursive: true, force: true });
       }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): the first `SIGTERM`/`SIGINT` handler was
+  // registered against a hook that still used `execFileSync`, which blocks the Node.js event
+  // loop for the whole child process's duration -- so the handler could never actually run while
+  // a child was in flight, reproduced directly with an isolated `execFileSync` + `SIGTERM` repro
+  // (the handler's own log line never printed). Switching to async `spawn` fixed the underlying
+  // problem; this case pins the externally observable behavior the fix promises: a real `SIGTERM`
+  // sent to a hook that is mid-check kills it promptly and leaves no scratch file behind, rather
+  // than running the hook's own hang-timeout out to completion.
+  it(
+    'exits promptly and cleans up its scratch file on SIGTERM',
+    async () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-sigterm-'));
+      try {
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': true } }),
+        );
+        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
+        writeFileSync(stubTextlintPath, '#!/usr/bin/env bash\nsleep 120\n');
+        chmodSync(stubTextlintPath, 0o755);
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const child = spawn('node', [hookScript], { cwd: repoRoot });
+        child.stdin.end(
+          JSON.stringify({
+            tool_name: 'Write',
+            tool_input: {
+              file_path: targetPath,
+              content: 'New content, with, way, too, many, commas, right, here, now.\n',
+            },
+          }),
+        );
+
+        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+          (resolve) => {
+            child.on('close', (code, signal) => resolve({ code, signal }));
+          },
+        );
+
+        // The "before" pass now lints the real on-disk target directly, so give the stub
+        // textlint's sleep a moment to actually start before killing the hook, rather than
+        // racing process startup.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        child.kill('SIGTERM');
+
+        const started = Date.now();
+        await exited;
+        const elapsedMs = Date.now() - started;
+
+        // Well under both the hook's own 15s textlint timeout and the stub's 120s sleep -- proves
+        // SIGTERM actually interrupted the in-flight child rather than the hook running either
+        // of those out to completion.
+        expect(elapsedMs).toBeLessThan(5_000);
+        const leftovers = readdirSync(scratchProject).filter((name) =>
+          name.startsWith('.ste-ai-hook-'),
+        );
+        expect(leftovers).toEqual([]);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): a substring check (`raw.includes('preset-ste-ai')`)
+  // treated `"preset-ste-ai": false` the same as an enabled preset, so a project that explicitly
+  // disabled the preset -- while keeping other, unrelated textlint rules enabled -- still had this
+  // hook block on findings from those unrelated rules. Reproduced directly with this exact config
+  // and a stub `textlint` that always reports one finding.
+  it(
+    'does not engage in a project that explicitly disables preset-ste-ai',
+    () => {
+      const scratchProject = mkdtempSync(join(tmpdir(), 'ste-ai-hook-disabled-'));
+      try {
+        mkdirSync(join(scratchProject, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(
+          join(scratchProject, '.textlintrc.json'),
+          JSON.stringify({ rules: { 'preset-ste-ai': false, 'some-other-rule': true } }),
+        );
+        const stubTextlintPath = join(scratchProject, 'node_modules', '.bin', 'textlint');
+        writeFileSync(
+          stubTextlintPath,
+          [
+            '#!/usr/bin/env bash',
+            'echo \'[{"messages":[{"ruleId":"some-other-rule","message":"stub finding","severity":2,"line":1,"column":1}]}]\'',
+          ].join('\n'),
+        );
+        chmodSync(stubTextlintPath, 0o755);
+        const targetPath = join(scratchProject, 'doc.md');
+        writeFileSync(targetPath, 'Existing content.\n');
+
+        const result = runHook({
+          tool_name: 'Write',
+          tool_input: { file_path: targetPath, content: 'New content.\n' },
+        });
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(scratchProject, { recursive: true, force: true });
+      }
+    },
+    SUBPROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Regression (independent review of PR #122): the "before"/"after" check ran against a
+  // randomly named scratch file, which `.textlintignore`'s exact-path entries (like this
+  // repository's own `examples/sample.md`, deliberately full of violations) do not recognise --
+  // so the hook blocked a write to a file an ordinary `textlint` invocation always skips.
+  it(
+    'does not block a write to a file .textlintignore excludes',
+    () => {
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: {
+          file_path: `${repoRoot}examples/sample.md`,
+          content:
+            'This, sentence, has, way, too, many, commas, in, it, deliberately, added, here.\n',
+        },
+      });
+      expect(result.status).toBe(0);
     },
     SUBPROCESS_TEST_TIMEOUT_MS,
   );

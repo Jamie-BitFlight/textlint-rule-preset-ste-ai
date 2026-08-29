@@ -1323,25 +1323,6 @@
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 27.1 (58 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nEach section below gives the fixture's t\n# Fixture Licences and Attributions\n1": 1
     }
   },
-  "prompts/v1/approved-word-sense.md": {
-    "total": 14,
-    "findings": {
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"DECIDE\" is used before it is introduced. Write the full term followed by \"(DECIDE)\" at the first use.\nDECIDE `violation` when the word is used\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"NOT\" is used before it is introduced. Write the full term followed by \"(NOT)\" at the first use.\nhen the word is used in a sense that is NOT in the permitted list.\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"SENSES\" is used before it is introduced. Write the full term followed by \"(SENSES)\" at the first use.\noffset, is used in one of the PERMITTED SENSES listed in the request.\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"TASK\" is used before it is introduced. Write the full term followed by \"(TASK)\" at the first use.\nTASK Decide whether the supplied word, a\n\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] A semicolon joins two statements. Write two sentences.\nboth occurrences are the permitted sense; judge only the offset supplied.\n\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] A semicolon joins two statements. Write two sentences.\ncould be \"to shut\" or an unlisted idiom; the passage does not disambiguate.\n\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 5 commas; the limit is 3. Split it.\ntifier, every negation, the action order, and the modal force.\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 10.7 (22 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nTASK Decide whether the supplied word, a\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 12.2 (29 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nWord: {{word}} Character offset of the o\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 12.3 (22 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nHard negative — compliant: \"Close the co\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 17.8 (28 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\n- Any suggested replacement must come from\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 9.9 (20 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\n- `evidenceStart` and `evidenceEnd` are ch\n\n1": 1,
-      "ste-ai/sentence-length-procedural\n[deterministic-violation][provisional] Procedural sentence has an estimated Flesch-Kincaid grade level of 10.7 (25 words); the configured limit is grade 7. Split it into shorter, simpler sentences.\nDECIDE `uncertain` when the passage does\n\n1": 1,
-      "ste-ai/unapproved-vocabulary\n[deterministic-violation][provisional] \"additional\" is not approved general vocabulary. Use \"more\".\ny you were trained on and do not invent additional senses.\n\n1": 1
-    }
-  },
   "prompts/v1/one-instruction-per-sentence.md": {
     "total": 22,
     "findings": {
@@ -1395,23 +1376,6 @@
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 13.8 (26 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nHard negative — compliant: \"Data receive\n\n1": 1,
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 21.3 (37 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\n- Any suggested replacement must preserve,\n\n1": 1,
       "ste-ai/sentence-length-procedural\n[deterministic-violation][provisional] Procedural sentence has an estimated Flesch-Kincaid grade level of 13.0 (28 words); the configured limit is grade 7. Split it into shorter, simpler sentences.\nDECIDE `violation` when the construction\n\n1": 1
-    }
-  },
-  "prompts/v1/permitted-part-of-speech.md": {
-    "total": 12,
-    "findings": {
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"DECIDE\" is used before it is introduced. Write the full term followed by \"(DECIDE)\" at the first use.\nDECIDE `violation` when the word's part\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"OF\" is used before it is introduced. Write the full term followed by \"(OF)\" at the first use.\n, is used in one of the PERMITTED PARTS OF SPEECH listed in the request.\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"PARTS\" is used before it is introduced. Write the full term followed by \"(PARTS)\" at the first use.\noffset, is used in one of the PERMITTED PARTS OF SPEECH listed in the request.\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"SPEECH\" is used before it is introduced. Write the full term followed by \"(SPEECH)\" at the first use.\ns used in one of the PERMITTED PARTS OF SPEECH listed in the request.\n\n1": 1,
-      "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"TASK\" is used before it is introduced. Write the full term followed by \"(TASK)\" at the first use.\nTASK Decide whether the supplied word, a\n\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] A semicolon joins two statements. Write two sentences.\ncuit, then test the relay.\" → both verbs; judge only the supplied offset.\n\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 5 commas; the limit is 3. Split it.\nentifier, every negation, action order, and modal force.\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 10.3 (24 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nTASK Decide whether the supplied word, a\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 8.3 (22 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nWord: {{word}} Character offset of the o\n\n1": 1,
-      "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 9.9 (20 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\n- `evidenceStart` and `evidenceEnd` are ch\n\n1": 1,
-      "ste-ai/sentence-length-procedural\n[deterministic-violation][provisional] Procedural sentence has an estimated Flesch-Kincaid grade level of 10.7 (28 words); the configured limit is grade 7. Split it into shorter, simpler sentences.\nDECIDE `violation` when the word's part\n\n1": 1,
-      "ste-ai/sentence-length-procedural\n[deterministic-violation][provisional] Procedural sentence has an estimated Flesch-Kincaid grade level of 9.1 (21 words); the configured limit is grade 7. Split it into shorter, simpler sentences.\nDECIDE `uncertain` when the word's part\n\n1": 1
     }
   },
   "prompts/v1/pronoun-antecedent-ambiguity.md": {

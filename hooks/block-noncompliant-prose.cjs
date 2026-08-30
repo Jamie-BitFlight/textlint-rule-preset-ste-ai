@@ -2,110 +2,63 @@
 'use strict';
 
 /**
- * PreToolUse hook — blocks a Write or Edit call that would introduce a ste-ai
- * (`textlint-rule-preset-ste-ai`) lint finding a markdown file does not already carry.
+ * Claude Code PreToolUse hook for writes to files with the lowercase `.md` suffix.
  *
- * Scope: only engages in a project that actually configures this preset. The nearest
- * `.textlintrc.json` walking up from the target file is authoritative — it must actually enable
- * `preset-ste-ai` (a `"preset-ste-ai": false` entry does not count as enabling it, even though
- * the preset's own name appears in the file); a config further up the tree does not count once a
- * nearer one exists, even when that nearer config disables or omits the preset. Only `.md` files
- * are ever in scope, and only a file `textlint` itself would not skip — a target excluded by
- * `.textlintignore`, whether it exists yet or this write would create it, is left alone the same
- * way an ordinary `textlint` run leaves it alone. A file that already carries pre-existing errors
- * is not blocked from every future edit —
- * only from an edit that introduces a finding the file did not already have. This mirrors
- * `scripts/ci/check-dogfood-lint.mjs`'s own ratchet in this repo ("the ratchet only ever
- * shrinks"), keyed on the exact finding (its rule plus its message) rather than on a raw error
- * count: swapping one finding for a different one blocks the write even when the total count of
- * errors does not rise.
- *
- * Exits code 2 (block + feedback to the agent) when the would-be content carries a genuinely new
- * finding the current on-disk content does not have. Exits code 0 (pass) otherwise, including
- * whenever the check cannot run at all (no textlint config, no textlint binary, any unexpected
- * error) — a hook that fails open never blocks legitimate work.
+ * The hook applies only when the nearest `.textlintrc.json` enables `preset-ste-ai`. It compares
+ * the preset findings for the current and proposed content, then blocks only findings introduced
+ * by the proposed Write or Edit. Every discovery or execution failure fails open.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
+const { createRequire } = require('node:module');
 
-/** How long a single `textlint` invocation may run before this hook gives up on it and fails
- * open. Without this, a hung `textlint` process (or a hung custom rule/plugin it loads) blocks
- * this hook forever, which blocks every subsequent Write/Edit in the session -- reproduced
- * directly with a stub binary that sleeps, see `test/integration/pre-write-compliance-hook.test.ts`. */
-const TEXTLINT_TIMEOUT_MS = 15_000;
+const TEXTLINT_TIMEOUT_MS = 20_000;
+const SIGKILL_GRACE_MS = 2_000;
+const MAX_STDOUT_BYTES = 5 * 1024 * 1024;
 
-/** How long, after `killGroup(child, 'SIGTERM')` fires at `TEXTLINT_TIMEOUT_MS`, this hook waits
- * for `close` before escalating to `SIGKILL`. `SIGTERM` is a request a process (or a rule/plugin
- * it loads) can trap or ignore outright -- reproduced directly with a stub `textlint` that runs
- * `trap '' TERM` before sleeping: the original single-`SIGTERM` timer left the hook alive past its
- * own documented 15s limit, still blocking every subsequent Write/Edit, until an external `timeout`
- * wrapper killed the whole hook process. `SIGKILL` cannot be trapped or ignored by any process, so
- * this grace period is what actually bounds the hook's own worst-case runtime. */
-const SIGKILL_GRACE_MS = 3_000;
+let pendingChild;
 
-/**
- * The `textlint` child process currently running, if any, and the scratch file it is reading
- * from. Read by the `SIGTERM`/`SIGINT` handlers below so a caller that kills this hook (the
- * harness's own hook-level timeout, or a person's Ctrl-C) still gets both the child and the
- * scratch file cleaned up, rather than leaving either behind. A `finally` block alone does not
- * run when the process is killed out from under it.
- *
- * PROVENANCE: an earlier version of this hook used `execFileSync` and relied on a `SIGTERM`/
- * `SIGINT` handler to kill the child and clean up the scratch file on an external kill. That
- * handler was dead code for exactly the scenario it existed to protect: `execFileSync` blocks the
- * whole Node.js event loop synchronously for the duration of the child process, and a registered
- * signal handler cannot run until the event loop is free to process it -- reproduced directly (an
- * isolated repro with a bare `execFileSync('sleep', ['30'])` and a `SIGTERM` handler: the
- * handler's own `console.error` never printed, confirmed still running 4s after the signal).
- * Switching to async `spawn` keeps the event loop free while `textlint` runs, so a signal handler
- * here can actually run -- and can kill the in-flight child directly, not just hope it exits on
- * its own.
- */
-let pending;
-
-/**
- * Kills `child`'s entire process group, not just `child` itself.
- *
- * `child.kill(signal)` only signals the immediate child. `textlint` -- or a rule/plugin it loads,
- * or (in this hook's own test suite) a stub binary standing in for it -- can be a shell script
- * that forks a grandchild (a real `bash script.sh` wrapping `sleep`, in the stub case); that
- * grandchild inherits the same stdout/stderr pipes and keeps them open even after the immediate
- * child (the shell) dies, so Node's `'close'` event -- what both the 15s timeout and cleanup wait
- * on -- never fires. Reproduced directly: a bare `child.kill('SIGTERM')` against a
- * `bash -c 'sleep 120'` child left `'close'` unfired for the full 120s; spawning with
- * `detached: true` (making the child its own process-group leader) and killing the *group* via
- * `process.kill(-child.pid, signal)` instead brought `'close'` back to ~1.5s. `-pid` is the
- * documented `kill`/`process.kill` syntax for "the process group led by this pid," not a typo.
- */
-function killGroup(child, signal) {
+/** Stop the complete child tree where the platform exposes that operation. */
+function terminateTree(child, signal) {
   if (child.pid === undefined) return;
+
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      stdio: 'ignore',
+      timeout: 2_000,
+      windowsHide: true,
+    });
+    if (result.status !== 0 || result.error !== undefined) {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // The process may already have exited.
+      }
+    }
+    return;
+  }
+
   try {
     process.kill(-child.pid, signal);
   } catch {
-    // ESRCH: the group is already gone. Best-effort only.
+    try {
+      child.kill(signal);
+    } catch {
+      // The process may already have exited.
+    }
   }
 }
 
 function cleanupPending() {
-  if (pending === undefined) return;
-  const { scratchPath, child } = pending;
-  pending = undefined;
+  const child = pendingChild;
+  pendingChild = undefined;
   if (child !== undefined && child.exitCode === null && child.signalCode === null) {
-    killGroup(child, 'SIGKILL');
-  }
-  try {
-    fs.unlinkSync(scratchPath);
-  } catch {
-    // Best-effort only -- the file may already be gone.
+    terminateTree(child, 'SIGKILL');
   }
 }
 
-// Registering a handler here suppresses Node's default terminate-immediately behaviour for these
-// two signals, so the process must call `process.exit` itself once cleanup runs. This cannot
-// catch SIGKILL (uncatchable by any process), only the two signals a well-behaved external killer
-// (a timeout wrapper, a shell's Ctrl-C) sends first.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
     cleanupPending();
@@ -121,11 +74,6 @@ function readStdin() {
   }
 }
 
-/** Whether a parsed `.textlintrc.json` actually enables `preset-ste-ai`, rather than merely
- * mentioning it somewhere in the file. `"rules": { "preset-ste-ai": false }` disables the preset
- * the same way it disables any other textlint rule -- a substring search for the preset's own
- * name cannot see that `false`, and would opt a project into this hook even though the project's
- * own config turned the preset off. */
 function presetIsEnabled(raw) {
   let config;
   try {
@@ -134,30 +82,18 @@ function presetIsEnabled(raw) {
     return false;
   }
   if (typeof config !== 'object' || config === null) return false;
-  const rules = config.rules;
-  if (typeof rules !== 'object' || rules === null) return false;
-  if (!('preset-ste-ai' in rules)) return false;
-  return rules['preset-ste-ai'] !== false;
+  if (typeof config.rules !== 'object' || config.rules === null) return false;
+  return config.rules['preset-ste-ai'] !== undefined && config.rules['preset-ste-ai'] !== false;
 }
 
-/** Walk from `startDir` up to the filesystem root. The first readable `.textlintrc.json` found is
- * authoritative and ends the walk immediately -- it is matched if it actually enables
- * `preset-ste-ai`, and treated as no match at all otherwise, even when some ancestor directory
- * further up has a config that does enable it. A nested project's own config, once it exists and
- * can be read, always decides that project's own files; the hook must never fall through to a
- * parent's config the nested project never opted into. Returns `undefined` when no readable
- * config is found at all. */
-function findSteAiConfigDir(startDir) {
+/** The nearest config is authoritative, including when it does not enable this preset. */
+function findSteAiConfig(startDir) {
   let dir = startDir;
   for (;;) {
-    const candidate = path.join(dir, '.textlintrc.json');
-    if (fs.existsSync(candidate)) {
-      try {
-        const raw = fs.readFileSync(candidate, 'utf8');
-        return presetIsEnabled(raw) ? { configDir: dir, configPath: candidate } : undefined;
-      } catch {
-        // Unreadable config: keep walking up rather than treating it as a match.
-      }
+    const configPath = path.join(dir, '.textlintrc.json');
+    if (fs.existsSync(configPath)) {
+      const raw = fs.readFileSync(configPath, 'utf8');
+      return presetIsEnabled(raw) ? { configDir: dir, configPath } : undefined;
     }
     const parent = path.dirname(dir);
     if (parent === dir) return undefined;
@@ -165,262 +101,210 @@ function findSteAiConfigDir(startDir) {
   }
 }
 
-/** Finds the nearest `node_modules/.bin/textlint` walking up from `startDir`. */
-function findTextlintBin(startDir) {
-  let dir = startDir;
-  for (;;) {
-    const candidate = path.join(dir, 'node_modules', '.bin', 'textlint');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
+/**
+ * Resolve both the JavaScript CLI and glob matcher from the selected textlint installation.
+ * Resolving each dependency from its owner supports flat npm and isolated pnpm layouts without
+ * depending on the plugin's own installation directory.
+ */
+function resolveTextlintRuntime(configDir) {
+  const projectRequire = createRequire(path.join(configDir, '__ste_ai_hook__.cjs'));
+  const packageJsonPath = projectRequire.resolve('textlint/package.json');
+  const packageDir = path.dirname(packageJsonPath);
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const binValue =
+    typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin?.textlint;
+  if (typeof binValue !== 'string') throw new Error('textlint does not expose a textlint CLI');
+  if (typeof packageJson.dependencies?.glob !== 'string') {
+    throw new Error('textlint does not declare glob as a direct dependency');
   }
+
+  const cliPath = path.resolve(packageDir, binValue);
+  const relativeCliPath = path.relative(packageDir, cliPath);
+  if (
+    relativeCliPath === '..' ||
+    relativeCliPath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeCliPath)
+  ) {
+    throw new Error('textlint CLI resolves outside its package');
+  }
+
+  const textlintRequire = createRequire(packageJsonPath);
+  const glob = textlintRequire(textlintRequire.resolve('glob'));
+  if (typeof glob.Glob !== 'function' || typeof glob.Ignore !== 'function') {
+    throw new Error('textlint glob dependency does not expose Glob and Ignore');
+  }
+
+  return { cliPath, Glob: glob.Glob, Ignore: glob.Ignore };
 }
 
-/** Resolves `id`'s own directory, starting the search from `searchFromDir`. `undefined` when `id`
- * cannot be found that way. */
-function tryResolvePackageDir(id, searchFromDir) {
-  try {
-    return path.dirname(require.resolve(`${id}/package.json`, { paths: [searchFromDir] }));
-  } catch {
-    return undefined;
-  }
-}
-
-/** Best-effort `require('minimatch')`, resolved by walking the real dependency chain --
- * `configDir` (the target project) to `textlint` to `glob` to `minimatch` -- instead of assuming a
- * flat, hoisted `node_modules` layout, or resolving relative to this hook script's own location.
- * `minimatch` is not a declared dependency of this repository, or of a host project this plugin's
- * hook might run inside; it is only ever present as a transitive dependency of `glob` (itself
- * pulled in by `textlint`).
- *
- * A flat/hoisted install (plain npm, most projects) resolves fine from `configDir` alone, since
- * Node's own resolution already walks every ancestor directory looking for `node_modules`. An
- * isolated install (pnpm's default) does not hoist a transitive dependency at all --
- * `configDir/node_modules` holds only the project's own direct dependencies (`textlint`, if
- * declared), never `textlint`'s own dependency on `glob`, nor `glob`'s own dependency on
- * `minimatch`. Each of those is reachable only by resolving from the OWNING package's own
- * directory: `configDir` finds `textlint`, `textlint`'s own directory finds `glob`, `glob`'s own
- * directory finds `minimatch`. This chain is a strict superset of the flat case -- each hop still
- * falls through to an ancestor walk from wherever the previous hop landed -- so it is the only
- * resolution attempted, and each hop degrades gracefully to the previous directory when it fails,
- * rather than aborting the chain outright.
- *
- * Verified against this repository's own real (flat, hoisted) install, and against a constructed
- * isolated layout (each package's `node_modules` populated only with its own declared
- * dependencies, `minimatch` absent from the project root) that reproduces a bare
- * `require('minimatch')`, and even a `configDir`-only resolution, failing there -- the full chain
- * is what closes it. Returns `undefined` when it cannot be resolved even this way, so the caller
- * can fail open instead of crashing the whole hook on an unmet `require`. */
-function tryLoadMinimatch(configDir) {
-  const textlintDir = tryResolvePackageDir('textlint', configDir) ?? configDir;
-  const globDir = tryResolvePackageDir('glob', textlintDir) ?? textlintDir;
-  try {
-    return require(require.resolve('minimatch', { paths: [globDir] })).minimatch;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Loads `.textlintignore`'s active patterns the same way textlint's own `find-util.js` does:
- * split on newlines, drop blank lines and `#`-comment lines. Returns `[]` when no ignore file
- * exists at `ignoreFilePath` -- textlint's own default, silently absent. */
 function loadIgnorePatterns(ignoreFilePath) {
   let raw;
   try {
     raw = fs.readFileSync(ignoreFilePath, 'utf8');
-  } catch {
-    return [];
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
   }
   return raw.split(/\r?\n/).filter((line) => !/^\s*$/.test(line) && !/^\s*#/.test(line));
 }
 
-/** Whether `realFilePath` is excluded by `.textlintignore` the same way an ordinary
- * `textlint <file>` invocation would skip it -- matched directly against the patterns
- * `.textlintignore` declares, plus textlint's own two built-in defaults (`.git`, `node_modules`),
- * rather than by asking the real CLI to lint the path.
- *
- * textlint's own ignore matching (`find-util.js`'s `searchFiles`, which this mirrors) is `glob`'s
- * `ignore` option -- `minimatch` under the hood -- applied only to paths a filesystem walk already
- * found. A path that does not exist on disk yet can never be returned by that walk, so asking the
- * real CLI has no way to answer "would this not-yet-created path be ignored": a brand-new file's
- * own first write was previously never checked for ignore status, only an edit to a file that
- * already exists was. Matching the patterns directly, independent of the target existing,
- * sidesteps that walk entirely and closes that gap.
- *
- * Verified directly against the real CLI for every case this repository's own `.textlintignore`
- * declares before relying on this: `examples/sample.md` and `examples/rule-pack/sample.md` both
- * agree ignored; `README.md` and `docs/architecture.md` both agree not ignored.
- *
- * `nonegate: true` matches `glob`'s own ignore matching exactly -- both `glob.js` and its
- * `ignore.js` helper hardcode that option on every ignore-pattern `Minimatch` instance they build.
- * Without it, minimatch's default negation semantics turn a `.textlintignore` entry like
- * `!kept.md` into "ignore everything except `kept.md`", the opposite of what `glob`'s own (and
- * therefore textlint's own) ignore matching does with that same line: treat the leading `!` as a
- * literal character in a literal pattern, which no ordinary filename starts with. Verified
- * directly: `minimatch('other.md', '!kept.md')` is `true` without `nonegate`, `false` with it --
- * matching `glob`'s hardcoded choice. */
-function isIgnoredByTextlint(cwd, minimatchSearchDir, realFilePath) {
-  const minimatch = tryLoadMinimatch(minimatchSearchDir);
-  if (minimatch === undefined) return false;
-  const relativePath = path.relative(cwd, realFilePath).split(path.sep).join('/');
+/**
+ * Classify the real target with glob's public Ignore implementation, which is the matcher used by
+ * the pinned textlint CLI. `childrenIgnored` models walker pruning without treating a trailing
+ * slash such as `generated/` as if it were the recursive pattern `generated/**`.
+ */
+function isIgnoredByTextlint(runtime, lintCwd, realFilePath) {
   const patterns = [
     '**/.git/**',
     '**/node_modules/**',
-    ...loadIgnorePatterns(path.join(cwd, '.textlintignore')),
+    ...loadIgnorePatterns(path.join(lintCwd, '.textlintignore')),
   ];
-  // `glob`'s own `Ignore#ignored` (what textlint's ignore matching actually walks through) checks
-  // every directory level it descends through on the way to a file, not only the file's own full
-  // path -- a directory-style pattern like `generated/` only ever matches literally against a
-  // *directory* segment's own trailing-slash form during that walk, so `generated/doc.md` is
-  // excluded because `generated` itself matched, never because the full file path did. Matching
-  // only the full `relativePath` (as this function did before) therefore misses every
-  // directory-style pattern entirely -- reproduced directly: `minimatch('generated/doc.md',
-  // 'generated/')` is `false`, though a real `textlint` run with that ignore pattern skips every
-  // file beneath `generated/`. Testing every path prefix (each ancestor directory, plus the full
-  // path itself) against each pattern reproduces that walk without needing to actually walk the
-  // filesystem.
-  const segments = relativePath.split('/');
-  const candidates = [];
-  for (let i = 1; i <= segments.length; i++) {
-    const prefix = segments.slice(0, i).join('/');
-    candidates.push(prefix, `${prefix}/`);
+  const globber = new runtime.Glob('.', {
+    cwd: lintCwd,
+    absolute: true,
+    nodir: true,
+    dot: true,
+  });
+  const ignore = new runtime.Ignore(patterns, globber);
+  const target = globber.scurry.cwd.resolve(realFilePath);
+  if (ignore.ignored(target)) return true;
+
+  for (let ancestor = target.parent; ancestor !== undefined; ancestor = ancestor.parent) {
+    if (ignore.childrenIgnored(ancestor)) return true;
+    if (ancestor === globber.scurry.cwd) break;
+    if (ancestor.parent === ancestor) break;
   }
-  return patterns.some((pattern) =>
-    candidates.some((candidate) => minimatch(candidate, pattern, { dot: true, nonegate: true })),
-  );
+  return false;
 }
 
-/**
- * Runs `textlint` against `content` (written to a scratch file beside `realFilePath` so relative
- * config/plugin resolution behaves the same as linting the real file) and returns its findings.
- *
- * Uses async `spawn` rather than `execFileSync` specifically so `TEXTLINT_TIMEOUT_MS` and an
- * external signal can both actually interrupt a hung child -- see {@link pending}'s doc comment.
- * `detached: true` plus {@link killGroup} is what makes that interruption reach a child that
- * itself forks a grandchild (a shell-script `textlint` shim, or a hung rule's own subprocess).
- * `SIGKILL_GRACE_MS` is what makes the timeout bound this function's real runtime even when the
- * child (or something it loads) traps or ignores the initial `SIGTERM`.
- */
-function countErrors(textlintBin, configPath, realFilePath, content) {
-  const dir = path.dirname(realFilePath);
-  const scratchPath = path.join(
-    dir,
-    `.ste-ai-hook-${process.pid}-${Math.random().toString(36).slice(2)}.md`,
-  );
-  fs.writeFileSync(scratchPath, content, 'utf8');
-
-  // The scratch file's own synthetic name can accidentally collide with a `.textlintignore`
-  // pattern the real target never matches (a dotfile-style pattern such as `.*.md`, for one) --
-  // reproduced directly: content that reports `ste-ai/punctuation-constraints` when linted as
-  // `doc.md` silently reports nothing when linted as the scratch file's own hidden name under
-  // that pattern. `isIgnoredByTextlint` already decided ignore status against the *real* target
-  // path before this function is ever called, so the CLI's own independent ignore-file matching
-  // on the scratch path itself must never re-decide it -- pointing `--ignore-path` at a path this
-  // hook never creates disables that matching for this invocation without disabling ignore
-  // handling for any other `textlint` run. Verified directly: the same content the real CLI
-  // reports a finding for under its true name still reports it when linted this way, where the
-  // default `--ignore-path` would have silently reported none.
-  const noIgnorePath = `${scratchPath}.no-ignore-file`;
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      textlintBin,
-      ['--config', configPath, '--ignore-path', noIgnorePath, '--format', 'json', scratchPath],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true,
-      },
+function parseErrors(jsonOutput) {
+  const results = JSON.parse(jsonOutput);
+  if (!Array.isArray(results)) throw new Error('textlint JSON output is not an array');
+  return results.flatMap((result) => {
+    const messages = Array.isArray(result?.messages) ? result.messages : [];
+    return messages.filter(
+      (message) => message.severity === 2 && message.ruleId?.startsWith('ste-ai/'),
     );
-    pending = { scratchPath, child };
-
-    const clearTimers = () => {
-      clearTimeout(termTimer);
-      clearTimeout(killTimer);
-    };
-
-    let stdout = '';
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.on('error', (error) => {
-      clearTimers();
-      cleanupPending();
-      reject(error);
-    });
-    child.on('close', () => {
-      clearTimers();
-      cleanupPending();
-      // textlint exits non-zero when it finds any error-severity message; its JSON report is
-      // still on stdout in that case, and an empty stdout (a crash before any report was
-      // printed) is the only case this hook cannot make sense of.
-      if (stdout.trim() === '') {
-        reject(new Error(`textlint produced no output for ${scratchPath}`));
-        return;
-      }
-      try {
-        resolve(parseErrors(stdout));
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    let killTimer;
-    const termTimer = setTimeout(() => {
-      killGroup(child, 'SIGTERM');
-      // A trapped or ignored SIGTERM leaves `close` unfired forever -- reproduced directly with a
-      // stub `textlint` running `trap '' TERM` before sleeping. SIGKILL cannot be trapped, so this
-      // second timer is what actually bounds the wait once SIGTERM alone does not end it.
-      killTimer = setTimeout(() => {
-        killGroup(child, 'SIGKILL');
-      }, SIGKILL_GRACE_MS);
-    }, TEXTLINT_TIMEOUT_MS);
   });
 }
 
-/** Every rule this preset registers reports under the `ste-ai/` prefix -- textlint's own default
- * naming for a preset configured under the literal key `preset-ste-ai` (which {@link
- * presetIsEnabled} requires; there is no alias to account for). A `.textlintrc.json` can enable
- * another, unrelated error-severity rule alongside this preset; without this scope, that rule's
- * own findings counted as this hook's business and could block a write over debt this preset
- * never reported. Reproduced directly with a stub result containing only an `other-rule` finding:
- * unscoped, the hook treated it as a blocking finding. */
-function parseErrors(jsonOutput) {
-  const results = JSON.parse(jsonOutput);
-  const messages = Array.isArray(results) ? (results[0]?.messages ?? []) : [];
-  return messages.filter((m) => m.severity === 2 && m.ruleId?.startsWith('ste-ai/'));
+/** Lint in-memory content under the real target identity without writing a temporary file. */
+function countErrors(runtime, configPath, lintCwd, realFilePath, content) {
+  // textlint 15 treats a truly empty stdin as "no input" and prints help instead of JSON. An
+  // empty document cannot contain a finding, so its exact result is known without a subprocess.
+  if (content.length === 0) return Promise.resolve([]);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        runtime.cliPath,
+        '--config',
+        configPath,
+        '--format',
+        'json',
+        '--no-color',
+        '--stdin',
+        '--stdin-filename',
+        realFilePath,
+      ],
+      {
+        cwd: lintCwd,
+        stdio: ['pipe', 'pipe', 'ignore'],
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+      },
+    );
+    pendingChild = child;
+
+    let stdout = '';
+    let stdoutBytes = 0;
+    let settled = false;
+    let timedOut = false;
+    let termTimer;
+    let killTimer;
+
+    const clearState = () => {
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
+      if (pendingChild === child) pendingChild = undefined;
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      clearState();
+      reject(error);
+    };
+
+    child.stdout.on('data', (chunk) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > MAX_STDOUT_BYTES) {
+        terminateTree(child, 'SIGKILL');
+        fail(new Error('textlint produced too much output'));
+        return;
+      }
+      stdout += chunk;
+    });
+    child.stdin.on('error', (error) => {
+      if (error?.code !== 'EPIPE') {
+        terminateTree(child, 'SIGKILL');
+        fail(error);
+      }
+    });
+    child.on('error', fail);
+    child.on('close', (code, signal) => {
+      if (settled) return;
+      if (timedOut) {
+        fail(new Error('textlint timed out'));
+        return;
+      }
+      if ((code !== 0 && code !== 1) || signal !== null || stdout.trim() === '') {
+        fail(new Error('textlint did not produce a complete lint report'));
+        return;
+      }
+      try {
+        const errors = parseErrors(stdout);
+        settled = true;
+        clearState();
+        resolve(errors);
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+    termTimer = setTimeout(() => {
+      timedOut = true;
+      terminateTree(child, 'SIGTERM');
+      killTimer = setTimeout(() => {
+        terminateTree(child, 'SIGKILL');
+        child.stdin.destroy();
+        child.stdout.destroy();
+        fail(new Error('textlint timed out'));
+      }, SIGKILL_GRACE_MS);
+    }, TEXTLINT_TIMEOUT_MS);
+
+    child.stdin.end(content);
+  });
 }
 
-/**
- * Which `after` messages are genuinely new relative to `before`, as a multiset diff keyed on
- * `ruleId` + `message` (never on line/column, which shift for every pre-existing finding once the
- * edit changes any earlier line — comparing raw counts or naively slicing the tail of the sorted
- * `after` list, both tried first, reported shifted PRE-EXISTING findings as "new" and missed the
- * actual new one; verified directly by inserting a 20-comma run-on sentence into a file with
- * pre-existing debt and diffing the real messages by hand).
- */
 function diffNewMessages(before, after) {
   const beforeCounts = new Map();
-  for (const m of before) {
-    const key = JSON.stringify([m.ruleId, m.message]);
+  for (const message of before) {
+    const key = JSON.stringify([message.ruleId, message.message]);
     beforeCounts.set(key, (beforeCounts.get(key) ?? 0) + 1);
   }
-  const seenSoFar = new Map();
-  const newOnes = [];
-  for (const m of after) {
-    const key = JSON.stringify([m.ruleId, m.message]);
-    const occurrence = (seenSoFar.get(key) ?? 0) + 1;
-    seenSoFar.set(key, occurrence);
-    if (occurrence > (beforeCounts.get(key) ?? 0)) newOnes.push(m);
-  }
-  return newOnes;
+
+  const seen = new Map();
+  return after.filter((message) => {
+    const key = JSON.stringify([message.ruleId, message.message]);
+    const occurrence = (seen.get(key) ?? 0) + 1;
+    seen.set(key, occurrence);
+    return occurrence > (beforeCounts.get(key) ?? 0);
+  });
 }
 
-/** Simulates what `Edit` would produce, without touching the real file. */
 function applyEditInMemory(currentContent, oldString, newString, replaceAll) {
-  if (replaceAll === true) {
-    return currentContent.split(oldString).join(newString);
-  }
+  if (replaceAll === true) return currentContent.split(oldString).join(newString);
   const index = currentContent.indexOf(oldString);
   if (index === -1) return undefined;
   return (
@@ -430,109 +314,78 @@ function applyEditInMemory(currentContent, oldString, newString, replaceAll) {
 
 async function main() {
   const raw = readStdin();
-  if (!raw.trim()) process.exit(0);
+  if (!raw.trim()) return;
 
   let event;
   try {
     event = JSON.parse(raw);
   } catch {
-    process.exit(0);
     return;
   }
-  // `JSON.parse` accepts `null`, a number, a string, or an array as top-level valid JSON -- none
-  // of those throw, but a bare property access on any of them either throws (on `null`) or is
-  // simply always `undefined` (on the others). Reproduced directly: `echo 'null' | node
-  // hooks/block-noncompliant-prose.cjs` used to throw an uncaught TypeError and exit 1, not the
-  // documented fail-open exit 0.
-  if (typeof event !== 'object' || event === null) {
-    process.exit(0);
-    return;
-  }
+  if (typeof event !== 'object' || event === null) return;
 
-  const toolName = event.tool_name ?? '';
-  if (toolName !== 'Write' && toolName !== 'Edit') {
-    process.exit(0);
-    return;
-  }
+  const toolName = event.tool_name;
+  if (toolName !== 'Write' && toolName !== 'Edit') return;
 
-  const filePath = event.tool_input?.file_path;
-  if (typeof filePath !== 'string' || !filePath.toLowerCase().endsWith('.md')) {
-    process.exit(0);
-    return;
-  }
-
-  const found = findSteAiConfigDir(path.dirname(filePath));
-  if (found === undefined) {
-    process.exit(0);
-    return;
-  }
-
-  const textlintBin = findTextlintBin(found.configDir);
-  if (textlintBin === undefined) {
-    process.exit(0);
-    return;
-  }
-
-  if (isIgnoredByTextlint(process.cwd(), found.configDir, filePath)) {
-    process.exit(0);
-    return;
-  }
-
-  const currentContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-
-  let wouldBeContent;
-  if (toolName === 'Write') {
-    wouldBeContent = event.tool_input?.content;
-  } else {
-    const oldString = event.tool_input?.old_string;
-    const newString = event.tool_input?.new_string;
-    if (typeof oldString !== 'string' || typeof newString !== 'string') {
-      process.exit(0);
-      return;
-    }
-    wouldBeContent = applyEditInMemory(
-      currentContent,
-      oldString,
-      newString,
-      event.tool_input?.replace_all,
-    );
-  }
-  if (typeof wouldBeContent !== 'string') {
-    process.exit(0);
+  const suppliedFilePath = event.tool_input?.file_path;
+  if (typeof suppliedFilePath !== 'string' || !suppliedFilePath.endsWith('.md')) {
     return;
   }
 
   try {
-    const before = await countErrors(textlintBin, found.configPath, filePath, currentContent);
-    const after = await countErrors(textlintBin, found.configPath, filePath, wouldBeContent);
-    const newOnes = diffNewMessages(before, after);
+    const eventCwd =
+      typeof event.cwd === 'string' && path.isAbsolute(event.cwd) ? event.cwd : process.cwd();
+    const filePath = path.resolve(eventCwd, suppliedFilePath);
+    const found = findSteAiConfig(path.dirname(filePath));
+    if (found === undefined) return;
 
-    if (newOnes.length > 0) {
-      const lines = newOnes
-        .slice(0, 10)
-        .map((m) => `  ${m.line}:${m.column}  ${m.message}  (${m.ruleId})`);
-      process.stderr.write(
-        `${[
-          '--- ste-ai: this edit adds new lint findings ---',
-          '',
-          `File: ${filePath}`,
-          `Findings before: ${before.length}, after: ${after.length}`,
-          '',
-          ...lines,
-          '',
-          'Fix these before writing — this project requires agent-authored prose to pass its own',
-          'linter in advance rather than leaving new debt for a later pass.',
-          '--- End ---',
-        ].join('\n')}\n`,
+    const runtime = resolveTextlintRuntime(found.configDir);
+    if (isIgnoredByTextlint(runtime, eventCwd, filePath)) return;
+
+    const currentContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+    let wouldBeContent;
+    if (toolName === 'Write') {
+      wouldBeContent = event.tool_input?.content;
+    } else {
+      const oldString = event.tool_input?.old_string;
+      const newString = event.tool_input?.new_string;
+      if (typeof oldString !== 'string' || typeof newString !== 'string') return;
+      wouldBeContent = applyEditInMemory(
+        currentContent,
+        oldString,
+        newString,
+        event.tool_input?.replace_all,
       );
-      process.exit(2);
-      return;
     }
-    process.exit(0);
+    if (typeof wouldBeContent !== 'string') return;
+
+    const before = await countErrors(runtime, found.configPath, eventCwd, filePath, currentContent);
+    const after = await countErrors(runtime, found.configPath, eventCwd, filePath, wouldBeContent);
+    const newFindings = diffNewMessages(before, after);
+    if (newFindings.length === 0) return;
+
+    const lines = newFindings
+      .slice(0, 10)
+      .map(
+        (finding) => `  ${finding.line}:${finding.column}  ${finding.message}  (${finding.ruleId})`,
+      );
+    process.stderr.write(
+      `${[
+        '--- ste-ai: this edit adds new lint findings ---',
+        '',
+        `File: ${filePath}`,
+        `Findings before: ${before.length}, after: ${after.length}`,
+        '',
+        ...lines,
+        '',
+        'Fix these before writing. This project requires agent-authored prose to pass its own',
+        'linter before the write lands.',
+        '--- End ---',
+      ].join('\n')}\n`,
+    );
+    process.exitCode = 2;
   } catch {
-    // Any failure to run the check (missing deps, unreadable temp dir, malformed output, ...)
-    // fails open: never block a write because the check itself broke.
-    process.exit(0);
+    // Never block a write because discovery, ignore matching, or lint execution failed.
   }
 }
 

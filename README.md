@@ -149,16 +149,17 @@ in the underlying analysis. Tracked as
 
 **4. A blocking Claude Code `PreToolUse` hook gating an agent's own file writes — built, shipped
 as this repository's own plugin**. This repository is also a Claude Code plugin (see
-[`PLUGIN.md`](PLUGIN.md)). Its hook blocks `Write` and `Edit` when the would-be markdown content
-would carry a lint finding the file does not already have. A swapped finding blocks the write too,
-even when the total error count stays flat. The plugin also ships a way-of-working compliance
-agent and a pre-push skill.
+[`PLUGIN.md`](PLUGIN.md)). Its hook blocks `Write` and `Edit` for lowercase `.md` files when the
+would-be content carries a lint finding the file does not already have. A swapped finding blocks
+the write too, even when the total error count stays flat. The plugin also ships a namespaced,
+read-only way-of-working compliance reviewer and pre-push skill.
 
 This is a different integration shape from surface 3. Surface 3 would gate outgoing chat text
 before it is sent, over stdin. That gap is still open, still tracked under issue #26. This hook
 instead gates a file write already headed for disk. It checks the write through the real
-`textlint` binary, against a scratch copy of the would-be content. It does not touch the stdin gap
-surface 3 needs.
+`textlint` CLI, sending the would-be content over stdin while preserving the real target path with
+`--stdin-filename`. It does not create a scratch file. This hook-specific stdin integration does
+not provide the general-purpose `ste-ai` CLI stdin surface that issue #26 tracks.
 
 ## The rules
 

@@ -1,5 +1,5 @@
 {
-  "description": "Blocks an agent's own Write/Edit calls that would introduce a ste-ai lint finding a markdown file does not already carry.",
+  "description": "Blocks Write/Edit calls that add a ste-ai lint finding to a lowercase .md file.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,8 +7,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/block-noncompliant-prose.cjs\"",
-            "timeout": 45
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/block-noncompliant-prose.cjs"],
+            "timeout": 60
           }
         ]
       }

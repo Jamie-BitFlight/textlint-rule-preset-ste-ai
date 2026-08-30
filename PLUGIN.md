@@ -1,60 +1,85 @@
 # ste-ai-compliance plugin
 
-This repository is also a Claude Code plugin. Each part below helps in a project that uses the
-`preset-ste-ai` textlint preset. It ships a compliance-reviewing agent. It ships a pre-push skill
-that runs the agent. It ships a hook that enforces the preset in advance.
+This repository can act as a Claude Code plugin. Use it in projects that enable the
+`preset-ste-ai` textlint preset. The plugin provides a compliance reviewer. It also provides a
+pre-push skill and a best-effort write hook for lowercase `.md` files.
 
-## What it provides
+## Components
 
-- **`agents/way-of-working-compliance-reviewer.md`** — a haiku-model agent. It reviews a diff. The
-  diff can be a pull request diff. It can also be the current staged and unstaged changes. The
-  agent walks each changed file's directory ancestry. It gathers every governing rule file along
-  that ancestry, not only the nearest one. A deeper file's instruction wins only an actual
-  conflict with a shallower file. It reports breaches as a terse bullet list. It does not perform
-  a general code review.
-- **`skills/pre-push-review/SKILL.md`** — a user-invocable skill. It uses `context: fork`. It
-  finds the current change set. It forks into the agent above. It relays that agent's report. It
-  combines two sources — the branch's own committed-but-unpushed history, and the working tree —
-  rather than checking only one.
-- **`hooks/block-noncompliant-prose.cjs`** — a `PreToolUse` hook. It watches `Write` and `Edit`.
-  It only engages for a markdown file. That file's project also needs a nearby `.textlintrc.json`
-  that configures `preset-ste-ai`. The hook lints the file's current content. It also lints the
-  write's would-be content. It blocks the write only when the write would add errors the file did
-  not already have. The block uses exit code 2. It reports the specific new findings. A file with
-  pre-existing debt is never blocked from an unrelated edit. Only a write that adds new errors of
-  its own gets blocked.
+- `skills/pre-push-review/SKILL.md` runs a namespaced, read-only plugin reviewer in a foreground
+  fork. Its bundled preparer collects committed, staged, unstaged, and untracked input with fixed
+  argument arrays. It keeps Claude and Cursor scope rules distinct. It reports uncertain Apply
+  Intelligently rules and conflicting Claude memory as incomplete.
+- `hooks/block-noncompliant-prose.cjs` checks Claude Code `Write` and `Edit` calls for lowercase
+  `.md` files. The nearest `.textlintrc.json` must enable `preset-ste-ai`. The hook compares the
+  current findings with the proposed findings. It exits with code 2 only when the write adds a
+  finding.
 
-## Why a hook, not just a skill
+The hook sends content to textlint over stdin. It passes the real target path through
+`--stdin-filename`. It does not create a scratch copy. It does not modify the target. The hook
+prechecks `.textlintignore` with the target textlint installation's glob matcher. This precheck is
+necessary because textlint stdin mode does not apply that file.
 
-A skill only runs when invoked. A hook runs automatically. That difference is the whole point
-here. An agent authoring markdown in a `preset-ste-ai` project cannot introduce a new lint error
-through `Write` or `Edit`. A human can still work around the hook, but the default is enforced.
-This matches the standard this repository holds itself to: comply with the linter in advance.
-Failing that, comply with its findings before the write lands, not after.
+## Enforcement boundary
 
-## A known tradeoff in the compliance-reviewing agent
+The write hook is fail-open. A missing package allows the write. An unsupported dependency allows
+the write. An unreadable policy also allows the write. Timeouts and malformed output have the same
+result. This behavior prevents a broken check from blocking all authoring. The hook is a guardrail,
+not an absolute guarantee. Run the project's ordinary textlint check before merging. Run its
+continuous integration checks too.
 
-The agent reads diffs and rule files. A reviewed change set can control that content. The agent
-also holds a `Bash` grant. It needs that grant to run `git status`, `git diff`, and `git branch`.
-It also needs the grant for a read-only `gh pr` lookup. Either kind runs only when nothing hands
-the agent a diff directly.
+The hook executes the target project's textlint command-line interface (CLI). It also loads that
+project's configuration and rules. Enable the hook only in a trusted workspace.
 
-Claude Code's own tool-grant syntax has a limit here. It cannot scope `Bash` down to only those
-read-only commands, inside an agent's frontmatter. Every narrower grant tried here either failed
-plugin validation, or would not have enforced anything.
+The hook needs a Node-resolvable textlint installation. Textlint must declare a compatible `glob`
+dependency. That dependency must expose the public `Glob` and `Ignore` APIs. Integration tests
+cover the textlint version pinned by this repository. The hook checks the APIs at runtime. It fails
+open when they are unavailable. The preset itself keeps its wider peer range.
 
-The agent's own prompt carries an explicit instruction instead. It says to treat all reviewed
-content as data, never as instructions. It says never to run any command beyond those read-only
-ones. That instruction is not a technical enforcement boundary, though. A crafted diff or rule
-file could still try to make the model run an unintended command.
+Yarn Plug'n'Play projects need the `node-modules` linker. This setting lets the external plugin
+process resolve target packages.
 
-Weigh that risk before enabling `permissionMode: dontAsk` on a fork of this agent. Weigh it
-especially in a setting where an untrusted party can shape the diffs this agent reviews. Watch
-this agent's `Bash` calls instead, when that risk applies.
+## Reviewer trust boundary
 
-## Installing this plugin elsewhere
+An untrusted contributor can control diffs, paths, commit metadata, and instruction files. A fixed
+Node.js preparer passes each Git or GitHub value through an argument array without a shell. It
+serializes untracked paths and text as JSON. It also takes separate `HEAD` and workspace snapshots
+of changed files and governing instructions. The reviewer uses a plugin-scoped name, so a project
+agent named `Explore` cannot replace it. Its tool allowlist contains only `Read` for a Claude-created
+output-spill file.
 
-Point Claude Code's plugin configuration at this repository. A marketplace entry for it works
-too. The hook carries no dependency on this repository once installed. It locates the target
-project's own `.textlintrc.json` at hook time. It locates that project's own
-`node_modules/.bin/textlint` the same way.
+The reviewer covers shared project instructions. It excludes `CLAUDE.local.md` and other personal,
+machine-local instructions, including imports that resolve to `CLAUDE.local.md`. The preparer
+follows an import or symbolic link only when the canonical target is shared. The target must also
+stay inside the repository. External targets and Cursor `@filename` references are unsupported.
+Unreadable evidence, ambiguous applicability, and conflicting Claude memory produce an incomplete
+result. The preparer replaces JSON that exceeds its serialized-output limit with a small incomplete
+result. The limit leaves working context for the Haiku reviewer.
+
+These boundaries prevent reviewed filenames from becoming shell syntax. They do not turn a model
+review into a formal proof. Claude Code loads project memory into custom agents. The reviewer treats
+that memory as untrusted. The tool allowlist prevents commands and writes. Adversarial text can
+still influence model output. Treat the report as an advisory check. Review its cited evidence
+before relying on a clean result.
+
+## Compatibility
+
+The pre-push skill needs a Portable Operating System Interface (POSIX) environment. It also needs
+Claude Code version `2.1.218` or later. That version supports the `background` skill field. The
+bundled preparer needs `/bin/sh`, Node.js 22 or later, Git, and an authenticated GitHub CLI. The
+Node.js executable must be a non-symlink on an absolute `PATH` entry outside the reviewed
+repository. Native Windows sessions are unsupported.
+
+## Local installation
+
+Clone this repository. Then launch Claude Code with the plugin directory:
+
+```bash
+claude --plugin-dir /absolute/path/to/textlint-rule-preset-ste-ai
+```
+
+Use the repository root as the path. The plugin manifest and component directories are rooted
+there. Keep this plugin checkout separate from an untrusted repository under review. Loading the
+plugin from the reviewed checkout would let that checkout replace the preparer itself. A future
+marketplace entry can provide persistent installation. This repository does not currently claim
+one.

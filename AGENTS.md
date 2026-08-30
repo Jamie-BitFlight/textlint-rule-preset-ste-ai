@@ -111,7 +111,8 @@ Set the `model` parameter explicitly on every delegated call. This covers `Agent
 `agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
 session model.
 
-- `haiku` — mechanical bulk work. Renames, boilerplate, format conversion, and log triage fit here.
+- `haiku` — mechanical bulk work. Renames, boilerplate, format conversion, and log triage fit
+  here.
 - `sonnet` — the default tier. It suits well-specified implementation with clear acceptance
   criteria.
 - `opus` — genuinely tricky work. Concurrency, subtle algorithms, adversarial verify panels, and
@@ -209,8 +210,9 @@ Reach for it too when a task benefits from a pipeline or a judge panel.
 
 Opt-in is a standing rule. Invoke the tool directly when ultracode is on for the session.
 Three signals turn ultracode on. The user types the "ultracode" keyword. The user sets the
-toggle. The user asks for orchestration in their own words. Otherwise propose the workflow first. One or two sentences
-covering the rough shape and cost is enough. Wait for the user's reply. Their "yes" is the opt-in.
+toggle. The user asks for orchestration in their own words. Otherwise propose the workflow first.
+One or two sentences covering the rough shape and cost is enough. Wait for the user's reply.
+Their "yes" is the opt-in.
 
 Every `agent()` call inside a workflow script must set the `model` parameter explicitly. Choose
 the tier per "Delegating to subagents" above, with one tightening. Never use a `fable` agent in a

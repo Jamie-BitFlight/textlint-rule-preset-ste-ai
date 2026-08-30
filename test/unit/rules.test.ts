@@ -471,11 +471,31 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     // the per-bucket limit (500) and the total pair-count budget (500,000) can still be expensive
     // if its keys are individually very long. 500 keys of 201 code points each: 124,750 pairs,
     // under every count-based limit, but 124,750 * 201 code points of matching work exceeds
-    // MAX_TOTAL_COMPARISON_WORK -- confirmed directly, before this bound existed, to take multiple
-    // seconds for keys an order of magnitude longer than this.
+    // MAX_TOTAL_COMPARISON_WORK, so this reproduces the shape the budget exists to reject rather
+    // than asserting a specific measured duration that would drift from the real cost over time.
     const additional: Record<string, string[]> = {};
     for (let i = 0; i < 500; i++) {
       const key = `${String(i).padStart(3, '0')}${'x'.repeat(198)}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
+  it('charges the work budget for uncollapsed whitespace, not the bucketed length (Codex review)', () => {
+    // codePointLength collapses a whitespace run to one unit for bucketing, matching how
+    // sameTermSpan's \s+ actually treats it -- but escapeForMatching/sameTermSpan still scan every
+    // raw whitespace character on each comparison, so a key built mostly of whitespace bucketed as
+    // short. Charging the work budget off that collapsed length let this shape slip under it: 500
+    // keys of a letter, three digits, three thousand spaces, and "x" all bucket at the same short
+    // collapsed length (6), but the raw length actually scanned per comparison is over 3,000.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String.fromCharCode(65 + (i % 26))}${String(i).padStart(3, '0')}${' '.repeat(3000)}x`;
       additional[key] = [`v${i}`];
     }
 

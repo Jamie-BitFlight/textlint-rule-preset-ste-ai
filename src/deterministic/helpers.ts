@@ -130,12 +130,19 @@ const MAX_TOTAL_COMPARISONS = 500_000;
  * {@link MAX_TOTAL_COMPARISONS} treats every `sameTermSpan` comparison as equal-cost, but a regex
  * match's cost scales with the length of the strings it matches — Codex's review on this PR found
  * that a bucket comfortably within the pair-count budget can still be expensive if its keys are
- * individually very long: every key sharing one length bucket, so the whole bucket's cost scales
- * with `pairs × length`, not `pairs` alone. `test/unit/rules.test.ts`'s "bounds total cost by key
- * length" test reproduces the shape (few hundred same-bucket keys, each long) directly, rather
- * than this comment committing a one-off measurement. Once a bucket's own or the running weighted
- * total would exceed this budget, it is reported as {@link CaseConflictScan.unchecked} the same
- * way as the other two limits.
+ * individually very long, so the whole bucket's cost scales with `pairs × length`, not `pairs`
+ * alone.
+ *
+ * The length used is each bucket's *raw*, un-whitespace-collapsed code-point count (tracked
+ * alongside the bucket during grouping), not {@link codePointLength} — a follow-up round of the
+ * same review found that `codePointLength` collapsing a long whitespace run to one unit made a key
+ * built almost entirely of whitespace bucket as short, even though `escapeForMatching`/
+ * {@link sameTermSpan} still scan every one of those whitespace characters on every comparison.
+ * Charging the collapsed length would have let exactly that shape bypass this budget.
+ * `test/unit/rules.test.ts`'s "bounds total cost by key length" and "...uncollapsed whitespace"
+ * tests reproduce both shapes directly, rather than this comment committing a one-off measurement.
+ * Once a bucket's own or the running weighted total would exceed this budget, it is reported as
+ * {@link CaseConflictScan.unchecked} the same way as the other two limits.
  */
 const MAX_TOTAL_COMPARISON_WORK = 25_000_000;
 
@@ -185,25 +192,29 @@ export function findCaseConflicts<T>(
 ): CaseConflictScan {
   const items = Object.entries(entries);
 
-  const byLength = new Map<number, [key: string, value: T][]>();
+  const byLength = new Map<number, { bucket: [key: string, value: T][]; maxRawLength: number }>();
   for (const item of items) {
     const length = codePointLength(item[0]);
-    const bucket = byLength.get(length);
-    if (bucket === undefined) byLength.set(length, [item]);
-    else bucket.push(item);
+    const rawLength = Array.from(item[0].trim()).length;
+    const entry = byLength.get(length);
+    if (entry === undefined) byLength.set(length, { bucket: [item], maxRawLength: rawLength });
+    else {
+      entry.bucket.push(item);
+      if (rawLength > entry.maxRawLength) entry.maxRawLength = rawLength;
+    }
   }
 
   const groups: [key: string, value: T][][] = [];
   const unchecked: UncheckedGroup[] = [];
   let comparisonsSpent = 0;
   let workSpent = 0;
-  for (const [length, bucket] of byLength.entries()) {
+  for (const { bucket, maxRawLength } of byLength.values()) {
     if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) {
       unchecked.push({ keys: bucket.map(([key]) => key), reason: 'bucket-too-large' });
       continue;
     }
     const bucketCost = (bucket.length * (bucket.length - 1)) / 2;
-    const bucketWork = bucketCost * length;
+    const bucketWork = bucketCost * maxRawLength;
     if (
       comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS ||
       workSpent + bucketWork > MAX_TOTAL_COMPARISON_WORK

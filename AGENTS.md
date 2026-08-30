@@ -205,8 +205,9 @@ there is nothing to lose but the empty directory.
 ## Dynamic workflows (`Workflow` tool)
 
 This section applies to every session, on any model. A dynamic workflow is not something to avoid.
-Reach for the `Workflow` tool when a task has three or more independent parallelizable subtasks.
-Reach for it too when a task benefits from a pipeline or a judge panel.
+Consider the `Workflow` tool when a task has three or more independent parallelizable subtasks.
+Consider it too when a task benefits from a pipeline or a judge panel. Then apply the opt-in rule
+below, before invoking it.
 
 Opt-in is a standing rule. Invoke the tool directly when ultracode is on for the session.
 Three signals turn ultracode on. The user types the "ultracode" keyword. The user sets the

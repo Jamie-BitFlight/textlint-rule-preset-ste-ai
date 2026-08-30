@@ -464,7 +464,14 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
     const elapsedMs = Date.now() - started;
 
-    expect(elapsedMs).toBeLessThan(2000);
+    // Every one of these 25,000 keys also pays a fixed per-key self-test cost now (see the
+    // "self-tests the actual termPattern shape too" test below), on top of the pairwise cost this
+    // test bounds -- a real, legitimate addition, not a regression, but it moves the wall-clock
+    // floor up enough that a tight ceiling flakes on a loaded or slower CI runner (observed
+    // directly: comfortably under a smaller bound locally, over it on CI). The bound here exists
+    // to catch a real return to unbounded O(n^2)-or-worse cost, which would take vastly longer
+    // than this, not to pin a specific millisecond figure.
+    expect(elapsedMs).toBeLessThan(10_000);
     // At least one bucket exceeded the total budget and came back unchecked rather than being
     // silently treated as conflict-free.
     expect(scan.unchecked.length).toBeGreaterThan(0);

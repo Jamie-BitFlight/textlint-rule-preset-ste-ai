@@ -77,7 +77,7 @@ raw text
   │                                 each with mode (procedural/descriptive) and admonition register
   │
   ├─ maskRanges() → full mask       every opaque region masked
-  │      └─ segmentSentences()      sentence-splitter over masked text, per block
+  │      └─ segmentSentences()      one-pass boundary scan over masked text, per block
   │             └─ tokenizeWords()  words from masked text, plus one synthetic word per
   │                                 content-bearing protected region
   │
@@ -331,7 +331,7 @@ This was checked against the real package tree rather than assumed:
   directly in `dependencies` is a real, new cost, not a free ride; I want to be honest about that
   rather than claim it costs nothing because it happens to already be on disk in this dev tree.
 - What it buys: its `TxtNode` shape (`@textlint/ast-node-types`, already a genuine transitive
-  runtime dependency via `sentence-splitter`) is `{ range: readonly [number, number], loc: {...}, ... }`
+  textlint dependency) is `{ range: readonly [number, number], loc: {...}, ... }`
   — exactly the AST the textlint kernel itself builds and, per the paragraph above this section,
   currently discards at `src/textlint/adapter.ts:168-172`. Adopting it means the reader produces the
   same node shape the rest of this codebase's textlint integration already type-checks against,

@@ -7,7 +7,7 @@ import type {
   RuleMetadata,
   TextFix,
 } from '../../core/types.js';
-import { excerpt, findTerm, matchCapitalisation } from '../helpers.js';
+import { buildClaimingTermScanner, excerpt, matchCapitalisation } from '../helpers.js';
 
 // ---------------------------------------------------------------------------
 // unapproved-vocabulary
@@ -62,67 +62,64 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
 
       // Longest term first so `prior to` wins over a hypothetical `prior`.
       entries.sort((a, b) => b.term.length - a.term.length);
+      const scan = buildClaimingTermScanner(entries.map((entry) => entry.term));
 
       for (const sentence of doc.sentences) {
-        const claimed: { start: number; end: number }[] = [];
-        for (const entry of entries) {
-          for (const match of findTerm(sentence, entry.term)) {
-            if (claimed.some((c) => match.range.start < c.end && c.start < match.range.end))
-              continue;
-            claimed.push(match.range);
+        for (const match of scan(sentence)) {
+          const entry = entries[match.termIndex];
+          if (entry === undefined) continue;
 
-            const alternatives = entry.alternatives;
-            const suggestion = alternatives[0];
-            let fix: TextFix | undefined;
-            if (entry.safeSubstitution && suggestion !== undefined) {
-              fix = {
-                range: match.range,
-                text: matchCapitalisation(match.text, suggestion),
-                rationale: `Rule pack marks "${entry.term}" → "${suggestion}" as meaning-preserving.`,
-                safety: 'deterministic-meaning-preserving',
-              };
-            }
+          const alternatives = entry.alternatives;
+          const suggestion = alternatives[0];
+          let fix: TextFix | undefined;
+          if (entry.safeSubstitution && suggestion !== undefined) {
+            fix = {
+              range: match.range,
+              text: matchCapitalisation(match.text, suggestion),
+              rationale: `Rule pack marks "${entry.term}" → "${suggestion}" as meaning-preserving.`,
+              safety: 'deterministic-meaning-preserving',
+            };
+          }
 
-            const alternativeText =
-              alternatives.length > 0
-                ? ` Use ${alternatives.map((a) => `"${a}"`).join(' or ')}.`
-                : ' The rule pack supplies no approved alternative; rewrite the sentence.';
+          const alternativeText =
+            alternatives.length > 0
+              ? ` Use ${alternatives.map((a) => `"${a}"`).join(' or ')}.`
+              : ' The rule pack supplies no approved alternative; rewrite the sentence.';
 
-            diagnostics.push(
-              buildDiagnostic(unapprovedMeta, policy, {
-                category: 'deterministic-violation',
-                message: `"${match.text}" is not approved general vocabulary.${alternativeText}`,
-                range: match.range,
-                evidence: excerpt(sentence.raw),
-                suggestions: alternatives,
-                ...(fix === undefined ? {} : { fix }),
-                meta: {
-                  term: entry.term,
-                  safeSubstitution: entry.safeSubstitution,
-                  ...(entry.note === undefined ? {} : { note: entry.note }),
-                },
-              }),
-            );
+          diagnostics.push(
+            buildDiagnostic(unapprovedMeta, policy, {
+              category: 'deterministic-violation',
+              message: `"${match.text}" is not approved general vocabulary.${alternativeText}`,
+              range: match.range,
+              evidence: excerpt(sentence.raw),
+              suggestions: alternatives,
+              ...(fix === undefined ? {} : { fix }),
+              meta: {
+                term: entry.term,
+                safeSubstitution: entry.safeSubstitution,
+                ...(entry.note === undefined ? {} : { note: entry.note }),
+              },
+            }),
+          );
 
-            if (options.adjudicateSense) {
-              candidates.push({
-                id: `${unapprovedMeta.id}:${sentence.id}:${match.range.start}`,
-                ruleId: unapprovedMeta.id,
-                evaluatorId: 'approved-word-sense',
-                range: match.range,
-                passage: sentence.masked,
-                passageOffset: sentence.range.start,
-                payload: {
-                  word: match.text,
-                  approvedAlternatives: alternatives,
-                  offsetInPassage: match.range.start - sentence.range.start,
-                },
-                invariants: ['technical meaning', 'quantities', 'identifiers', 'negation'],
-                reason: 'Word is listed as unapproved; confirm the sense used here.',
-                mode: sentence.mode,
-                admonition: sentence.admonition,
-              });
-            }
+          if (options.adjudicateSense) {
+            candidates.push({
+              id: `${unapprovedMeta.id}:${sentence.id}:${match.range.start}`,
+              ruleId: unapprovedMeta.id,
+              evaluatorId: 'approved-word-sense',
+              range: match.range,
+              passage: sentence.masked,
+              passageOffset: sentence.range.start,
+              payload: {
+                word: match.text,
+                approvedAlternatives: alternatives,
+                offsetInPassage: match.range.start - sentence.range.start,
+              },
+              invariants: ['technical meaning', 'quantities', 'identifiers', 'negation'],
+              reason: 'Word is listed as unapproved; confirm the sense used here.',
+              mode: sentence.mode,
+              admonition: sentence.admonition,
+            });
           }
         }
       }
@@ -171,40 +168,37 @@ export const preferredTerminologyRule: DeterministicRule<z.output<typeof preferr
         })),
       ].filter((entry) => !allow.has(entry.from.toLowerCase()));
       entries.sort((a, b) => b.from.length - a.from.length);
+      const scan = buildClaimingTermScanner(entries.map((entry) => entry.from));
 
       const diagnostics: Diagnostic[] = [];
       for (const sentence of doc.sentences) {
-        const claimed: { start: number; end: number }[] = [];
-        for (const entry of entries) {
-          for (const match of findTerm(sentence, entry.from)) {
-            if (claimed.some((c) => match.range.start < c.end && c.start < match.range.end))
-              continue;
-            claimed.push(match.range);
-            const replacement = matchCapitalisation(match.text, entry.to);
-            const fix: TextFix | undefined = entry.safeSubstitution
-              ? {
-                  range: match.range,
-                  text: replacement,
-                  rationale: `Rule pack marks "${entry.from}" → "${entry.to}" as a spelling choice.`,
-                  safety: 'deterministic-meaning-preserving',
-                }
-              : undefined;
-            diagnostics.push(
-              buildDiagnostic(preferredMeta, policy, {
-                category: 'deterministic-violation',
-                message: `Use "${entry.to}" instead of "${match.text}".`,
+        for (const match of scan(sentence)) {
+          const entry = entries[match.termIndex];
+          if (entry === undefined) continue;
+          const replacement = matchCapitalisation(match.text, entry.to);
+          const fix: TextFix | undefined = entry.safeSubstitution
+            ? {
                 range: match.range,
-                evidence: excerpt(sentence.raw),
-                suggestions: [replacement],
-                ...(fix === undefined ? {} : { fix }),
-                meta: {
-                  from: entry.from,
-                  to: entry.to,
-                  ...(entry.note === undefined ? {} : { note: entry.note }),
-                },
-              }),
-            );
-          }
+                text: replacement,
+                rationale: `Rule pack marks "${entry.from}" → "${entry.to}" as a spelling choice.`,
+                safety: 'deterministic-meaning-preserving',
+              }
+            : undefined;
+          diagnostics.push(
+            buildDiagnostic(preferredMeta, policy, {
+              category: 'deterministic-violation',
+              message: `Use "${entry.to}" instead of "${match.text}".`,
+              range: match.range,
+              evidence: excerpt(sentence.raw),
+              suggestions: [replacement],
+              ...(fix === undefined ? {} : { fix }),
+              meta: {
+                from: entry.from,
+                to: entry.to,
+                ...(entry.note === undefined ? {} : { note: entry.note }),
+              },
+            }),
+          );
         }
       }
       return { diagnostics, candidates: [] };
@@ -240,37 +234,38 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
   run({ doc, options, pack, policy }): RuleOutput {
     const allow = new Set(options.allow.map((t) => t.toLowerCase()));
     const entries = pack.contractions.filter((e) => !allow.has(e.from.toLowerCase()));
+    const variants = entries.flatMap((entry) =>
+      variantsOf(entry.from).map((term) => ({ entry, term })),
+    );
+    const scan = buildClaimingTermScanner(variants.map(({ term }) => term));
     const diagnostics: Diagnostic[] = [];
 
     for (const sentence of doc.sentences) {
-      for (const entry of entries) {
-        // Match both the straight apostrophe and U+2019.
-        for (const variant of variantsOf(entry.from)) {
-          for (const match of findTerm(sentence, variant)) {
-            const replacement = matchCapitalisation(match.text, entry.to);
-            const fix: TextFix | undefined = entry.safeSubstitution
-              ? {
-                  range: match.range,
-                  text: replacement,
-                  rationale: `"${entry.from}" expands unambiguously to "${entry.to}".`,
-                  safety: 'deterministic-meaning-preserving',
-                }
-              : undefined;
-            diagnostics.push(
-              buildDiagnostic(contractionMeta, policy, {
-                category: 'deterministic-violation',
-                message:
-                  `Do not use the contraction "${match.text}". Write "${replacement}".` +
-                  (entry.safeSubstitution ? '' : ` ${entry.note ?? 'Confirm the intended sense.'}`),
-                range: match.range,
-                evidence: excerpt(sentence.raw),
-                suggestions: [replacement],
-                ...(fix === undefined ? {} : { fix }),
-                meta: { contraction: entry.from, ambiguous: !entry.safeSubstitution },
-              }),
-            );
-          }
-        }
+      for (const match of scan(sentence)) {
+        const entry = variants[match.termIndex]?.entry;
+        if (entry === undefined) continue;
+        const replacement = matchCapitalisation(match.text, entry.to);
+        const fix: TextFix | undefined = entry.safeSubstitution
+          ? {
+              range: match.range,
+              text: replacement,
+              rationale: `"${entry.from}" expands unambiguously to "${entry.to}".`,
+              safety: 'deterministic-meaning-preserving',
+            }
+          : undefined;
+        diagnostics.push(
+          buildDiagnostic(contractionMeta, policy, {
+            category: 'deterministic-violation',
+            message:
+              `Do not use the contraction "${match.text}". Write "${replacement}".` +
+              (entry.safeSubstitution ? '' : ` ${entry.note ?? 'Confirm the intended sense.'}`),
+            range: match.range,
+            evidence: excerpt(sentence.raw),
+            suggestions: [replacement],
+            ...(fix === undefined ? {} : { fix }),
+            meta: { contraction: entry.from, ambiguous: !entry.safeSubstitution },
+          }),
+        );
       }
     }
     return { diagnostics, candidates: [] };

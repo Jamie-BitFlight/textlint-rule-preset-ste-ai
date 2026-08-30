@@ -388,7 +388,16 @@ export function createSteTextlintRule(
         for (const notice of analysis.notices) {
           if (notice.level === 'info') continue;
           const noticeRuleId = notice.detail?.['ruleId'];
-          if (typeof noticeRuleId === 'string' && noticeRuleId !== ruleId) continue;
+          // Invalid-options notices belong to the handler whose options failed. Generic
+          // configuration notices can also name a rule (for example an unknown id), but no
+          // handler with that unknown id can ever run; let the first enabled handler report
+          // those and use the per-node identity set to deduplicate them.
+          if (
+            notice.code === 'rule-options-invalid' &&
+            typeof noticeRuleId === 'string' &&
+            noticeRuleId !== ruleId
+          )
+            continue;
           const identity = JSON.stringify([notice.code, notice.message]);
           if (reportedForNode?.has(identity) === true) continue;
           if (reportedForNode === undefined) {

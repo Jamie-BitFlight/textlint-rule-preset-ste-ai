@@ -65,6 +65,7 @@
     "SSLOptions StdEnvVars"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-b",
     "rewriter-a"
   ],
@@ -84,6 +85,21 @@
       "reviewer": "reviewer-b",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "passive-voice-candidate:s5:474",
+      "ruleId": "passive-voice-candidate",
+      "evaluatorId": "passive-voice-adjudication",
+      "quote": "be configured",
+      "span": {
+        "start": 474,
+        "end": 487
+      },
+      "verdict": "non-violation",
+      "reason": "This is a descriptive capability statement about the module, not an instruction obscuring who must act.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.92
     },
     {
       "passageId": "passive-voice-candidate:s7:785",

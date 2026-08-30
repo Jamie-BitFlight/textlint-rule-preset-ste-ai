@@ -15,10 +15,11 @@ pre-push skill and a best-effort write hook for lowercase `.md` files.
   current findings with the proposed findings. It exits with code 2 only when the write adds a
   finding.
 
-The hook sends content to textlint over stdin. It passes the real target path through
-`--stdin-filename`. It does not create a scratch copy. It does not modify the target. The hook
-prechecks `.textlintignore` with the target textlint installation's glob matcher. This precheck is
-necessary because textlint stdin mode does not apply that file.
+The hook sends both content versions to one isolated worker. For each hook invocation, the worker
+loads the target textlint API and configuration once. It calls `lintText` with the real target path
+for each version. It does not create a scratch copy. It does not modify the target. The hook prechecks
+`.textlintignore` with the target textlint installation's glob matcher. This precheck is necessary
+because the programmatic `lintText` API does not apply that file.
 
 ## Enforcement boundary
 
@@ -28,8 +29,8 @@ result. This behavior prevents a broken check from blocking all authoring. The h
 not an absolute guarantee. Run the project's ordinary textlint check before merging. Run its
 continuous integration checks too.
 
-The hook executes the target project's textlint command-line interface (CLI). It also loads that
-project's configuration and rules. Enable the hook only in a trusted workspace.
+The worker executes the target project's textlint programmatic API. It also loads that project's
+configuration and rules. Enable the hook only in a trusted workspace.
 
 The hook needs a Node-resolvable textlint installation. Textlint must declare a compatible `glob`
 dependency. That dependency must expose the public `Glob` and `Ignore` APIs. Integration tests

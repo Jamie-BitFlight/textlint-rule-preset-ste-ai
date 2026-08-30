@@ -177,13 +177,12 @@ export function isAdmonitionLabelLine(line: string): boolean {
 /**
  * Classify a passage as an instruction or a description.
  *
- * This is a **provisional heuristic**, not a parser: it asks whether the passage opens with an
- * imperative-mood verb, using `compromise`'s grammatical tagging (see
- * {@link sentenceOpensImperative}) rather than closed-list membership. That still only looks at
- * the sentence opener, so `Record the value` is procedural while `Record the value is stored in
- * flash` is misclassified — the same known limit the previous list-based heuristic had. Rules
- * that depend on the distinction therefore emit review-required candidates rather than hard
- * violations wherever the classification changes the outcome.
+ * This is a **provisional lexical heuristic**, not a parser: it asks whether the passage opens
+ * with a reviewed action verb or a run-local configured phrase (see
+ * {@link sentenceOpensImperative}). It only looks at the sentence opener, so `Record the value`
+ * is procedural while `Record the value is stored in flash` is misclassified. The bounded
+ * vocabulary is the deliberate edit-time trade: predictable microsecond classification without
+ * loading a statistical tagger.
  */
 export function detectMode(text: string, options: StructureOptions): TextMode {
   return sentenceOpensImperative(text, options.extraImperativeVerbs) ? 'procedural' : 'descriptive';

@@ -234,6 +234,7 @@
     "PRAGMA"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-d",
     "rewriter-a"
   ],
@@ -285,6 +286,21 @@
       "reviewerConfidence": 0.6
     },
     {
+      "passageId": "noun-cluster-candidate:s3:436",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "leaves behind empty space",
+      "span": {
+        "start": 436,
+        "end": 461
+      },
+      "verdict": "non-violation",
+      "reason": "'leaves behind' is a phrasal verb with the ordinary object 'empty space', not a noun cluster.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
+    },
+    {
       "passageId": "ambiguous-pronoun-candidate:s4:489",
       "ruleId": "ambiguous-pronoun-candidate",
       "evaluatorId": "pronoun-antecedent-ambiguity",
@@ -328,6 +344,21 @@
       "reviewer": "reviewer-d",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s7:883",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "largely stored contiguously within",
+      "span": {
+        "start": 883,
+        "end": 917
+      },
+      "verdict": "non-violation",
+      "reason": "The run is adverb, passive verb, adverb, and preposition, so it contains no noun stack.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
     },
     {
       "passageId": "passive-voice-candidate:s9:1092",

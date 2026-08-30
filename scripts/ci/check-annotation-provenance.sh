@@ -61,14 +61,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 # Adjudication records, and the four reviewer runs that produced them, per fixtures/verdicts/.
-export EXPECTED_ADJUDICATIONS="${EXPECTED_ADJUDICATIONS:-105}"
-export EXPECTED_ADJUDICATION_REVIEWERS="${EXPECTED_ADJUDICATION_REVIEWERS:-reviewer-a=25,reviewer-b=25,reviewer-c=23,reviewer-d=32}"
+export EXPECTED_ADJUDICATIONS="${EXPECTED_ADJUDICATIONS:-122}"
+export EXPECTED_ADJUDICATION_REVIEWERS="${EXPECTED_ADJUDICATION_REVIEWERS:-codex-performance-review-2026-08-30=18,reviewer-a=24,reviewer-b=25,reviewer-c=23,reviewer-d=32}"
 # Rewrite records, and the two rewriter runs, split nine fixtures each.
 export EXPECTED_CHANGES="${EXPECTED_CHANGES:-70}"
 export EXPECTED_CHANGE_REVIEWERS="${EXPECTED_CHANGE_REVIEWERS:-rewriter-a=36,rewriter-b=34}"
 # Every record in the corpus was produced by an agent run. A human-authored record is a real
 # possibility and the schema allows it; it is not something that should arrive unnoticed.
-export EXPECTED_KINDS="${EXPECTED_KINDS:-agent=175}"
+export EXPECTED_KINDS="${EXPECTED_KINDS:-agent=192}"
 # The evaluation partition is a corpus decision, not a mutable label. Pin each assignment so a
 # balanced dev/heldout rearrangement cannot preserve the aggregate split checks and pass.
 export EXPECTED_SPLITS="${EXPECTED_SPLITS:-curl-url-option-reference=heldout
@@ -94,24 +94,24 @@ zephyr-dependency-table=dev}"
 # `sqlite-pragma-hard-negative` names one run because it emits no candidates, so no adjudication
 # reviewer ever touched it. To refresh a digest after an intended edit, run the script — the failure
 # names the fixture and prints the digest its records now have.
-export EXPECTED_PER_FIXTURE="${EXPECTED_PER_FIXTURE:-curl-url-option-reference=reviewer-b+rewriter-a|82df9668fd4f301cffbd35555d5352ca6b9bc28ff470c8cdc30604e3907ac8ec
-django-settings-configuration=reviewer-d+rewriter-a|49861fb07a211131c5bd4a0c0639c620251014322c4bfd64f3dd9d65a289d342
-httpd-mod-ssl-directive-config=reviewer-a+rewriter-b|74b196d5ed6f41bc87666b50429cc1f9f0e24544cf0f888b59c9040f360f72ab
-httpd-mod-ssl-overview=reviewer-b+rewriter-a|923b306b1b73f46bb4bed005d02addcfb8e77cc85b92ad5bbb3038f44e123d22
-k8s-audit-log-troubleshooting=reviewer-c+rewriter-b|1aca2ad77aae62af0622137e3fb93f909508c34b353f2a1b2cedd3fda9840482
-k8s-debug-pod-troubleshooting=reviewer-c+rewriter-a|96614cfe3a49af8cde244adf417d86b0b6b32ca90a5bf13f16019617e3dc9b40
-llvm-getting-started-build=reviewer-a+rewriter-a|f4cec98fb7a2d3d65cb3bf760078b6143ae207078945ab6094075d8865057569
+export EXPECTED_PER_FIXTURE="${EXPECTED_PER_FIXTURE:-curl-url-option-reference=codex-performance-review-2026-08-30+reviewer-b+rewriter-a|4916a0f65fd6ecf6217e623afbc2b0ef8031b004186dfda03e9eda0a7f271eee
+django-settings-configuration=codex-performance-review-2026-08-30+reviewer-d+rewriter-a|e9ed61e728a9933a0cf2ae5ee019d618437178a1a9224832de58b49a88e95f2f
+httpd-mod-ssl-directive-config=codex-performance-review-2026-08-30+reviewer-a+rewriter-b|e3f45d56124ccbc4353610b3a66a8561fbd6aa0b5a2fa0c2dd6858827f740768
+httpd-mod-ssl-overview=codex-performance-review-2026-08-30+reviewer-b+rewriter-a|73b853b8c63eb06958303dc57ed6af6f8cf1522ee8802ed0ffb081ebca4fe32d
+k8s-audit-log-troubleshooting=codex-performance-review-2026-08-30+reviewer-c+rewriter-b|9470a9b6e3ab1b666e4592a38679980e5aa5df3ff463fc3fdcef2b1572318d87
+k8s-debug-pod-troubleshooting=codex-performance-review-2026-08-30+reviewer-c+rewriter-a|8cdc54299ad7f0cc33d9da5c8e895102c8ef14ac3b5b6fbf15160d2199f9724a
+llvm-getting-started-build=codex-performance-review-2026-08-30+reviewer-a+rewriter-a|511a91f609b5c1858cbcc820d05cf13140ac9daad0319a8ee97324217c4667f0
 llvm-standalone-build-table=reviewer-a+rewriter-b|1f2ebb69ec74843d2a56e08d4d7d39dfd6ec5a00cb52c22b851a7d481f6a47c2
 node-cli-hard-negative=reviewer-d+rewriter-b|e95141872f6dd00569b4adb7a575ecf5bb3b4ae0645febf4bf3d2299780e96d6
 osha-lockout-tagout-warning=reviewer-c+rewriter-a|520b13f234af1f67160234cbb6de7c55348c95bf57aacbd0488a8b1f55d22991
 osha-ppe-requirements=reviewer-d+rewriter-b|c17af3c3ef8581e1498601236bdb8be5ee14bf370f48a6d44ceb17378bbdb7a0
-postgres-vacuum-overview=reviewer-b+rewriter-b|8a5a59fe3d8065559475ee4bae5393b847c0ca6d0979ae12d219476802b5c80a
-sqlite-cli-description=reviewer-a+rewriter-b|3bd454e25554da7b4bf4d039088d732603677e702fad805940ab659835d3d01e
+postgres-vacuum-overview=codex-performance-review-2026-08-30+reviewer-b+rewriter-b|1394ea8aa3a4bb0f38179ca8b1d3e29a55603ca8c7b8a44b605308edfebf6c2e
+sqlite-cli-description=codex-performance-review-2026-08-30+reviewer-a+rewriter-b|4d588cf3779bdc8d63b484f5e60a38208baaa7c017e4f036818847806a5311fb
 sqlite-cli-dot-commands=reviewer-c+rewriter-a|ecbc21ba560df1dc433352ef6bbe77f0b6bb6d655e58aceebdf927cdec67f44a
 sqlite-pragma-hard-negative=rewriter-b|d82255533037474391d7aef55f5cf4939d917a0a8f97c839a0ee62cd34b47418
-sqlite-vacuum-space-reclaim=reviewer-d+rewriter-a|e55a769b2e5a25162da273e45d1b42700234718646a8f0261b0ebf724f8f28f4
+sqlite-vacuum-space-reclaim=codex-performance-review-2026-08-30+reviewer-d+rewriter-a|28b469516dcca4d9c4434abb6e68405f9c106167262273b28098e5b85e1a1a67
 zephyr-dependency-setup=reviewer-a+rewriter-a|cb9b09a412e8a7115d6b1b458fc6ae995bb944fe3f44bfb38b41618f443d988a
-zephyr-dependency-table=reviewer-b+rewriter-b|fb1f6d85d91b22f46089aaedf4218580e99619d3fa0e9b566815b74351c96c81}"
+zephyr-dependency-table=codex-performance-review-2026-08-30+reviewer-b+rewriter-b|bb53c76374da7e2f9f8826c112d249eaed9d235594c64214a0f22ffc5493303f}"
 
 node --input-type=module -e '
 import { createHash } from "node:crypto";

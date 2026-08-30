@@ -1,7 +1,6 @@
 import type { ZodType } from 'zod';
 import type { AutofixPolicy, DiagnosticPolicy } from './config.js';
 import type { SentencePosIndex } from './pos-tags.js';
-import type { WinkPosIndex } from './wink-tags.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -25,16 +24,12 @@ export interface RuleInput<TOptions extends object = object> {
   /**
    * The run's configured `extraImperativeVerbs` (`SteAiConfig.extraImperativeVerbs`), passed
    * through so a rule that consults `src/core/pos-tags.ts` (`sentenceOpensImperative`,
-   * `buildSentencePosIndex`) can pass the *current* run's vocabulary explicitly on every call,
-   * rather than relying on it having been taught to `compromise`'s shared lexicon by an earlier
-   * call for this document. `pos-tags.ts` keys its lexicon state off exactly this value, so a rule
-   * that silently omits it gets whatever configuration happened to run last in this process, not
-   * necessarily this run's own.
+   * `buildSentencePosIndex`) uses the current run's vocabulary. The lexical helpers keep no
+   * process-global configuration state, so concurrent runs remain isolated.
    */
   readonly extraImperativeVerbs: readonly string[];
   /** Lazy POS indexes owned by this deterministic run, never shared across configurations. */
   readonly posIndexFor: (sentence: Sentence) => SentencePosIndex;
-  readonly winkIndexFor: (sentence: Sentence) => WinkPosIndex;
 }
 
 export interface RuleOutput {

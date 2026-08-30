@@ -156,10 +156,11 @@ read-only way-of-working compliance reviewer and pre-push skill.
 
 This is a different integration shape from surface 3. Surface 3 would gate outgoing chat text
 before it is sent, over stdin. That gap is still open, still tracked under issue #26. This hook
-instead gates a file write already headed for disk. It checks the write through the real
-`textlint` CLI, sending the would-be content over stdin while preserving the real target path with
-`--stdin-filename`. It does not create a scratch file. This hook-specific stdin integration does
-not provide the general-purpose `ste-ai` CLI stdin surface that issue #26 tracks.
+instead gates a file write already headed for disk. It sends the current and proposed content to
+one isolated worker. For each hook invocation, that worker loads the target project's textlint API
+and configuration once. It calls `lintText` with the real target path and does not create a scratch
+file. This hook-specific worker does not provide the general-purpose `ste-ai` CLI stdin surface that
+issue #26 tracks.
 
 ## The rules
 

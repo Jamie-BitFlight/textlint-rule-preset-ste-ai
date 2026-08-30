@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vite-plus/test';
 import { resolveConfig, type SteAiConfigInput } from '../../src/core/config.js';
 import { analyseDocument } from '../../src/core/document.js';
 import { runDeterministicRules } from '../../src/core/runner.js';
-import type { Diagnostic, DocumentFormat } from '../../src/core/types.js';
+import type { CandidatePassage, Diagnostic, DocumentFormat } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
 import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 interface RunResult {
   readonly diagnostics: readonly Diagnostic[];
+  readonly candidates: readonly CandidatePassage[];
   readonly text: string;
   quotesFor(ruleId: string): string[];
   forRule(ruleId: string): Diagnostic[];
@@ -37,6 +38,7 @@ function run(
   });
   return {
     diagnostics: result.diagnostics,
+    candidates: result.candidates,
     text,
     forRule: (ruleId) => result.diagnostics.filter((d) => d.ruleId === ruleId),
     quotesFor: (ruleId) =>
@@ -268,6 +270,11 @@ describe('punctuation-constraints', () => {
   it('flags an exclamation mark and an ellipsis', () => {
     expect(run('Stop now!\n').quotesFor(id)).toContain('!');
     expect(run('The value is set...\n').quotesFor(id)).toContain('...');
+  });
+
+  it('ignores the dynamic-command marker in a Claude skill', () => {
+    const command = '!`/bin/sh "${CLAUDE_SKILL_DIR}/scripts/prepare-review.sh"`\n';
+    expect(run(command).forRule(id)).toHaveLength(0);
   });
 
   it('flags parentheses only inside an instruction', () => {
@@ -548,23 +555,21 @@ describe('one-instruction-per-sentence', () => {
   });
 
   it('flags two imperatives joined by "and" using a verb the old hardcoded list never enumerated', () => {
-    // Neither "wipe" nor "trim" is in `IMPERATIVE_VERBS` (src/core/imperative-verbs.ts) — this is
-    // real recall from `compromise`'s grammatical tagging, not just parity with the closed list.
+    // Both verbs are intentionally present in the reviewed edit-time vocabulary.
     const result = run('Wipe the sensor lens and trim the excess cable.\n');
     expect(result.forRule(id)).toHaveLength(1);
     expect(result.forRule(id)[0]?.category).toBe('deterministic-violation');
   });
 
+  it('honours a configuration-local verb after a conjunction', () => {
+    const result = run('Install the driver and reticulate the splines.\n', {
+      extraImperativeVerbs: ['reticulate'],
+    });
+    expect(result.forRule(id)).toHaveLength(1);
+  });
+
   it('does not flag an inflected third-person verb inside a descriptive relative clause', () => {
-    // Regression (chatgpt-codex-connector, P1): `compromise` tags a finite third-person verb such
-    // as "sends" or "logs" as `Verb`+`PresentTense` without `Infinitive` — the same PresentTense
-    // tag a genuine bare/base-form command verb carries. The old "is this a bare verb" check
-    // accepted either signal alone, so the word after "and" in "which logs events and sends
-    // reports" (itself part of a descriptive relative clause, not a second instruction) satisfied
-    // it and this sentence was reported as containing two instructions, even though "sends" never
-    // opens an imperative clause — confirmed directly: `compromise` tags "sends" `Verb
-    // PresentTense` with no `Infinitive`, exactly like "logs", while a genuine second imperative
-    // ("...and format the disk.") keeps `Infinitive` in the same position.
+    // Inflected forms are absent from the bounded base-form action vocabulary.
     const result = run('Install the agent, which logs events and sends reports.\n');
     expect(result.forRule(id)).toHaveLength(0);
   });
@@ -593,13 +598,7 @@ describe('candidate rules never assert violations', () => {
   });
 
   it('passive-voice-candidate still catches an ordinary irregular participle from the old list', () => {
-    // "known" is in the old 70-entry `PARTICIPLES` list, and wink-nlp independently tags it VERB
-    // here — the wink-nlp check is a filter added on top of the unchanged shape gate (regular
-    // `-ed` word or `PARTICIPLES` membership), not a replacement for it: see the "Known gap found,
-    // not fixed here" note on `isPassiveParticiple` in candidate-rules.ts for why a genuinely novel
-    // irregular participle outside that list ("hewn", "forsaken" — wink-nlp tags both VERB, and
-    // neither is in `PARTICIPLES`) is deliberately not admitted by this prototype: it would emit a
-    // candidate span no reviewer has ever adjudicated.
+    // "known" is in the bounded irregular-participle list.
     const result = run('The value is known.\n', {
       rules: { 'passive-voice-candidate': { adjudicate: false } },
     });
@@ -608,16 +607,24 @@ describe('candidate rules never assert violations', () => {
     expect(result.text.slice(passive[0]?.range.start, passive[0]?.range.end)).toBe('is known');
   });
 
-  it('passive-voice-candidate no longer flags the exact adjectival case the corpus reviewer named', () => {
+  it('passive-voice-candidate accepts an adjectival false positive to avoid model startup', () => {
     // "is disabled" in this shape ("By default X is disabled") is the corpus's own example of a
     // configuration-state reading, not a passive action (httpd-mod-ssl-directive-config.json).
-    // wink-nlp tags "disabled" ADJ here, so the tag-conditioned check does not generate a
-    // candidate at all — a real behaviour change from the old regex, which matched any `-ed`
-    // word and relied on semantic adjudication to call it a non-violation.
+    // The edit-time profile intentionally uses the cheap surface shape and lets review discard
+    // this case. Avoiding the statistical tagger is worth this extra low-severity candidate.
     const result = run('By default the SSL Engine is disabled.\n', {
       rules: { 'passive-voice-candidate': { adjudicate: false } },
     });
-    expect(result.forRule('passive-voice-candidate')).toHaveLength(0);
+    expect(result.forRule('passive-voice-candidate')).toHaveLength(1);
+  });
+
+  it('passes only the participle, not an intervening adverb, to semantic review', () => {
+    const result = run('The device is automatically configured.\n', {
+      rules: { 'passive-voice-candidate': { adjudicate: true } },
+    });
+    const candidate = result.candidates.find((item) => item.ruleId === 'passive-voice-candidate');
+    expect(candidate?.payload['participle']).toBe('configured');
+    expect(candidate?.payload['construction']).toBe('is automatically configured');
   });
 
   it('noun-cluster-candidate flags a long run of content words', () => {
@@ -639,10 +646,7 @@ describe('candidate rules never assert violations', () => {
     ).toHaveLength(0);
   });
 
-  it('noun-cluster-candidate still breaks a run on "no", which compromise mistags as Expression', () => {
-    // Regression guard: `compromise` tags "no" as `Expression` rather than `Determiner`/`Negative`
-    // in ordinary sentence context (confirmed directly against fixtures/original), so
-    // `isFunctionWord` must still catch it via the closed-class list, not rely on the tag alone.
+  it('noun-cluster-candidate breaks a run on the function word "no"', () => {
     const result = run('Check the engine has no oil pressure warning lamp fault today.\n', {
       rules: { 'noun-cluster-candidate': { adjudicate: false } },
     });

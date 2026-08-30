@@ -4,6 +4,7 @@ import { analyseDocument } from '../../src/core/document.js';
 import { runDeterministicRules } from '../../src/core/runner.js';
 import type { Diagnostic, DocumentFormat } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
+import { findCaseConflicts } from '../../src/deterministic/helpers.js';
 import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 interface RunResult {
@@ -362,6 +363,28 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
     expect(notice?.message).toBeDefined();
     expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
+  });
+
+  it('stays fast and correct on a large map, without the exhaustive Unicode-fold merge', () => {
+    // Direct call, not through a rule: constructing a document config with 600 `additional`
+    // entries through the full pipeline just to exercise this one internal boundary would be
+    // unwieldy for no extra coverage. `findCaseConflicts`'s exhaustive pairwise merge (for a
+    // case-fold pair `canonicalKey`'s NFKC+lowercase step does not unify, such as Greek final
+    // sigma) is O(n^2) once past `EXHAUSTIVE_FOLD_MERGE_LIMIT` entries -- measured directly at
+    // ~800ms for 2,000 pairwise-distinct entries before this limit existed. Past the limit, only
+    // the O(n) canonical-key fast path runs, which still catches an ordinary case pair.
+    const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
+    for (let i = 0; i < 600; i++) additional[`word${i}`] = [`alt${i}`];
+
+    const started = Date.now();
+    const conflicts = findCaseConflicts(
+      additional,
+      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    );
+    const elapsedMs = Date.now() - started;
+
+    expect(conflicts).toEqual([['Foo', 'foo']]);
+    expect(elapsedMs).toBeLessThan(2000);
   });
 });
 

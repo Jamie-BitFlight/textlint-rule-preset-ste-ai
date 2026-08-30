@@ -54,44 +54,85 @@ export function sanitizeQuotedValue(text: string): string {
 }
 
 /**
- * Group the keys of a term map by {@link sameTermSpan} and report every group whose members do not
- * all resolve to the same value.
+ * Fast-path canonical form for {@link findCaseConflicts}'s grouping: NFKC folds some
+ * compatibility variants `toLowerCase()` alone does not (confirmed directly: `'ſ'.normalize
+ * ('NFKC').toLowerCase() === 's'`, unifying the Latin long s with plain `s`), which is exactly
+ * the pair Codex's review on this PR flagged `toLowerCase()`-only grouping for missing.
+ */
+function canonicalKey(term: string): string {
+  return term.trim().normalize('NFKC').toLowerCase();
+}
+
+/**
+ * Above this many `additional` entries, {@link findCaseConflicts} skips the exhaustive pairwise
+ * merge below and returns {@link canonicalKey}'s grouping alone.
+ *
+ * That merge step exists only for a case-fold pair `canonicalKey` itself does not unify — Greek
+ * final sigma `ς`/`σ` is the standing example (confirmed directly: `'ς'.normalize('NFKC')
+ * .toLowerCase() !== 'σ'.toLowerCase()`, but `termPattern`'s `/iu` regex does treat them as the
+ * same letter). Finding every such pair exhaustively means testing every remaining group against
+ * every other, which is quadratic in the number of *distinct spellings* after canonicalisation —
+ * measured directly at roughly 800ms for 2,000 pairwise-distinct entries, the DoS-shaped cost
+ * Codex's review on this PR flagged in the pairwise-only version of this function. `additional`
+ * maps are operator- or pack-authored vocabulary lists; one this large is already unusual, so
+ * degrading to canonical-only grouping (which still catches every conflict this function shipped
+ * with before this pairwise refinement existed) is an acceptable trade against stalling a lint run.
+ */
+const EXHAUSTIVE_FOLD_MERGE_LIMIT = 500;
+
+/**
+ * Group the keys of a term map by case-fold equivalence and report every group whose members do
+ * not all resolve to the same value.
  *
  * `termPattern()` matches case-insensitively, so `Use` and `use` claim the same source span; the
  * first one in object key order silently wins and the other's mapping never applies. That is only
  * a real conflict when the two keys disagree about the replacement — `{ Use: ['employ'], use:
  * ['employ'] }` is redundant but not contradictory.
- *
- * Grouping is pairwise (`O(n²)`) rather than a single hash pass, because {@link sameTermSpan} is
- * not reducible to a hashable key the way `String.prototype.toLowerCase()` is — Unicode case
- * folding is an equivalence relation checked pairwise, not a function computing one canonical
- * form per string. `additional` maps are operator- or pack-authored and small (tens of entries at
- * most), so this cost is not a concern in practice.
  */
 export function findCaseConflicts<T>(
   entries: Readonly<Record<string, T>>,
   valuesEqual: (a: T, b: T) => boolean,
 ): string[][] {
   const items = Object.entries(entries);
-  const consumed = new Set<number>();
-  const groups: [key: string, value: T][][] = [];
-  for (let i = 0; i < items.length; i++) {
-    if (consumed.has(i)) continue;
-    const current = items[i];
-    if (current === undefined) continue;
-    const group: [string, T][] = [current];
-    consumed.add(i);
-    for (let j = i + 1; j < items.length; j++) {
-      if (consumed.has(j)) continue;
-      const candidate = items[j];
-      if (candidate === undefined) continue;
-      if (sameTermSpan(current[0], candidate[0])) {
-        group.push(candidate);
-        consumed.add(j);
-      }
-    }
-    groups.push(group);
+
+  // Fast path: O(n) grouping by canonical form, catching every plain-case and NFKC-decomposable
+  // pair (which covers everything `String.prototype.toLowerCase()` alone caught, plus more).
+  const byCanonical = new Map<string, [key: string, value: T][]>();
+  for (const item of items) {
+    const canonical = canonicalKey(item[0]);
+    const group = byCanonical.get(canonical);
+    if (group === undefined) byCanonical.set(canonical, [item]);
+    else group.push(item);
   }
+  let groups = [...byCanonical.values()];
+
+  // Precise path: merge any remaining groups `sameTermSpan` still considers equivalent, bounded
+  // so an unusually large map degrades to the fast path alone instead of stalling.
+  if (items.length <= EXHAUSTIVE_FOLD_MERGE_LIMIT) {
+    const merged: typeof groups = [];
+    const consumed = new Set<number>();
+    for (let i = 0; i < groups.length; i++) {
+      if (consumed.has(i)) continue;
+      let combined = groups[i];
+      if (combined === undefined) continue;
+      consumed.add(i);
+      for (let j = i + 1; j < groups.length; j++) {
+        if (consumed.has(j)) continue;
+        const candidate = groups[j];
+        const combinedFirst = combined[0];
+        if (candidate === undefined || combinedFirst === undefined) continue;
+        const candidateFirst = candidate[0];
+        if (candidateFirst === undefined) continue;
+        if (sameTermSpan(combinedFirst[0], candidateFirst[0])) {
+          combined = [...combined, ...candidate];
+          consumed.add(j);
+        }
+      }
+      merged.push(combined);
+    }
+    groups = merged;
+  }
+
   const conflicts: string[][] = [];
   for (const group of groups) {
     if (group.length < 2) continue;

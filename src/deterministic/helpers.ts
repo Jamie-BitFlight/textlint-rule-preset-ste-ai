@@ -176,15 +176,16 @@ const MAX_TOTAL_COMPARISON_WORK = 25_000_000;
  * unconfirmed — a bucket that individually exceeds {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH}
  * is a different situation for a caller (and a reader of the resulting notice) than a
  * comfortably-sized bucket that only lost out to the total {@link MAX_TOTAL_COMPARISONS} or
- * {@link MAX_TOTAL_COMPARISON_WORK} budget because earlier buckets already spent most of it —
- * collapsing both into one shape would report the wrong constraint as the reason a rule got
- * skipped.
+ * {@link MAX_TOTAL_COMPARISON_WORK} budget because earlier buckets already spent most of it, or a
+ * bucket whose keys were too long for the underlying regex engine to compare at all (`'comparison-
+ * failed'`; see the `try`/`catch` in {@link findCaseConflicts}) — collapsing all three into one
+ * shape would report the wrong constraint as the reason a rule got skipped.
  */
 export interface UncheckedGroup {
   /** The keys in this bucket, unconfirmed either way. */
   readonly keys: string[];
   /** Which limit stopped this bucket from being checked. */
-  readonly reason: 'bucket-too-large' | 'total-budget-exceeded';
+  readonly reason: 'bucket-too-large' | 'total-budget-exceeded' | 'comparison-failed';
 }
 
 /** {@link findCaseConflicts}'s result: confirmed conflicts, and buckets too large to confirm. */
@@ -249,23 +250,41 @@ export function findCaseConflicts<T>(
     }
     comparisonsSpent += bucketCost;
     workSpent += bucketWork;
-    const consumed = new Set<number>();
-    for (let i = 0; i < bucket.length; i++) {
-      if (consumed.has(i)) continue;
-      const current = bucket[i];
-      if (current === undefined) continue;
-      const group: [string, T][] = [current];
-      consumed.add(i);
-      for (let j = i + 1; j < bucket.length; j++) {
-        if (consumed.has(j)) continue;
-        const candidate = bucket[j];
-        if (candidate === undefined) continue;
-        if (sameTermSpan(current[0], candidate[0])) {
-          group.push(candidate);
-          consumed.add(j);
+    // `sameTermSpan` compiles a `RegExp` from each key, and the underlying engine refuses to
+    // compile one past its own internal size limit — a version-specific threshold this comment
+    // does not pin a number to; `test/unit/rules.test.ts`'s "degrades to unchecked instead of
+    // crashing" test reproduces the failure directly on whatever engine runs it. Neither
+    // `MAX_TOTAL_COMPARISONS` nor `MAX_TOTAL_COMPARISON_WORK` catches this: a bucket of just two
+    // such keys costs one comparison, comfortably under both budgets. Uncaught, that exception
+    // would escape this whole function, then the `superRefine` callback calling it, then
+    // `safeParse` itself, crashing the run instead of the schema-validation failure this rule is
+    // supposed to degrade to. Buffer this bucket's groups locally and only merge them in on
+    // success, so a bucket that fails partway through reports honestly as
+    // {@link CaseConflictScan.unchecked} rather than contributing a
+    // partial, silently-incomplete scan.
+    try {
+      const bucketGroups: [key: string, value: T][][] = [];
+      const consumed = new Set<number>();
+      for (let i = 0; i < bucket.length; i++) {
+        if (consumed.has(i)) continue;
+        const current = bucket[i];
+        if (current === undefined) continue;
+        const group: [string, T][] = [current];
+        consumed.add(i);
+        for (let j = i + 1; j < bucket.length; j++) {
+          if (consumed.has(j)) continue;
+          const candidate = bucket[j];
+          if (candidate === undefined) continue;
+          if (sameTermSpan(current[0], candidate[0])) {
+            group.push(candidate);
+            consumed.add(j);
+          }
         }
+        bucketGroups.push(group);
       }
-      groups.push(group);
+      groups.push(...bucketGroups);
+    } catch {
+      unchecked.push({ keys: bucket.map(([key]) => key), reason: 'comparison-failed' });
     }
   }
 
@@ -340,17 +359,27 @@ export function reportUncheckedGroup(
     .slice(0, 3)
     .map((key) => `"${sanitizeQuotedValue(key)}"`)
     .join(', ');
-  const message =
-    group.reason === 'bucket-too-large'
-      ? `${group.keys.length} keys (for example ${sample}) are the same length once whitespace ` +
-        `runs are normalised — too many to exhaustively check for a case-insensitive collision ` +
-        `over their ${noun}. Reduce how many keys share this length, or split them across more ` +
-        'than one rule configuration.'
-      : `${group.keys.length} keys (for example ${sample}) could not be checked for a ` +
-        `case-insensitive collision over their ${noun}: checking them would exceed the total ` +
-        `comparison budget shared across every key length in this "additional" map, even though ` +
-        'this group alone is well within the per-length limit. Reduce the total number of keys, ' +
-        'their length, or split them across more than one rule configuration.';
+  let message: string;
+  if (group.reason === 'bucket-too-large') {
+    message =
+      `${group.keys.length} keys (for example ${sample}) are the same length once whitespace ` +
+      `runs are normalised — too many to exhaustively check for a case-insensitive collision ` +
+      `over their ${noun}. Reduce how many keys share this length, or split them across more ` +
+      'than one rule configuration.';
+  } else if (group.reason === 'total-budget-exceeded') {
+    message =
+      `${group.keys.length} keys (for example ${sample}) could not be checked for a ` +
+      `case-insensitive collision over their ${noun}: checking them would exceed the total ` +
+      `comparison budget shared across every key length in this "additional" map, even though ` +
+      'this group alone is well within the per-length limit. Reduce the total number of keys, ' +
+      'their length, or split them across more than one rule configuration.';
+  } else {
+    message =
+      `${group.keys.length} keys (for example ${sample}) could not be checked for a ` +
+      `case-insensitive collision over their ${noun}: at least one of them is too long for the ` +
+      'underlying matcher to compare. Shorten these keys, or split them across more than one ' +
+      'rule configuration.';
+  }
   ctx.addIssue({ code: 'custom', path: ['additional'], message });
 }
 

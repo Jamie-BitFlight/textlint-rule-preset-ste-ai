@@ -562,6 +562,28 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]?.keys).toHaveLength(500);
   });
 
+  it('degrades to unchecked instead of crashing when a key is too long to compile (Codex review)', () => {
+    // sameTermSpan compiles a RegExp from each key. Neither MAX_TOTAL_COMPARISONS nor
+    // MAX_TOTAL_COMPARISON_WORK catches two case-fold-equivalent keys that are each merely very
+    // long: a bucket of two costs one comparison, comfortably under both budgets, yet the
+    // underlying regex engine refuses to compile a pattern past its own internal size limit --
+    // 50,000 code points is comfortably past that limit on the engine running this test. Uncaught,
+    // that exception would escape this function, the superRefine callback calling it, and
+    // safeParse itself, crashing the whole run instead of degrading to the rule-options-invalid
+    // this rule is supposed to produce.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(50_000)}`]: ['first'],
+      [`A${'x'.repeat(50_000)}`]: ['second'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+    expect(scan.unchecked[0]?.keys).toHaveLength(2);
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

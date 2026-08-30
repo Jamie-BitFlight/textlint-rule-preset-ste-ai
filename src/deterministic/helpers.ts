@@ -33,9 +33,24 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * surrounding terminal or log output reads, or reorder text around it. General Unicode format
  * characters (`\p{Cf}`) outside that explicit list are left alone: a real word or replacement can
  * legitimately need one.
+ *
+ * The whitespace-shaped members of those categories — tab, newline, CR, vertical tab, form feed,
+ * and the two Unicode line/paragraph separators — are normalised to an ordinary space rather than
+ * deleted outright, and normalised *before* the rest of the category is stripped. This sanitizer
+ * runs on the actual replacement text a fix writes into a document, not just display strings
+ * (`sanitizeQuotedValue`'s doc comment on `note` is the display-only exception, not the rule) — so
+ * a legitimately schema-permitted pack value like `sign\tin` or `do\nnot` deleting straight to
+ * `signin`/`donot` would silently glue two words together, corrupting the actual suggestion and
+ * fix. Every other control character in these categories has no legitimate word-internal role, so
+ * it is still deleted rather than replaced.
  */
+const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u2028\u2029]/gu;
+
 export function stripUnsafeCharacters(text: string): string {
-  return text.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '').replace(BIDI_CONTROL_CHARS, '');
+  return text
+    .replace(WHITESPACE_SHAPED_CONTROLS, ' ')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '')
+    .replace(BIDI_CONTROL_CHARS, '');
 }
 
 /**

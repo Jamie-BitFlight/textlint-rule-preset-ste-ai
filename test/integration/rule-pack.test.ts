@@ -1069,4 +1069,26 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.fix?.text).toBe(manTechnologist);
     expect(diagnostic?.fix?.text).toContain(zwj);
   });
+
+  it('normalises a tab/newline-like control to a space instead of deleting it (Codex review)', () => {
+    // stripUnsafeCharacters deleted every \p{Cc} character outright, tab and newline included --
+    // but the schema permits those in a pack's replacement text, and this sanitizer runs on the
+    // actual text a fix writes into the document, not only display strings. Deleting rather than
+    // normalising a word-separating control glued the words on either side together
+    // (`sign\tin` -> `signin`); normalising to an ordinary space instead preserves the boundary.
+    const tab = String.fromCharCode(0x09);
+    const replacement = `sign${tab}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
 });

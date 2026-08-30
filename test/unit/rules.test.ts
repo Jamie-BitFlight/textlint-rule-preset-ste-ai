@@ -289,6 +289,42 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
   });
 
+  it('does not reject a conflict whose keys are both disabled via allow (Codex review)', () => {
+    // `run()` filters `additional` entries through `allow` (case-insensitively) before matching,
+    // so `{ additional: { Use: [...], use: [...] }, allow: ['use'] }` has no runtime ambiguity at
+    // all: neither key ever reaches `findTerm`. Validating the unfiltered map rejected this
+    // perfectly valid configuration on a conflict that can never actually occur.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: ['employ'], use: ['apply'] },
+          allow: ['use'],
+        },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('still rejects a conflict when allow disables only one of the two keys', () => {
+    // Filtering must be case-insensitive and per-key, not "any entry present in allow clears the
+    // whole map": disabling `Use` alone leaves `use` on its own, so there is no conflict left
+    // either -- this proves the filter narrows to the *other* remaining key correctly, not that it
+    // happens to clear everything whenever `allow` is non-empty.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: ['employ'], use: ['apply'], leverage: ['employ'] },
+          allow: ['leverage'],
+        },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toContain('"Use"');
+    expect(notice?.message).toContain('"use"');
+  });
+
   it('rejects conflicting case-equivalent keys in preferred-terminology, both key orders', () => {
     const orderA = runRaw({
       rules: {

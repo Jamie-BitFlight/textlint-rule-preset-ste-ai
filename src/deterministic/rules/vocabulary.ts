@@ -38,10 +38,16 @@ const unapprovedOptionsSchema = z
     // `additional` keys are matched case-insensitively (`findTerm` → `termPattern`), so `Use` and
     // `use` claim the same span; JSON key order would otherwise decide which alternatives list
     // applies. Reject only when the conflicting keys actually disagree (#125).
-    const scan = findCaseConflicts(
-      options.additional,
-      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    //
+    // Checked against `allow`-filtered entries, matching `run()`'s own `allow.has(entry.term
+    // .toLowerCase())` filter (below): an operator can name-and-disable both sides of a conflict
+    // via `allow` (`{ additional: { Use: [...], use: [...] }, allow: ['use'] }`), at which point
+    // neither key ever reaches `findTerm` and there is no runtime ambiguity left to reject.
+    const allow = new Set(options.allow.map((term) => term.toLowerCase()));
+    const effective = Object.fromEntries(
+      Object.entries(options.additional).filter(([term]) => !allow.has(term.toLowerCase())),
     );
+    const scan = findCaseConflicts(effective, (a, b) => JSON.stringify(a) === JSON.stringify(b));
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'alternatives');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'alternatives');
   });
@@ -174,8 +180,13 @@ const preferredOptionsSchema = z
     allow: z.array(z.string()).default([]),
   })
   .superRefine((options, ctx) => {
-    // Same case-insensitive span-matching conflict as `unapproved-vocabulary` above (#125).
-    const scan = findCaseConflicts(options.additional, (a, b) => a === b);
+    // Same case-insensitive span-matching conflict, and the same allow-filtering before checking
+    // it, as `unapproved-vocabulary` above (#125) -- see that schema's `superRefine` doc comment.
+    const allow = new Set(options.allow.map((term) => term.toLowerCase()));
+    const effective = Object.fromEntries(
+      Object.entries(options.additional).filter(([term]) => !allow.has(term.toLowerCase())),
+    );
+    const scan = findCaseConflicts(effective, (a, b) => a === b);
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'replacements');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'replacements');
   });

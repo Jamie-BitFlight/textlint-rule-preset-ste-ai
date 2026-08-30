@@ -54,27 +54,33 @@ export function sanitizeQuotedValue(text: string): string {
 }
 
 /**
- * Code-point count of a term, after the same `trim()` {@link sameTermSpan} applies before
- * comparing.
+ * Code-point count of a term, treating each internal whitespace run as a single unit, matching
+ * how {@link escapeForMatching}/{@link sameTermSpan} actually treat whitespace.
  *
  * Used only as a *necessary* pre-filter for {@link findCaseConflicts}, never as a verdict on its
  * own: JS's `/iu` regex canonicalisation is confirmed directly to be one-code-point-to-one
  * (`new RegExp('^ß$', 'iu').test('ss')` is `false` — unlike full Unicode case folding, which
  * would expand `ß` to `ss`), so two strings `termPattern` actually treats as the same span always
- * have equal code-point length. The converse does not hold — equal length never implies
- * equivalence (ASCII `A` and fullwidth `Ａ` are both length 1, and are visually/case-fold-similar
- * enough that an NFKC-based canonicalisation this function used to rely on falsely merged them,
- * confirmed directly: `'Ａ'.normalize('NFKC').toLowerCase() === 'a'` while
- * `/^A$/iu.test('Ａ')` is `false`) — so a length match is only ever a candidate to confirm with
- * {@link sameTermSpan}, never a substitute for it.
+ * have equal code-point length — *once whitespace is normalised the same way the matcher itself
+ * normalises it*. `escapeForMatching` turns every whitespace run into a flexible `\s+` (matching
+ * one or more characters, of any length, on either side), so `"foo bar"` and `"foo  bar"` are
+ * `sameTermSpan`-equivalent despite differing raw code-point counts — confirmed directly, and a
+ * real miss in an earlier version of this pre-filter, which bucketed by raw length and so never
+ * even tested that pair against each other. Collapsing every whitespace run to one code point
+ * before counting restores the invariant.
+ *
+ * A length match is still only ever a candidate to confirm with {@link sameTermSpan}, never a
+ * substitute for it — equal length does not imply equivalence (ASCII `A` and fullwidth `Ａ` are
+ * both length 1, and are visually/case-fold-similar enough that an NFKC-based canonicalisation
+ * this function used to rely on falsely merged them, confirmed directly: `'Ａ'.normalize('NFKC')
+ * .toLowerCase() === 'a'` while `/^A$/iu.test('Ａ')` is `false`).
  *
  * `Array.from` over a string iterates *code points*, not user-perceived grapheme clusters (an
- * `Intl.Segmenter` count), which is exactly what this needs: the invariant above is that simple
- * case folding preserves code-point count, not grapheme count, so grapheme-based counting would
- * not be the same invariant.
+ * `Intl.Segmenter` count), which is exactly what this needs: the invariant above is about
+ * code-point count, not grapheme count.
  */
 function codePointLength(term: string): number {
-  return Array.from(term.trim()).length;
+  return Array.from(term.trim().replace(/\s+/g, ' ')).length;
 }
 
 /**

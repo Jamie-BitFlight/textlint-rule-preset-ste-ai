@@ -400,6 +400,21 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
 
     expect(conflicts).toEqual([]);
   });
+
+  it('bucket differing internal whitespace runs together (Codex review)', () => {
+    // `escapeForMatching` turns every whitespace run into a flexible `\s+`, matching one or more
+    // characters of any length on either side, so `"foo bar"` (one space) and `"foo  bar"` (two
+    // spaces) are `sameTermSpan`-equivalent -- confirmed directly -- despite differing raw
+    // code-point counts. A length-based prefilter keyed on raw code points would put them in
+    // different buckets and never test them against each other, silently missing exactly the
+    // "object key order decides" conflict #125 exists to reject, for a multi-word phrase.
+    const conflicts = findCaseConflicts(
+      { 'foo bar': ['first'], 'foo  bar': ['second'] },
+      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    );
+
+    expect(conflicts).toEqual([['foo bar', 'foo  bar']]);
+  });
 });
 
 describe('no-contractions', () => {

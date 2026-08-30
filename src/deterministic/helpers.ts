@@ -43,8 +43,13 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * value like `sign\tin` or `do\nnot` deleting straight to `signin`/`donot` would silently glue two
  * words together, corrupting the actual suggestion and fix. Every other control character in these
  * categories has no legitimate word-internal role, so it is still deleted rather than replaced.
+ *
+ * Matched as a run (`+`), not one character at a time: a conventional multi-character line break
+ * like `\r\n` is two of these controls back to back, and replacing each independently produces
+ * `sign  in` (two spaces) for `sign\r\nin` instead of one — confirmed as a real gap by Codex's
+ * review on this PR. A whole contiguous run collapses to a single replacement space.
  */
-const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]/gu;
+const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]+/gu;
 
 export function stripUnsafeCharacters(text: string): string {
   return text

@@ -1111,4 +1111,26 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
     expect(diagnostic?.fix?.text).toBe('sign in');
   });
+
+  it('collapses a CRLF line break to one space, not two (Codex review)', () => {
+    // stripUnsafeCharacters replaced each whitespace-shaped control independently, so a
+    // conventional multi-character line break -- CR followed by LF -- produced two replacement
+    // spaces instead of one: `sign\r\nin` became `sign  in`, not `sign in`. A whole contiguous run
+    // of these controls now collapses to a single space.
+    const cr = String.fromCharCode(0x0d);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `sign${cr}${lf}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
 });

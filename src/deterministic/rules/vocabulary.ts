@@ -47,7 +47,17 @@ const unapprovedOptionsSchema = z
     const effective = Object.fromEntries(
       Object.entries(options.additional).filter(([term]) => !allow.has(term.toLowerCase())),
     );
-    const scan = findCaseConflicts(effective, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+    // Compared after the same `stripUnsafeCharacters` the raw alternatives get before they ever
+    // reach a diagnostic or fix (below) — two keys whose raw alternatives differ only in a control
+    // character that sanitizes away (`"sign\tin"` vs `"sign in"`, say) produce the identical
+    // effective replacement and have no real conflict, even though the raw arrays themselves
+    // differ. Comparing the raw values rejected exactly that non-conflict.
+    const scan = findCaseConflicts(
+      effective,
+      (a, b) =>
+        JSON.stringify(a.map(stripUnsafeCharacters)) ===
+        JSON.stringify(b.map(stripUnsafeCharacters)),
+    );
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'alternatives');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'alternatives');
   });
@@ -180,13 +190,17 @@ const preferredOptionsSchema = z
     allow: z.array(z.string()).default([]),
   })
   .superRefine((options, ctx) => {
-    // Same case-insensitive span-matching conflict, and the same allow-filtering before checking
-    // it, as `unapproved-vocabulary` above (#125) -- see that schema's `superRefine` doc comment.
+    // Same case-insensitive span-matching conflict, the same allow-filtering, and the same
+    // sanitized-value comparison before checking it, as `unapproved-vocabulary` above (#125) --
+    // see that schema's `superRefine` doc comment for both.
     const allow = new Set(options.allow.map((term) => term.toLowerCase()));
     const effective = Object.fromEntries(
       Object.entries(options.additional).filter(([term]) => !allow.has(term.toLowerCase())),
     );
-    const scan = findCaseConflicts(effective, (a, b) => a === b);
+    const scan = findCaseConflicts(
+      effective,
+      (a, b) => stripUnsafeCharacters(a) === stripUnsafeCharacters(b),
+    );
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'replacements');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'replacements');
   });

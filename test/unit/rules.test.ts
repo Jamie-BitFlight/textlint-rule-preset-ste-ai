@@ -290,6 +290,36 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
   });
 
+  it('accepts case-equivalent keys whose raw alternatives sanitize to the same value (Codex review)', () => {
+    // The equality check compared raw alternatives, but every alternative is sanitized
+    // (stripUnsafeCharacters) before it ever reaches a diagnostic or fix. Two keys whose raw
+    // alternatives differ only in a control character that sanitizes away -- a tab vs. a plain
+    // space, here -- produce the identical effective replacement and have no real conflict, even
+    // though the raw arrays themselves are different strings.
+    const tab = String.fromCharCode(0x09);
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: [`sign${tab}in`], use: ['sign in'] },
+        },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+    expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
+  });
+
+  it('accepts case-equivalent preferred-terminology keys whose raw replacements sanitize to the same value (Codex review)', () => {
+    const tab = String.fromCharCode(0x09);
+    const result = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: `sign${tab}in`, use: 'sign in' } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
   it('does not reject a conflict whose keys are both disabled via allow (Codex review)', () => {
     // `run()` filters `additional` entries through `allow` (case-insensitively) before matching,
     // so `{ additional: { Use: [...], use: [...] }, allow: ['use'] }` has no runtime ambiguity at

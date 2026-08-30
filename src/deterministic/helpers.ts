@@ -37,7 +37,9 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * The whitespace-shaped members of those categories — tab, newline, CR, vertical tab, form feed,
  * NEL (U+0085, a C1 control that is also a line break), and the two Unicode line/paragraph
  * separators — are normalised to an ordinary space rather than deleted outright, and normalised
- * *before* the rest of the category is stripped. This sanitizer runs on the actual replacement
+ * *after* the rest of the category (and bidi controls) are stripped outright, not before --
+ * see the ordering note on {@link stripUnsafeCharacters}'s whitespace-run comment below for
+ * why. This sanitizer runs on the actual replacement
  * text a fix writes into a document, not just display strings (`sanitizeQuotedValue`'s doc comment
  * on `note` is the display-only exception, not the rule) — so a legitimately schema-permitted pack
  * value like `sign\tin` or `do\nnot` deleting straight to `signin`/`donot` would silently glue two

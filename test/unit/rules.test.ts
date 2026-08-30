@@ -584,6 +584,25 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]?.keys).toHaveLength(2);
   });
 
+  it('also catches a too-long key with no peer to compare it against (Codex review)', () => {
+    // The fix above only exercised a key's own compile-safety when the pairwise loop happened to
+    // use it as sameTermSpan's first argument -- a key alone in its length bucket never enters
+    // that loop at all (there is no second entry to compare it against), so it passed through
+    // untested and unchecked, the identical crash risk with no bucket-level catch anywhere near
+    // it. Every key is now self-tested up front, regardless of whether it ends up compared to
+    // anything.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(50_000)}`]: ['only'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+    expect(scan.unchecked[0]?.keys).toHaveLength(1);
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

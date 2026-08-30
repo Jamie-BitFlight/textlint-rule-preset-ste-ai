@@ -263,6 +263,17 @@ export function findCaseConflicts<T>(
     // {@link CaseConflictScan.unchecked} rather than contributing a
     // partial, silently-incomplete scan.
     try {
+      // A key only has its own compile-safety exercised when it is used as `sameTermSpan`'s first
+      // argument (the side actually compiled into a pattern; the second is only `.trim()`'d and
+      // tested) — the pairwise loop below only calls it that way for a key still unconsumed when
+      // its own turn as `current` arrives. Confirmed directly: a bucket of exactly one such key
+      // never calls `sameTermSpan` at all, so `findCaseConflicts` reports it neither conflicting
+      // nor unchecked, passing validation without ever attempting to compile it. The same gap
+      // applies to any key a peer already claimed as its own `candidate` before its own turn as
+      // `current` arrived. Self-testing every key up front, before any pairwise work, exercises
+      // every key's own compile-safety exactly once regardless of the role it plays below.
+      for (const [key] of bucket) sameTermSpan(key, key);
+
       const bucketGroups: [key: string, value: T][][] = [];
       const consumed = new Set<number>();
       for (let i = 0; i < bucket.length; i++) {

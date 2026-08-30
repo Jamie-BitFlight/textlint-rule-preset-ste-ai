@@ -320,6 +320,37 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
   });
 
+  it('accepts case-equivalent keys whose alternatives resolve to the same empty list after visibility filtering (Codex review)', () => {
+    // The comparator was fixed (above) to compare sanitized values, but that alone was not enough:
+    // an alternative that sanitizes to no visible content (a lone ZWJ, here) is also dropped from
+    // the array entirely at runtime (`hasVisibleContent`, see unapprovedVocabularyRule.run()), so
+    // `Use: [ZWJ]` and `use: []` resolve to the identical empty alternatives list even though their
+    // sanitized-but-not-yet-filtered arrays look different (`[ZWJ]` vs `[]`).
+    const zwj = String.fromCharCode(0x200d);
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: [zwj], use: [] } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('accepts case-equivalent preferred-terminology keys whose replacements are both invisible-only (Codex review)', () => {
+    // A ZWJ-only replacement and a ZWNJ-only replacement look different once sanitized, but
+    // preferredTerminologyRule.run()'s own hasReplacement check treats any invisible-only
+    // replacement identically as "no usable replacement" -- these two are not a real conflict.
+    const zwj = String.fromCharCode(0x200d);
+    const zwnj = String.fromCharCode(0x200c);
+    const result = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: zwj, use: zwnj } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
   it('does not reject a conflict whose keys are both disabled via allow (Codex review)', () => {
     // `run()` filters `additional` entries through `allow` (case-insensitively) before matching,
     // so `{ additional: { Use: [...], use: [...] }, allow: ['use'] }` has no runtime ambiguity at

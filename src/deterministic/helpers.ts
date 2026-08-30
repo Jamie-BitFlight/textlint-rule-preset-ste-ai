@@ -44,16 +44,31 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * words together, corrupting the actual suggestion and fix. Every other control character in these
  * categories has no legitimate word-internal role, so it is still deleted rather than replaced.
  *
- * Matched as a run (`+`), not one character at a time: a conventional multi-character line break
- * like `\r\n` is two of these controls back to back, and replacing each independently produces
- * `sign  in` (two spaces) for `sign\r\nin` instead of one — confirmed as a real gap by Codex's
- * review on this PR. A whole contiguous run collapses to a single replacement space.
+ * Matched and collapsed as a whole run, not one character at a time, and the run itself spans any
+ * ordinary space characters immediately touching a control, not only the controls themselves --
+ * two gaps in an earlier version, both confirmed directly by Codex's review on this PR:
+ *
+ * - A conventional multi-character line break like `\r\n` is two of these controls back to
+ *   back; replacing each independently produced `sign  in` (two spaces) for `sign\r\nin`
+ *   instead of one.
+ * - Indentation around a line break (`sign \r\n in`) left the *adjacent* ordinary spaces
+ *   untouched, since they are not themselves one of these controls, producing `sign   in`
+ *   (three spaces) instead of one.
+ *
+ * {@link WHITESPACE_RUN_TOUCHING_CONTROL} matches the broader run (controls and ordinary
+ * spaces both); the replacer only collapses a matched run to one space when
+ * {@link WHITESPACE_SHAPED_CONTROLS} actually finds a control character inside it, leaving a
+ * run of *only* ordinary spaces -- legitimate, pack-authored text with no control character in
+ * it at all -- untouched.
  */
-const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]+/gu;
+const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]/u;
+const WHITESPACE_RUN_TOUCHING_CONTROL = /[ \t\n\v\f\r\u0085\u2028\u2029]+/gu;
 
 export function stripUnsafeCharacters(text: string): string {
   return text
-    .replace(WHITESPACE_SHAPED_CONTROLS, ' ')
+    .replace(WHITESPACE_RUN_TOUCHING_CONTROL, (run) =>
+      WHITESPACE_SHAPED_CONTROLS.test(run) ? ' ' : run,
+    )
     .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '')
     .replace(BIDI_CONTROL_CHARS, '');
 }

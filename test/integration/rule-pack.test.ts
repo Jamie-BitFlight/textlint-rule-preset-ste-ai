@@ -1134,6 +1134,46 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.fix?.text).toBe('sign in');
   });
 
+  it('collapses ordinary spaces touching a line break too, not only the controls (Codex review)', () => {
+    // The CRLF fix above collapsed a run of controls to one space but left ordinary spaces
+    // immediately touching that run untouched, since they are not themselves one of the listed
+    // controls -- indentation around a line break (`sign \r\n in`) produced `sign   in` (three
+    // spaces) instead of one.
+    const cr = String.fromCharCode(0x0d);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `sign ${cr}${lf} in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
+
+  it('leaves a plain double space with no control character untouched (Codex review)', () => {
+    // The broader whitespace-run match added above must only collapse a run that actually
+    // contains a control character -- a run of nothing but ordinary spaces, with no control
+    // involved at all, is legitimate pack-authored text and stays as the pack wrote it.
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: 'sign  in', safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign  in');
+  });
+
   it('does not offer or apply a fix that sanitizes to a blank replacement (unapproved-vocabulary, Codex review)', () => {
     // A pack-supplied alternative made entirely of control characters sanitizes to an empty
     // string. checkFixSafety's numeric/negation/modal/ordering checks do not catch a blank

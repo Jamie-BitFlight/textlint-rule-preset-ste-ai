@@ -23,6 +23,17 @@ import {
 // unapproved-vocabulary
 // ---------------------------------------------------------------------------
 
+/**
+ * An `alternatives` array's effective value for case-conflict comparison purposes: each entry
+ * sanitized, then any entry with no visible content dropped entirely. Order is preserved and still
+ * distinguishes two otherwise-equal-looking arrays, matching `unapprovedVocabularyRule.run()`'s own
+ * use of `alternatives[0]` as the fix candidate (below) — this is the same two-step transform, not
+ * a looser one.
+ */
+function effectiveAlternatives(alternatives: readonly string[]): string[] {
+  return alternatives.map(stripUnsafeCharacters).filter(hasVisibleContent);
+}
+
 const unapprovedOptionsSchema = z
   .object({
     /** Additional terms to treat as unapproved: `{ "leverage": ["use"] }`. */
@@ -48,16 +59,19 @@ const unapprovedOptionsSchema = z
     const effective = Object.fromEntries(
       Object.entries(options.additional).filter(([term]) => !allow.has(term.toLowerCase())),
     );
-    // Compared after the same `stripUnsafeCharacters` the raw alternatives get before they ever
-    // reach a diagnostic or fix (below) — two keys whose raw alternatives differ only in a control
-    // character that sanitizes away (`"sign\tin"` vs `"sign in"`, say) produce the identical
-    // effective replacement and have no real conflict, even though the raw arrays themselves
-    // differ. Comparing the raw values rejected exactly that non-conflict.
+    // Compared after the same two-step transform the raw alternatives get before they ever reach
+    // a diagnostic or fix (below): `stripUnsafeCharacters`, then dropping any entry that sanitizes
+    // to no visible content (`hasVisibleContent`). A follow-up round of the same review found that
+    // comparing only the first step wasn't enough -- `Use` mapped to a single ZWJ (U+200D) and
+    // `use` mapped to an empty array sanitize to different-looking raw arrays (`["‍"]` vs
+    // `[]`), but the second step drops the invisible-only entry from both, so at the runtime the
+    // rule actually reaches (below), both keys resolve to the identical empty alternatives list.
+    // Comparing after only the first step rejected that non-conflict the same way comparing raw
+    // values did before.
     const scan = findCaseConflicts(
       effective,
       (a, b) =>
-        JSON.stringify(a.map(stripUnsafeCharacters)) ===
-        JSON.stringify(b.map(stripUnsafeCharacters)),
+        JSON.stringify(effectiveAlternatives(a)) === JSON.stringify(effectiveAlternatives(b)),
     );
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'alternatives');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'alternatives');
@@ -196,6 +210,18 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
 // preferred-terminology
 // ---------------------------------------------------------------------------
 
+/**
+ * A `to` value's effective replacement for case-conflict comparison purposes: the sanitized value
+ * itself, or a canonical empty string when that sanitized value has no visible content. Two
+ * replacements that each sanitize to no visible content compare equal here even if their raw,
+ * invisible-only content differs, since `preferredTerminologyRule`'s own `hasReplacement` check
+ * (below) treats both identically as "no usable replacement" at runtime.
+ */
+function effectiveReplacement(to: string): string {
+  const safe = stripUnsafeCharacters(to);
+  return hasVisibleContent(safe) ? safe : '';
+}
+
 const preferredOptionsSchema = z
   .object({
     /** Extra mappings: `{ "log in": "sign in" }`. Never fixed automatically. */
@@ -204,7 +230,7 @@ const preferredOptionsSchema = z
   })
   .superRefine((options, ctx) => {
     // Same case-insensitive span-matching conflict, the same allow-filtering, and the same
-    // sanitized-value comparison before checking it, as `unapproved-vocabulary` above (#125) --
+    // effective-value comparison before checking it, as `unapproved-vocabulary` above (#125) --
     // see that schema's `superRefine` doc comment for both.
     const allow = new Set(options.allow.map((term) => term.toLowerCase()));
     const effective = Object.fromEntries(
@@ -212,7 +238,7 @@ const preferredOptionsSchema = z
     );
     const scan = findCaseConflicts(
       effective,
-      (a, b) => stripUnsafeCharacters(a) === stripUnsafeCharacters(b),
+      (a, b) => effectiveReplacement(a) === effectiveReplacement(b),
     );
     for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'replacements');
     for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'replacements');

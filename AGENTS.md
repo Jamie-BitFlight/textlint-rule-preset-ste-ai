@@ -99,6 +99,32 @@ of those tests or CI assertion scripts now assert the old behavior. Update only 
 actually affects, not every file discovery turned up. Definition of done includes removing or
 updating stale tests, CI assertion scripts, and documentation. It is not enough to only add new ones.
 
+## Commit hygiene
+
+Prefer smaller sequential commits when a task touches multiple concerns. Split the work along
+those concern boundaries. One commit per concern reviews better than one commit carrying all of
+them.
+
+## Delegating to subagents
+
+Set the `model` parameter explicitly on every delegated call. This covers `Agent`-tool calls and
+`agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
+session model.
+
+- `haiku` — mechanical bulk work. Renames, boilerplate, format conversion, and log triage fit here.
+- `sonnet` — the default tier. It suits well-specified implementation with clear acceptance
+  criteria.
+- `opus` — genuinely tricky work. Concurrency, subtle algorithms, adversarial verify panels, and
+  gnarly debugging fit here.
+- `fable` — rare. It earns its cost only when independence from the orchestrator's own context is
+  the point. An adversarial review of the orchestrator's own plan is one example. A large diff is
+  another.
+
+Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
+warrants one.
+
+Pick the cheaper tier when the choice between two is unclear. Escalate on failure.
+
 ## Delegation gotchas
 
 Read this before dispatching subagents in bulk.
@@ -174,6 +200,23 @@ orchestrator's own direct action, at the same path the same agent already owned.
 `Agent`-tool dispatch. So it stays inside the exception above for orchestrator-performed worktree
 recovery. This differs from a worktree that has real uncommitted edits destroyed outright. Here,
 there is nothing to lose but the empty directory.
+
+## Dynamic workflows (`Workflow` tool)
+
+This section applies to every session, on any model. A dynamic workflow is not something to avoid.
+Reach for the `Workflow` tool when a task has three or more independent parallelizable subtasks.
+Reach for it too when a task benefits from a pipeline or a judge panel.
+
+Opt-in is a standing rule. Invoke the tool directly when ultracode is on for the session.
+Three signals turn ultracode on. The user types the "ultracode" keyword. The user sets the
+toggle. The user asks for orchestration in their own words. Otherwise propose the workflow first. One or two sentences
+covering the rough shape and cost is enough. Wait for the user's reply. Their "yes" is the opt-in.
+
+Every `agent()` call inside a workflow script must set the `model` parameter explicitly. Choose
+the tier per "Delegating to subagents" above, with one tightening. Never use a `fable` agent in a
+dynamic workflow. Approval does not lift that. Only `haiku`, `sonnet`, and `opus` belong in a
+workflow stage. A warranted `fable` review runs after the workflow completes instead. It runs as a
+standalone `Agent`-tool call. It still needs the user's approval first.
 
 ## Verifying what an agent did: query its session log, not git state
 

@@ -54,31 +54,40 @@ export function sanitizeQuotedValue(text: string): string {
 }
 
 /**
- * Fast-path canonical form for {@link findCaseConflicts}'s grouping: NFKC folds some
- * compatibility variants `toLowerCase()` alone does not (confirmed directly: `'ſ'.normalize
- * ('NFKC').toLowerCase() === 's'`, unifying the Latin long s with plain `s`), which is exactly
- * the pair Codex's review on this PR flagged `toLowerCase()`-only grouping for missing.
+ * Code-point count of a term, after the same `trim()` {@link sameTermSpan} applies before
+ * comparing.
+ *
+ * Used only as a *necessary* pre-filter for {@link findCaseConflicts}, never as a verdict on its
+ * own: JS's `/iu` regex canonicalisation is confirmed directly to be one-code-point-to-one
+ * (`new RegExp('^ß$', 'iu').test('ss')` is `false` — unlike full Unicode case folding, which
+ * would expand `ß` to `ss`), so two strings `termPattern` actually treats as the same span always
+ * have equal code-point length. The converse does not hold — equal length never implies
+ * equivalence (ASCII `A` and fullwidth `Ａ` are both length 1, and are visually/case-fold-similar
+ * enough that an NFKC-based canonicalisation this function used to rely on falsely merged them,
+ * confirmed directly: `'Ａ'.normalize('NFKC').toLowerCase() === 'a'` while
+ * `/^A$/iu.test('Ａ')` is `false`) — so a length match is only ever a candidate to confirm with
+ * {@link sameTermSpan}, never a substitute for it.
+ *
+ * `Array.from` over a string iterates *code points*, not user-perceived grapheme clusters (an
+ * `Intl.Segmenter` count), which is exactly what this needs: the invariant above is that simple
+ * case folding preserves code-point count, not grapheme count, so grapheme-based counting would
+ * not be the same invariant.
  */
-function canonicalKey(term: string): string {
-  return term.trim().normalize('NFKC').toLowerCase();
+function codePointLength(term: string): number {
+  return Array.from(term.trim()).length;
 }
 
 /**
- * Above this many `additional` entries, {@link findCaseConflicts} skips the exhaustive pairwise
- * merge below and returns {@link canonicalKey}'s grouping alone.
+ * Above this many entries sharing the same {@link codePointLength}, {@link findCaseConflicts}
+ * skips the exhaustive pairwise check for that length and treats none of them as conflicting.
  *
- * That merge step exists only for a case-fold pair `canonicalKey` itself does not unify — Greek
- * final sigma `ς`/`σ` is the standing example (confirmed directly: `'ς'.normalize('NFKC')
- * .toLowerCase() !== 'σ'.toLowerCase()`, but `termPattern`'s `/iu` regex does treat them as the
- * same letter). Finding every such pair exhaustively means testing every remaining group against
- * every other, which is quadratic in the number of *distinct spellings* after canonicalisation —
- * measured directly at roughly 800ms for 2,000 pairwise-distinct entries, the DoS-shaped cost
- * Codex's review on this PR flagged in the pairwise-only version of this function. `additional`
- * maps are operator- or pack-authored vocabulary lists; one this large is already unusual, so
- * degrading to canonical-only grouping (which still catches every conflict this function shipped
- * with before this pairwise refinement existed) is an acceptable trade against stalling a lint run.
+ * The check is quadratic per length bucket — measured directly at roughly 800ms for 2,000
+ * pairwise-distinct same-length entries, the DoS-shaped cost Codex's review on this PR flagged.
+ * `additional` maps are operator- or pack-authored vocabulary lists; a single length bucket this
+ * large is already unusual, so skipping it (rather than guessing at a conflict with an
+ * unconfirmed heuristic) is an acceptable trade against stalling a lint run.
  */
-const EXHAUSTIVE_FOLD_MERGE_LIMIT = 500;
+const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
 
 /**
  * Group the keys of a term map by case-fold equivalence and report every group whose members do
@@ -88,6 +97,13 @@ const EXHAUSTIVE_FOLD_MERGE_LIMIT = 500;
  * first one in object key order silently wins and the other's mapping never applies. That is only
  * a real conflict when the two keys disagree about the replacement — `{ Use: ['employ'], use:
  * ['employ'] }` is redundant but not contradictory.
+ *
+ * Every reported group is confirmed with {@link sameTermSpan} — the actual matcher — rather than
+ * a cheaper canonicalisation, because a canonicalisation broad enough to catch every case
+ * `sameTermSpan` recognises (Greek final sigma, the Latin long s) is also broad enough to falsely
+ * merge keys the matcher treats as distinct (ASCII/fullwidth Latin letters); see
+ * {@link codePointLength}'s doc comment for both confirmed examples. {@link codePointLength}
+ * narrows the candidates checked, as a size (not a correctness) optimisation.
  */
 export function findCaseConflicts<T>(
   entries: Readonly<Record<string, T>>,
@@ -95,42 +111,35 @@ export function findCaseConflicts<T>(
 ): string[][] {
   const items = Object.entries(entries);
 
-  // Fast path: O(n) grouping by canonical form, catching every plain-case and NFKC-decomposable
-  // pair (which covers everything `String.prototype.toLowerCase()` alone caught, plus more).
-  const byCanonical = new Map<string, [key: string, value: T][]>();
+  const byLength = new Map<number, [key: string, value: T][]>();
   for (const item of items) {
-    const canonical = canonicalKey(item[0]);
-    const group = byCanonical.get(canonical);
-    if (group === undefined) byCanonical.set(canonical, [item]);
-    else group.push(item);
+    const length = codePointLength(item[0]);
+    const bucket = byLength.get(length);
+    if (bucket === undefined) byLength.set(length, [item]);
+    else bucket.push(item);
   }
-  let groups = [...byCanonical.values()];
 
-  // Precise path: merge any remaining groups `sameTermSpan` still considers equivalent, bounded
-  // so an unusually large map degrades to the fast path alone instead of stalling.
-  if (items.length <= EXHAUSTIVE_FOLD_MERGE_LIMIT) {
-    const merged: typeof groups = [];
+  const groups: [key: string, value: T][][] = [];
+  for (const bucket of byLength.values()) {
+    if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) continue;
     const consumed = new Set<number>();
-    for (let i = 0; i < groups.length; i++) {
+    for (let i = 0; i < bucket.length; i++) {
       if (consumed.has(i)) continue;
-      let combined = groups[i];
-      if (combined === undefined) continue;
+      const current = bucket[i];
+      if (current === undefined) continue;
+      const group: [string, T][] = [current];
       consumed.add(i);
-      for (let j = i + 1; j < groups.length; j++) {
+      for (let j = i + 1; j < bucket.length; j++) {
         if (consumed.has(j)) continue;
-        const candidate = groups[j];
-        const combinedFirst = combined[0];
-        if (candidate === undefined || combinedFirst === undefined) continue;
-        const candidateFirst = candidate[0];
-        if (candidateFirst === undefined) continue;
-        if (sameTermSpan(combinedFirst[0], candidateFirst[0])) {
-          combined = [...combined, ...candidate];
+        const candidate = bucket[j];
+        if (candidate === undefined) continue;
+        if (sameTermSpan(current[0], candidate[0])) {
+          group.push(candidate);
           consumed.add(j);
         }
       }
-      merged.push(combined);
+      groups.push(group);
     }
-    groups = merged;
   }
 
   const conflicts: string[][] = [];

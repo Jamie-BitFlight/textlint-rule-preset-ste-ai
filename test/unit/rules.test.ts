@@ -365,14 +365,15 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
   });
 
-  it('stays fast and correct on a large map, without the exhaustive Unicode-fold merge', () => {
+  it('stays fast and correct on a large map, without exhaustively scanning every length', () => {
     // Direct call, not through a rule: constructing a document config with 600 `additional`
     // entries through the full pipeline just to exercise this one internal boundary would be
-    // unwieldy for no extra coverage. `findCaseConflicts`'s exhaustive pairwise merge (for a
-    // case-fold pair `canonicalKey`'s NFKC+lowercase step does not unify, such as Greek final
-    // sigma) is O(n^2) once past `EXHAUSTIVE_FOLD_MERGE_LIMIT` entries -- measured directly at
-    // ~800ms for 2,000 pairwise-distinct entries before this limit existed. Past the limit, only
-    // the O(n) canonical-key fast path runs, which still catches an ordinary case pair.
+    // unwieldy for no extra coverage. `findCaseConflicts` only pays its pairwise `sameTermSpan`
+    // cost within a bucket of same-code-point-length keys, bounded by
+    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH` -- measured directly at ~800ms for 2,000
+    // pairwise-distinct same-length entries before that bound existed. `word0`..`word599` spread
+    // across four lengths (5-8 digits), each bucket comfortably under the limit, so `Foo`/`foo`
+    // (the only length-3 pair) still gets a real, confirmed conflict check.
     const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
     for (let i = 0; i < 600; i++) additional[`word${i}`] = [`alt${i}`];
 
@@ -385,6 +386,19 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
 
     expect(conflicts).toEqual([['Foo', 'foo']]);
     expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  it('never merges keys the real matcher treats as distinct (Codex review)', () => {
+    // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
+    // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth
+    // `Ａ` (U+FF21) both normalize+lowercase to `a`, but `termPattern`'s actual `/iu` regex does
+    // not treat them as the same letter -- confirmed directly: `/^A$/iu.test('Ａ')` is `false`.
+    // An earlier version of `findCaseConflicts` used exactly that canonicalisation as its
+    // grouping and would have flagged this pair, incorrectly skipping the whole rule for two
+    // keys that do not actually collide.
+    const conflicts = findCaseConflicts({ A: ['alfa'], Ａ: ['fullwidth-a'] }, (a, b) => a === b);
+
+    expect(conflicts).toEqual([]);
   });
 });
 

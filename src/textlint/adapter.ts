@@ -8,6 +8,7 @@ import type {
 import { analyseText, type AnalysisResult } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
 import type { Diagnostic } from '../core/types.js';
+import { sanitizeQuotedValue } from '../deterministic/helpers.js';
 import { deterministicRules, findDeterministicRule } from '../deterministic/index.js';
 import { tryConfigFingerprint } from './config-fingerprint.js';
 import { loadSharedConfig } from './shared-config.js';
@@ -354,9 +355,18 @@ export function createSteTextlintRule(
           if (diagnostic.suggestions !== undefined && diagnostic.suggestions.length > 0) {
             // Suggestions are advisory: an editor may offer them, but `textlint --fix` applies
             // only `details.fix`, which the autofix gate has already approved.
+            //
+            // `replacement` can be supplier-controlled, schema-unconstrained rule-pack text (a
+            // vocabulary rule's `entry.alternatives`/`entry.to`, from `src/deterministic/rules/
+            // vocabulary.ts`) -- the same untrusted-text class #123 sanitizes for `Diagnostic
+            // .message` and fix `rationale`. `message` below wraps it in the template's own
+            // literal quotes, so it needs `sanitizeQuotedValue` for display. `fix` must keep the
+            // raw `replacement`: it is the actual text `fixer.replaceTextRange` inserts into the
+            // document, and sanitizing it would silently change what an editor's "apply fix"
+            // action writes to the file.
             details.suggestions = diagnostic.suggestions.slice(0, 3).map((replacement, index) => ({
               id: `${ruleId}-${start}-${index}`,
-              message: `Replace with "${replacement}"`,
+              message: `Replace with "${sanitizeQuotedValue(replacement)}"`,
               fix: fixer.replaceTextRange([start, end], replacement),
             }));
           }

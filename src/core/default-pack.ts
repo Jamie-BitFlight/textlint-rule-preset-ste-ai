@@ -27,8 +27,14 @@ function deepFreeze<T>(value: T): T {
  *
  * No authorised ASD-STE100 material is available to this repository: the specification and its
  * dictionary are "a Copyright and a Trademark of ASD, Brussels, Belgium. All rights reserved."
- * (asd-ste100.org, retrieved 2026-07-26). Nothing here is copied, paraphrased or reconstructed
- * from that specification.
+ * (asd-ste100.org, retrieved 2026-07-26). No rule text, no dictionary entry and no rule numbering
+ * was copied, paraphrased or reconstructed from that specification.
+ *
+ * The numeric limits below (`limits`) are round working defaults chosen by the author, not values
+ * read from or reconstructed against the standard, which was never consulted. No claim is made
+ * about whether any of them coincides with a value the standard happens to use — that would be an
+ * assertion this repository has no evidence to support (#19). They are replaceable the same way as
+ * the rest of this pack, below.
  *
  * What this pack *is*: ordinary plain-English editing guidance of the kind published in many
  * public style guides — prefer the short common word, avoid contractions, keep sentences short,

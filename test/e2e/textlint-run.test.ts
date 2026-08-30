@@ -305,6 +305,31 @@ describe('textlint lint run', () => {
     const message = result.messages[0] as { suggestions?: { message: string }[] } | undefined;
     expect(message?.suggestions?.[0]?.message).toContain('start');
   });
+
+  it('sanitizes a rule-pack-controlled alternative in the rendered suggestion message (#123)', async () => {
+    // `diagnostic.suggestions` (`src/deterministic/rules/vocabulary.ts`) can carry
+    // schema-unconstrained pack/project text. `src/textlint/adapter.ts` wraps each one in its own
+    // literal double quotes to build `details.suggestions[].message` -- the review that found this
+    // gap traced it through `mustGetRule`/`kernel.lintText` to confirm it is genuinely rendered,
+    // not just an internal field. The control character below must not survive into that message,
+    // and an embedded `"` must not let the forged text visually escape the quoting.
+    const forged = 'apply"; forged citation\u0008';
+    const result = await kernel.lintText('Leverage the API.\n', {
+      ...options([]),
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          rule: mustGetRule('unapproved-vocabulary'),
+          options: { additional: { leverage: [forged] } },
+        },
+      ],
+    });
+
+    const message = result.messages[0] as { suggestions?: { message: string }[] } | undefined;
+    const suggestionMessage = message?.suggestions?.[0]?.message;
+    expect(suggestionMessage).not.toContain('\u0008');
+    expect(suggestionMessage?.match(/"/g)).toHaveLength(2);
+  });
 });
 
 describe('textlint fix run', () => {

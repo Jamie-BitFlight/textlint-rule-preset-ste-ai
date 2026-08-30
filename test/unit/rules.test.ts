@@ -4,6 +4,12 @@ import { analyseDocument } from '../../src/core/document.js';
 import { runDeterministicRules } from '../../src/core/runner.js';
 import type { Diagnostic, DocumentFormat } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
+import {
+  findCaseConflicts,
+  findTerm,
+  reportUncheckedGroup,
+  type IssueReporter,
+} from '../../src/deterministic/helpers.js';
 import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 interface RunResult {
@@ -223,6 +229,534 @@ describe('preferred-terminology', () => {
   it('reports without a fix when the pack marks the entry unsafe', () => {
     const result = run('The start-up sequence runs.\n');
     expect(result.forRule(id)[0]?.fix).toBeUndefined();
+  });
+});
+
+/**
+ * Runs a fixed document, exposing notices that the `run()` helper above discards. The second
+ * sentence carries a contraction so `no-contractions` -- unrelated to `additional`'s own conflict
+ * -- has something to genuinely find, not just something it happens not to flag.
+ */
+function runRaw(config: SteAiConfigInput) {
+  const resolved = resolveConfig(config);
+  const doc = analyseDocument({
+    id: 't',
+    format: 'markdown',
+    text: "Use the tool. Don't touch the busbar.\n",
+  });
+  return runDeterministicRules({
+    doc,
+    rules: deterministicRules,
+    config: resolved,
+    pack: provisionalRulePack,
+  });
+}
+
+/**
+ * `additional` keys are matched case-insensitively (`termPattern()` in `src/deterministic/
+ * helpers.ts`), so `Use` and `use` claim the same span. Before #125's fix, JSON key order silently
+ * decided which alternatives list applied.
+ */
+describe('case-equivalent "additional" keys are rejected, not silently order-dependent (#125)', () => {
+  it('rejects conflicting case-equivalent keys in unapproved-vocabulary, both key orders', () => {
+    const orderA = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['apply'] } },
+      },
+    });
+    const orderB = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { use: ['apply'], Use: ['employ'] } },
+      },
+    });
+
+    for (const result of [orderA, orderB]) {
+      expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(false);
+      const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+      expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
+      expect(notice?.message).toContain('"Use"');
+      expect(notice?.message).toContain('"use"');
+    }
+  });
+
+  it('accepts case-equivalent keys that resolve to the same alternatives', () => {
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['employ'] } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+    expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
+  });
+
+  it('accepts case-equivalent keys whose raw alternatives sanitize to the same value (Codex review)', () => {
+    // The equality check compared raw alternatives, but every alternative is sanitized
+    // (stripUnsafeCharacters) before it ever reaches a diagnostic or fix. Two keys whose raw
+    // alternatives differ only in a control character that sanitizes away -- a tab vs. a plain
+    // space, here -- produce the identical effective replacement and have no real conflict, even
+    // though the raw arrays themselves are different strings.
+    const tab = String.fromCharCode(0x09);
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: [`sign${tab}in`], use: ['sign in'] },
+        },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+    expect(result.diagnostics.some((d) => d.ruleId === 'unapproved-vocabulary')).toBe(true);
+  });
+
+  it('accepts case-equivalent preferred-terminology keys whose raw replacements sanitize to the same value (Codex review)', () => {
+    const tab = String.fromCharCode(0x09);
+    const result = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: `sign${tab}in`, use: 'sign in' } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('accepts case-equivalent keys whose alternatives resolve to the same empty list after visibility filtering (Codex review)', () => {
+    // The comparator was fixed (above) to compare sanitized values, but that alone was not enough:
+    // an alternative that sanitizes to no visible content (a lone ZWJ, here) is also dropped from
+    // the array entirely at runtime (`hasVisibleContent`, see unapprovedVocabularyRule.run()), so
+    // `Use: [ZWJ]` and `use: []` resolve to the identical empty alternatives list even though their
+    // sanitized-but-not-yet-filtered arrays look different (`[ZWJ]` vs `[]`).
+    const zwj = String.fromCharCode(0x200d);
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: [zwj], use: [] } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('accepts case-equivalent preferred-terminology keys whose replacements are both invisible-only (Codex review)', () => {
+    // A ZWJ-only replacement and a ZWNJ-only replacement look different once sanitized, but
+    // preferredTerminologyRule.run()'s own hasReplacement check treats any invisible-only
+    // replacement identically as "no usable replacement" -- these two are not a real conflict.
+    const zwj = String.fromCharCode(0x200d);
+    const zwnj = String.fromCharCode(0x200c);
+    const result = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: zwj, use: zwnj } },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('does not reject a conflict whose keys are both disabled via allow (Codex review)', () => {
+    // `run()` filters `additional` entries through `allow` (case-insensitively) before matching,
+    // so `{ additional: { Use: [...], use: [...] }, allow: ['use'] }` has no runtime ambiguity at
+    // all: neither key ever reaches `findTerm`. Validating the unfiltered map rejected this
+    // perfectly valid configuration on a conflict that can never actually occur.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: ['employ'], use: ['apply'] },
+          allow: ['use'],
+        },
+      },
+    });
+
+    expect(result.notices.some((n) => n.code === 'rule-options-invalid')).toBe(false);
+  });
+
+  it('still rejects a conflict when allow disables only one of the two keys', () => {
+    // Filtering must be case-insensitive and per-key, not "any entry present in allow clears the
+    // whole map": disabling `Use` alone leaves `use` on its own, so there is no conflict left
+    // either -- this proves the filter narrows to the *other* remaining key correctly, not that it
+    // happens to clear everything whenever `allow` is non-empty.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': {
+          additional: { Use: ['employ'], use: ['apply'], leverage: ['employ'] },
+          allow: ['leverage'],
+        },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toContain('"Use"');
+    expect(notice?.message).toContain('"use"');
+  });
+
+  it('rejects conflicting case-equivalent keys in preferred-terminology, both key orders', () => {
+    const orderA = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { Use: 'employ', use: 'apply' } },
+      },
+    });
+    const orderB = runRaw({
+      rules: {
+        'preferred-terminology': { additional: { use: 'apply', Use: 'employ' } },
+      },
+    });
+
+    for (const result of [orderA, orderB]) {
+      expect(result.diagnostics.some((d) => d.ruleId === 'preferred-terminology')).toBe(false);
+      const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+      expect(notice?.detail).toEqual({ ruleId: 'preferred-terminology' });
+    }
+  });
+
+  it('does not reject unrelated rules when one rule’s additional map conflicts', () => {
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { Use: ['employ'], use: ['apply'] } },
+      },
+    });
+
+    // The malformed rule is skipped; every other rule still ran (mirrors the `unknown-rule-id`
+    // degrade-not-fail contract in `test/unit/config-strictness.test.ts`). `no-contractions` has a
+    // real contraction to find in `runRaw`'s fixture text, so this proves it actually ran rather
+    // than merely failing to flag text it was never going to flag anyway.
+    expect(result.notices.filter((n) => n.level === 'error')).toHaveLength(1);
+    expect(result.diagnostics.some((d) => d.ruleId === 'no-contractions')).toBe(true);
+  });
+
+  it('sanitizes the conflicting keys before naming them in the notice message', () => {
+    // A pack's own `rules[].options` field is an unconstrained `z.record(z.string(),
+    // z.unknown())` (`rulePackRuleSpecSchema` in `src/rule-pack/schema.ts`) and is merged as the
+    // base of `rawOptions` before schema validation (`src/core/runner.ts`), so a case-conflicting
+    // `additional` key can itself be pack-controlled, not just operator-typed. The notice message
+    // is rendered verbatim by the CLI and by the textlint adapter's run-level notice reporting, so
+    // it needs the same control-character/bidi-override stripping as `Diagnostic.message`.
+    //
+    // The bidi-override character sits *inside* both keys, at the same position, so the keys stay
+    // case-equivalent (`.toLowerCase()` doesn't touch it) -- appending it only to one key instead
+    // would make the two keys genuinely different strings, not case variants, and the conflict
+    // detector would never fire at all.
+    const bidiOverride = String.fromCharCode(0x202e);
+    const keyA = `U${bidiOverride}se`;
+    const keyB = `u${bidiOverride}se`;
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { [keyA]: ['employ'], [keyB]: ['apply'] } },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toBeDefined();
+    expect(notice?.message).not.toContain(bidiOverride);
+    expect(notice?.message).toContain('"Use"');
+    expect(notice?.message).toContain('"use"');
+  });
+
+  it('catches a Unicode case fold "toLowerCase()" itself does not compute', () => {
+    // `termPattern()`'s `/iu` flag matches on full Unicode case folding, which is a different,
+    // stricter relation than `String.prototype.toLowerCase()` computes -- confirmed directly:
+    // `/s/iu` matches the Latin small letter long s (`ſ`, U+017F), a real span collision, but
+    // `'s'.toLowerCase() !== 'ſ'.toLowerCase()`. A conflict detector keyed on `toLowerCase()`
+    // would silently miss this pair, leaving exactly the object-key-order ambiguity #125 exists
+    // to reject.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { s: ['sierra'], ſ: ['long-s'] } },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toBeDefined();
+    expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
+  });
+
+  it('stays fast and correct on a large map, without exhaustively scanning every length', () => {
+    // Direct call, not through a rule: constructing a document config with 600 `additional`
+    // entries through the full pipeline just to exercise this one internal boundary would be
+    // unwieldy for no extra coverage. `findCaseConflicts` only pays its pairwise `sameTermSpan`
+    // cost within a bucket of same-code-point-length keys, bounded by
+    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`. `word0`..`word599` spread across four lengths
+    // (5-8 digits), each bucket comfortably under the limit, so `Foo`/`foo` (the only length-3
+    // pair) still gets a real, confirmed conflict check.
+    const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
+    for (let i = 0; i < 600; i++) additional[`word${i}`] = [`alt${i}`];
+
+    const started = Date.now();
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+    const elapsedMs = Date.now() - started;
+
+    expect(scan.conflicts).toEqual([['Foo', 'foo']]);
+    expect(scan.unchecked).toEqual([]);
+    expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  it('rejects an oversized length bucket instead of silently passing it (Codex review)', () => {
+    // Silently treating a bucket too large to check exhaustively as conflict-free was the first
+    // version of this bound -- rejected on review, because that bucket could still contain a
+    // genuine conflict (`Foo`/`foo` here, buried among 500 unrelated four-code-point keys) and
+    // reporting "no conflict" without having actually checked is a false all-clear. This proves
+    // the corrected behavior: the oversized bucket comes back as `unchecked`, not silently
+    // dropped, regardless of whether it happens to contain a real conflict.
+    // Every filler key is exactly 3 code points, the same length as "Foo"/"foo", so they land in
+    // the one oversized bucket together: 500 filler keys ("000".."499") plus the real pair, 502
+    // entries total, comfortably over `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH` (500).
+    const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
+    for (let i = 0; i < 500; i++) additional[String(i).padStart(3, '0')] = [`alt${i}`];
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('bucket-too-large');
+    expect(scan.unchecked[0]?.keys).toHaveLength(502);
+    expect(scan.unchecked[0]?.keys).toEqual(expect.arrayContaining(['Foo', 'foo']));
+  });
+
+  it('bounds total cost across many buckets, not just within one (Codex review)', () => {
+    // The per-length bound alone does not stop an untrusted pack from keeping every bucket at
+    // exactly the per-length limit and supplying arbitrarily many buckets: 50 distinct lengths,
+    // 500 entries each (25,000 keys total, every individual bucket within
+    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`) reproduces the adversarial shape `MAX_TOTAL_COMPARISONS`
+    // exists to bound.
+    const additional: Record<string, string[]> = {};
+    for (let bucket = 0; bucket < 50; bucket++) {
+      const prefix = 'x'.repeat(bucket);
+      for (let i = 0; i < 500; i++)
+        additional[`${prefix}${String(i).padStart(3, '0')}`] = [`v${i}`];
+    }
+
+    const started = Date.now();
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+    const elapsedMs = Date.now() - started;
+
+    // Every one of these 25,000 keys also pays a fixed per-key self-test cost now (see the
+    // "self-tests the actual termPattern shape too" test below), on top of the pairwise cost this
+    // test bounds -- a real, legitimate addition, not a regression, but it moves the wall-clock
+    // floor up enough that a tight ceiling flakes on a loaded or slower CI runner (observed
+    // directly: comfortably under a smaller bound locally, over it on CI). The bound here exists
+    // to catch a real return to unbounded O(n^2)-or-worse cost, which would take vastly longer
+    // than this, not to pin a specific millisecond figure.
+    expect(elapsedMs).toBeLessThan(10_000);
+    // At least one bucket exceeded the total budget and came back unchecked rather than being
+    // silently treated as conflict-free.
+    expect(scan.unchecked.length).toBeGreaterThan(0);
+    expect(scan.unchecked.some((group) => group.reason === 'total-budget-exceeded')).toBe(true);
+  });
+
+  it('reports a total-budget overflow as its own reason, not "bucket too large" (Codex review)', () => {
+    // Four buckets sitting exactly at the per-length limit (500 * 499 / 2 = 124,750 comparisons
+    // each) spend 499,000 of the 500,000-comparison total budget between them. A fifth, much
+    // smaller bucket (50 entries, nowhere near the per-length limit) then pushes the running total
+    // over budget by itself. Before distinguishing the two reasons, both this small bucket and a
+    // genuinely oversized one shared one `unchecked` shape, and `reportUncheckedGroup` always
+    // claimed "too many keys share this length" -- wrong for this bucket, which isn't oversized at
+    // all, just the one that happened to cross a budget earlier buckets already spent most of.
+    const additional: Record<string, string[]> = {};
+    for (let bucket = 0; bucket < 4; bucket++) {
+      const prefix = 'x'.repeat(bucket);
+      for (let i = 0; i < 500; i++)
+        additional[`${prefix}${String(i).padStart(3, '0')}`] = [`v${i}`];
+    }
+    const smallPrefix = 'x'.repeat(10);
+    for (let i = 0; i < 50; i++)
+      additional[`${smallPrefix}${String(i).padStart(2, '0')}`] = [`s${i}`];
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    const smallBucket = scan.unchecked.find((group) => group.keys.length === 50);
+    expect(smallBucket?.reason).toBe('total-budget-exceeded');
+
+    const notices: string[] = [];
+    const ctx: IssueReporter = { addIssue: (issue) => notices.push(issue.message) };
+    if (smallBucket !== undefined) reportUncheckedGroup(ctx, smallBucket, 'alternatives');
+    expect(notices[0]).toContain('total comparison budget');
+    expect(notices[0]).not.toContain('too many to exhaustively check');
+  });
+
+  it('bounds total cost by key length as well as comparison count (Codex review)', () => {
+    // MAX_TOTAL_COMPARISONS alone assumes every comparison costs the same, but a regex match's
+    // cost scales with the length of the strings it matches -- a bucket comfortably within both
+    // the per-bucket limit (500) and the total pair-count budget (500,000) can still be expensive
+    // if its keys are individually very long. 500 keys of 201 code points each: 124,750 pairs,
+    // under every count-based limit, but 124,750 * 201 code points of matching work exceeds
+    // MAX_TOTAL_COMPARISON_WORK, so this reproduces the shape the budget exists to reject rather
+    // than asserting a specific measured duration that would drift from the real cost over time.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String(i).padStart(3, '0')}${'x'.repeat(198)}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
+  it('charges the work budget for uncollapsed whitespace, not the bucketed length (Codex review)', () => {
+    // codePointLength collapses a whitespace run to one unit for bucketing, matching how
+    // sameTermSpan's \s+ actually treats it -- but escapeForMatching/sameTermSpan still scan every
+    // raw whitespace character on each comparison, so a key built mostly of whitespace bucketed as
+    // short. Charging the work budget off that collapsed length let this shape slip under it: 500
+    // keys of a letter, three digits, three thousand spaces, and "x" all bucket at the same short
+    // collapsed length (6), but the raw length actually scanned per comparison is over 3,000.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String.fromCharCode(65 + (i % 26))}${String(i).padStart(3, '0')}${' '.repeat(3000)}x`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
+  it('charges the work budget for untrimmed leading/trailing whitespace too (Codex review)', () => {
+    // The raw-length fix above measured Array.from(item[0].trim()).length -- trimming before
+    // counting hid exactly the whitespace that costs time: escapeForMatching's own .trim() call,
+    // and sameTermSpan's b.trim(), each scan the full untrimmed string regardless of how much they
+    // end up stripping. 500 distinct three-character keys each followed by 3,000 trailing spaces
+    // all bucket at the same short trimmed length (3), so a length charge that also trims hides
+    // the real per-comparison re-trim cost the same way the internal-whitespace case did above.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String(i).padStart(3, '0')}${' '.repeat(3000)}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
+  it('degrades to unchecked instead of crashing when a key is too long to compile (Codex review)', () => {
+    // sameTermSpan compiles a RegExp from each key. Neither MAX_TOTAL_COMPARISONS nor
+    // MAX_TOTAL_COMPARISON_WORK catches two case-fold-equivalent keys that are each merely very
+    // long: a bucket of two costs one comparison, comfortably under both budgets, yet the
+    // underlying regex engine refuses to compile a pattern past its own internal size limit --
+    // 50,000 code points is comfortably past that limit on the engine running this test. Uncaught,
+    // that exception would escape this function, the superRefine callback calling it, and
+    // safeParse itself, crashing the whole run instead of degrading to the rule-options-invalid
+    // this rule is supposed to produce.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(50_000)}`]: ['first'],
+      [`A${'x'.repeat(50_000)}`]: ['second'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+    expect(scan.unchecked[0]?.keys).toHaveLength(2);
+  });
+
+  it('also catches a too-long key with no peer to compare it against (Codex review)', () => {
+    // The fix above only exercised a key's own compile-safety when the pairwise loop happened to
+    // use it as sameTermSpan's first argument -- a key alone in its length bucket never enters
+    // that loop at all (there is no second entry to compare it against), so it passed through
+    // untested and unchecked, the identical crash risk with no bucket-level catch anywhere near
+    // it. Every key is now self-tested up front, regardless of whether it ends up compared to
+    // anything.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(50_000)}`]: ['only'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+    expect(scan.unchecked[0]?.keys).toHaveLength(1);
+  });
+
+  it('self-tests the actual termPattern shape too, not only sameTermSpan (Codex review)', () => {
+    // Confirmed directly: a compiled RegExp survives construction no matter how long the pattern
+    // is -- the compile step that can throw for an oversized or pathologically-shaped pattern
+    // happens lazily, on first *execution* (.test()/.exec()/.matchAll()), not at `new RegExp(...)`
+    // time. termPattern's lookaround-boundary shape (the one findTerm actually executes against
+    // real document text) is not guaranteed to hit that lazy-compile failure at the same size as
+    // sameTermSpan's anchored `^...$` shape for the same content, so self-testing only one of the
+    // two shapes leaves the other's failure mode unguarded. Both shapes are executed here.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(100_000)}`]: ['only'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+  });
+
+  it('charges the per-key self-test cost to the total budget too (Codex review)', () => {
+    // MAX_TOTAL_COMPARISON_WORK weighed the pairwise scan's cost, but the fixed per-key self-test
+    // (sameTermSpan and termPattern, both above) runs before that scan and was not counted at all.
+    // A near-singleton bucket costs almost nothing pairwise (bucketCost is 0 for a true singleton,
+    // 1 for a pair, and so on) regardless of key length, so a pack distributing many long keys
+    // across many distinct lengths -- never colliding, so never bucketed together, so never
+    // contributing pairwise cost -- could impose unbounded self-test work with nothing here to
+    // stop it before this fix. 6,500 keys of ~2,000 code points each, spread across enough
+    // distinct lengths that no bucket approaches EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH (500) or
+    // MAX_TOTAL_COMPARISONS (500,000 pairs) on their own, reproduces the shape: self-test cost
+    // alone accumulates enough to trip MAX_TOTAL_COMPARISON_WORK partway through.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 6500; i++) {
+      const key = `${'x'.repeat(2000)}${'q'.repeat(i % 50)}${i}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked.length).toBeGreaterThan(0);
+    for (const group of scan.unchecked) expect(group.reason).toBe('total-budget-exceeded');
+  });
+
+  it('never merges keys the real matcher treats as distinct (Codex review)', () => {
+    // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
+    // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth
+    // `Ａ` (U+FF21) both normalize+lowercase to `a`, but `termPattern`'s actual `/iu` regex does
+    // not treat them as the same letter -- confirmed directly: `/^A$/iu.test('Ａ')` is `false`.
+    // An earlier version of `findCaseConflicts` used exactly that canonicalisation as its
+    // grouping and would have flagged this pair, incorrectly skipping the whole rule for two
+    // keys that do not actually collide.
+    const scan = findCaseConflicts({ A: ['alfa'], Ａ: ['fullwidth-a'] }, (a, b) => a === b);
+
+    expect(scan.conflicts).toEqual([]);
+  });
+
+  it('bucket differing internal whitespace runs together (Codex review)', () => {
+    // `escapeForMatching` turns every whitespace run into a flexible `\s+`, matching one or more
+    // characters of any length on either side, so `"foo bar"` (one space) and `"foo  bar"` (two
+    // spaces) are `sameTermSpan`-equivalent -- confirmed directly -- despite differing raw
+    // code-point counts. A length-based prefilter keyed on raw code points would put them in
+    // different buckets and never test them against each other, silently missing exactly the
+    // "object key order decides" conflict #125 exists to reject, for a multi-word phrase.
+    const scan = findCaseConflicts(
+      { 'foo bar': ['first'], 'foo  bar': ['second'] },
+      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    );
+
+    expect(scan.conflicts).toEqual([['foo bar', 'foo  bar']]);
+  });
+
+  it('findTerm degrades to no match instead of crashing on a pathological term (Codex review)', () => {
+    // findCaseConflicts's own self-test at schema-validation time cannot guarantee findTerm won't
+    // still fail later at document-analysis time: the underlying regex engine's lazy-compile
+    // failure threshold is sensitive to how much call stack is already in use at the point of
+    // execution, and the two call sites run from different points in the call stack. findTerm
+    // guards its own termPattern execution independently, rather than relying solely on that
+    // earlier check, so a pathological term degrades to "no match in this sentence" instead of
+    // crashing the whole analysis run.
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: 'Use the widget.\n' });
+    const sentence = doc.sentences[0];
+    if (sentence === undefined) throw new Error('expected at least one sentence');
+
+    const pathological = `a${'x'.repeat(100_000)}`;
+    expect(() => findTerm(sentence, pathological)).not.toThrow();
+    expect(findTerm(sentence, pathological)).toEqual([]);
   });
 });
 

@@ -933,3 +933,388 @@ describe('rule pack: limits, contractions, path resolution, and the autofix gate
     });
   });
 });
+
+describe('rule pack: untrusted text reaching a rendered message is neutralised (#123)', () => {
+  // A control character or an embedded double-quote in supplier-controlled text can rewrite how a
+  // terminal reads surrounding output, or make fabricated text look like it has escaped the
+  // message's own quoting -- the same class of finding PR #116 fixed for `meta.sourceRef`, but
+  // here on `message`, the field actually rendered by `src/textlint/adapter.ts`'s `formatMessage`
+  // and the CLI's human-output branch. Escape sequences, not literal glyphs: BACKSPACE stands in
+  // for a control character, RIGHT-TO-LEFT OVERRIDE for a bidi override.
+  const CONTROL_CHAR = '\u0008';
+  const BIDI_OVERRIDE = '\u202e';
+  const FORGED = 'widget"; forged citation' + CONTROL_CHAR + BIDI_OVERRIDE;
+
+  it('sanitizes preferred-terminology\'s "to" before it reaches the message and fix rationale', () => {
+    const result = analyse('Use the gadget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'gadget', to: FORGED, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+    // The message wraps the value in its own double quotes; an embedded quote must not survive.
+    expect(diagnostic?.message?.match(/"/g)).toHaveLength(4);
+    expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.rationale).not.toContain(BIDI_OVERRIDE);
+    // `entry.to` is stripped once, at the source, before it becomes `fix.text` or `suggestions` --
+    // not just before it is interpolated into `message`/`rationale`. `fix.text` is the value
+    // `textlint --fix` (or an editor's "apply fix") writes straight into the document, so a
+    // control character or bidi override reaching it would corrupt the file being linted, not
+    // just a rendered message. A literal `"` is not stripped here (unlike in the quoted message),
+    // since this is the real replacement text, not display text wrapped in a template's quotes.
+    expect(diagnostic?.fix?.text).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.text).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.fix?.text).toContain('"');
+    expect(diagnostic?.suggestions?.[0]).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.suggestions?.[0]).not.toContain(BIDI_OVERRIDE);
+  });
+
+  it("sanitizes unapproved-vocabulary's alternatives before they reach the message", () => {
+    const result = analyse('Utilise the bracket.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [{ term: 'utilise', alternatives: [FORGED], safeSubstitution: true }],
+          preferred: [],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
+    // `entry.alternatives` is stripped once, at the source (`unapprovedVocabularyRule` in
+    // `src/deterministic/rules/vocabulary.ts`), before it becomes `Diagnostic.suggestions` or
+    // `fix.text` -- not just before it reaches `message`/`rationale`. `fix.text` is what
+    // `textlint --fix` (or an editor's "apply fix") writes straight into the document, and
+    // `suggestions` is what `src/textlint/adapter.ts` uses for its own suggestion `fix` too, so
+    // both need the control character and bidi override gone, not only the rendered copies. The
+    // literal `"` survives here (unlike in `message`, which wraps the value in its own quotes):
+    // this is real replacement text, not a display string.
+    expect(diagnostic?.suggestions?.[0]).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.suggestions?.[0]).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.suggestions?.[0]).toContain('"');
+    expect(diagnostic?.fix?.text).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.text).not.toContain(BIDI_OVERRIDE);
+  });
+
+  it('sanitizes a project-configured (non-pack) additional entry the same way', () => {
+    // `options.additional` is operator-supplied, not pack-supplied, but it feeds the identical
+    // interpolation site -- the sanitizer must not be conditioned on where the string came from.
+    const result = analyseTextDeterministic('Leverage the API.\n', {
+      config: {
+        rules: { 'unapproved-vocabulary': { additional: { leverage: [FORGED] } } },
+      },
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+  });
+
+  it("sanitizes meta fields, which the CLI's --json output serialises verbatim", () => {
+    // `Diagnostic.message`/`fix.rationale` are what a human reads on a terminal, but `steai lint
+    // --json` writes the whole `Diagnostic` object -- `meta` included -- straight to stdout via
+    // `JSON.stringify`. `JSON.stringify` escapes the C0 controls covered by the JSON spec's own
+    // short escapes (`\b`, `\n`, ...), but a bidi-override character (`‮`) is not one of
+    // those and passes through raw, so `meta` needs the same stripping as the rendered fields.
+    const result = analyse('Use the gadget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'gadget', to: FORGED, safeSubstitution: false, note: FORGED }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    const meta = diagnostic?.meta ?? {};
+    for (const value of Object.values(meta)) {
+      if (typeof value !== 'string') continue;
+      expect(value).not.toContain(CONTROL_CHAR);
+      expect(value).not.toContain(BIDI_OVERRIDE);
+    }
+    expect(meta['to']).toBeDefined();
+    expect(meta['note']).toBeDefined();
+  });
+
+  it('preserves a legitimate zero-width joiner in replacement text (Codex review)', () => {
+    // `stripUnsafeCharacters` originally removed the entire Unicode "format" category (`\p{Cf}`),
+    // which also contains characters with a real, local effect on the word they sit inside, not
+    // just bidi overrides. ZWJ (U+200D) is the clearest case: it is what makes a multi-codepoint
+    // emoji sequence render as one glyph. Stripping it from a rule pack's real replacement text
+    // would corrupt exactly the text `safeSubstitution: true` promises is meaning-preserving.
+    const zwj = String.fromCharCode(0x200d);
+    const manTechnologist = `\u{1F468}${zwj}\u{1F4BB}`; // U+1F468 U+200D U+1F4BB
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: manTechnologist, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe(manTechnologist);
+    expect(diagnostic?.fix?.text).toContain(zwj);
+  });
+
+  it('normalises a tab/newline-like control to a space instead of deleting it (Codex review)', () => {
+    // stripUnsafeCharacters deleted every \p{Cc} character outright, tab and newline included --
+    // but the schema permits those in a pack's replacement text, and this sanitizer runs on the
+    // actual text a fix writes into the document, not only display strings. Deleting rather than
+    // normalising a word-separating control glued the words on either side together
+    // (`sign\tin` -> `signin`); normalising to an ordinary space instead preserves the boundary.
+    const tab = String.fromCharCode(0x09);
+    const replacement = `sign${tab}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
+
+  it('normalises NEL (U+0085) to a space too, not just ASCII whitespace controls (Codex review)', () => {
+    // The first version of the tab/newline fix above listed only the ASCII C0 whitespace controls
+    // and missed NEL (U+0085), a C1 control that is also a legitimate line break -- so a
+    // schema-permitted replacement containing it still deleted straight through a word boundary.
+    const nel = String.fromCharCode(0x85);
+    const replacement = `sign${nel}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
+
+  it('collapses a CRLF line break to one space, not two (Codex review)', () => {
+    // stripUnsafeCharacters replaced each whitespace-shaped control independently, so a
+    // conventional multi-character line break -- CR followed by LF -- produced two replacement
+    // spaces instead of one: `sign\r\nin` became `sign  in`, not `sign in`. A whole contiguous run
+    // of these controls now collapses to a single space.
+    const cr = String.fromCharCode(0x0d);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `sign${cr}${lf}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
+
+  it('collapses ordinary spaces touching a line break too, not only the controls (Codex review)', () => {
+    // The CRLF fix above collapsed a run of controls to one space but left ordinary spaces
+    // immediately touching that run untouched, since they are not themselves one of the listed
+    // controls -- indentation around a line break (`sign \r\n in`) produced `sign   in` (three
+    // spaces) instead of one.
+    const cr = String.fromCharCode(0x0d);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `sign ${cr}${lf} in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
+
+  it('leaves a plain double space with no control character untouched (Codex review)', () => {
+    // The broader whitespace-run match added above must only collapse a run that actually
+    // contains a control character -- a run of nothing but ordinary spaces, with no control
+    // involved at all, is legitimate pack-authored text and stays as the pack wrote it.
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: 'sign  in', safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign  in');
+  });
+
+  it('drops a control-derived run at the replacement boundary instead of leaving a stray space (Codex review)', () => {
+    // A control-bearing run touching either end of the whole replacement string was still
+    // collapsed to a space, not dropped, even though there is no word on that side to separate
+    // from: `stripUnsafeCharacters('\nfoo')` produced `' foo'`, a stray leading space that turns
+    // into a double space once substituted next to the document's own existing separator.
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `${lf}foo`;
+    const result = analyse('Use the widget here.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('foo');
+  });
+
+  it('drops a control-derived boundary run even when another doomed character sits between it and the edge (Codex review)', () => {
+    // The boundary check above ran against the original string, before a separate .replace() step
+    // had removed characters that were also going to disappear entirely -- a backspace ahead of a
+    // newline (`\bfoo`, `\b` then `\n` then `foo`) put the newline run at offset 1, not touching
+    // either end of the *original* string, so it collapsed to a space rather than nothing. Only
+    // afterwards did the next step delete the backspace, leaving that space stranded at the true
+    // start of the final string -- the same bug in a different guise. The boundary check now reads
+    // the live string after the entirely-deleting steps have already run, so this collapses
+    // correctly regardless of what used to sit between the control run and the true edge.
+    const backspace = String.fromCharCode(0x08);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `${backspace}${lf}foo`;
+    const result = analyse('Use the widget here.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('foo');
+  });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (unapproved-vocabulary, Codex review)', () => {
+    // A pack-supplied alternative made entirely of control characters sanitizes to an empty
+    // string. checkFixSafety's numeric/negation/modal/ordering checks do not catch a blank
+    // replacement for an ordinary word, so an unguarded fix would delete the matched term outright
+    // and `--fix` would apply it unchallenged.
+    const blank = String.fromCharCode(0x08);
+    const result = analyse('Utilise the bracket.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [{ term: 'utilise', alternatives: [blank], safeSubstitution: true }],
+          preferred: [],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('no approved alternative');
+  });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (preferred-terminology, Codex review)', () => {
+    const blank = String.fromCharCode(0x08);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: blank, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (no-contractions, Codex review)', () => {
+    const blank = String.fromCharCode(0x08);
+    const result = analyse("Don't touch the busbar.\n", {
+      rulePack: pack({ contractions: [{ from: "don't", to: blank, safeSubstitution: true }] }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'no-contractions');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('no usable expansion');
+  });
+
+  it('does not offer or apply a fix made only of invisible format characters (Codex review)', () => {
+    // A replacement made entirely of a lone ZWJ survives both stripUnsafeCharacters (which
+    // intentionally leaves \p{Cf} alone -- it can have a real, local effect on the word it sits
+    // inside) and .trim() (which only strips whitespace) -- so checking merely that the sanitized
+    // value is non-blank was not enough: a ZWJ-only replacement would still build a fix that
+    // replaces the matched word with something invisible.
+    const zwj = String.fromCharCode(0x200d);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: zwj, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
+
+  it('does not offer or apply a fix made only of a variation selector (Codex review)', () => {
+    // hasVisibleContent's first version excluded only \p{Cf} and whitespace, but a variation
+    // selector (U+FE0F) is general category Mn, not Cf, and is equally invisible on its own --
+    // confirmed as a real gap by review. A replacement of only U+FE0F passed the \p{Cf}-based
+    // check and still built a fix replacing the matched word with something invisible.
+    const vs16 = String.fromCodePoint(0xfe0f);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: vs16, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
+});

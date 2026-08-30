@@ -85,15 +85,28 @@ function codePointLength(term: string): number {
 
 /**
  * Above this many entries sharing the same {@link codePointLength}, {@link findCaseConflicts}
- * skips the exhaustive pairwise check for that length and treats none of them as conflicting.
+ * reports that whole bucket as {@link CaseConflictScan.unchecked} instead of exhaustively
+ * confirming it.
  *
  * The check is quadratic per length bucket — measured directly at roughly 800ms for 2,000
- * pairwise-distinct same-length entries, the DoS-shaped cost Codex's review on this PR flagged.
- * `additional` maps are operator- or pack-authored vocabulary lists; a single length bucket this
- * large is already unusual, so skipping it (rather than guessing at a conflict with an
- * unconfirmed heuristic) is an acceptable trade against stalling a lint run.
+ * pairwise-distinct same-length entries, the DoS-shaped cost Codex's review on this PR flagged
+ * (`additional` is reachable from an untrusted pack's own `rules[].options`, per
+ * {@link reportCaseConflict}'s doc comment, so this is a real cost an untrusted pack can impose,
+ * not only an operator's own mistake). Silently treating an oversized bucket as conflict-free was
+ * tried first and rejected on review: a bucket this large could still contain a genuine conflict
+ * (`Foo`/`foo` among 500 unrelated same-length keys, say), and reporting "no conflict" without
+ * having checked is a false all-clear. Failing the rule instead, honestly naming the bucket as
+ * unverified, is the safer default — {@link reportUncheckedGroup} is the caller-side half of this.
  */
 const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
+
+/** {@link findCaseConflicts}'s result: confirmed conflicts, and buckets too large to confirm. */
+export interface CaseConflictScan {
+  /** Groups confirmed, via the real matcher, to map to different values. */
+  readonly conflicts: string[][];
+  /** Groups too large to check exhaustively (see {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH}); their case-conflict status was never determined. */
+  readonly unchecked: string[][];
+}
 
 /**
  * Group the keys of a term map by case-fold equivalence and report every group whose members do
@@ -104,8 +117,8 @@ const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
  * a real conflict when the two keys disagree about the replacement — `{ Use: ['employ'], use:
  * ['employ'] }` is redundant but not contradictory.
  *
- * Every reported group is confirmed with {@link sameTermSpan} — the actual matcher — rather than
- * a cheaper canonicalisation, because a canonicalisation broad enough to catch every case
+ * Every reported conflict is confirmed with {@link sameTermSpan} — the actual matcher — rather
+ * than a cheaper canonicalisation, because a canonicalisation broad enough to catch every case
  * `sameTermSpan` recognises (Greek final sigma, the Latin long s) is also broad enough to falsely
  * merge keys the matcher treats as distinct (ASCII/fullwidth Latin letters); see
  * {@link codePointLength}'s doc comment for both confirmed examples. {@link codePointLength}
@@ -114,7 +127,7 @@ const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
 export function findCaseConflicts<T>(
   entries: Readonly<Record<string, T>>,
   valuesEqual: (a: T, b: T) => boolean,
-): string[][] {
+): CaseConflictScan {
   const items = Object.entries(entries);
 
   const byLength = new Map<number, [key: string, value: T][]>();
@@ -126,8 +139,12 @@ export function findCaseConflicts<T>(
   }
 
   const groups: [key: string, value: T][][] = [];
+  const unchecked: string[][] = [];
   for (const bucket of byLength.values()) {
-    if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) continue;
+    if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) {
+      unchecked.push(bucket.map(([key]) => key));
+      continue;
+    }
     const consumed = new Set<number>();
     for (let i = 0; i < bucket.length; i++) {
       if (consumed.has(i)) continue;
@@ -158,7 +175,7 @@ export function findCaseConflicts<T>(
       conflicts.push(group.map(([key]) => key));
     }
   }
-  return conflicts;
+  return { conflicts, unchecked };
 }
 
 /**
@@ -192,6 +209,34 @@ export function reportCaseConflict(
     message:
       `${group.map((key) => `"${sanitizeQuotedValue(key)}"`).join(' and ')} are case-equivalent ` +
       `keys that resolve to the same source span but map to different ${noun}.`,
+  });
+}
+
+/**
+ * Report one `findCaseConflicts` {@link CaseConflictScan.unchecked} group: too many keys of the
+ * same length to confirm, one way or the other, whether any of them collide.
+ *
+ * Names a sample rather than every key, both because the full list can be long and because each
+ * key is display text (see {@link reportCaseConflict}'s doc comment on provenance) sanitized the
+ * same way.
+ */
+export function reportUncheckedGroup(
+  ctx: IssueReporter,
+  group: readonly string[],
+  noun: 'alternatives' | 'replacements',
+): void {
+  const sample = group
+    .slice(0, 3)
+    .map((key) => `"${sanitizeQuotedValue(key)}"`)
+    .join(', ');
+  ctx.addIssue({
+    code: 'custom',
+    path: ['additional'],
+    message:
+      `${group.length} keys (for example ${sample}) are the same length once whitespace runs ` +
+      `are normalised — too many to exhaustively check for a case-insensitive collision over ` +
+      `their ${noun}. Reduce how many keys share this length, or split them across more than ` +
+      'one rule configuration.',
   });
 }
 

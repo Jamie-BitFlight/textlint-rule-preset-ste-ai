@@ -13,6 +13,7 @@ import {
   findTerm,
   matchCapitalisation,
   reportCaseConflict,
+  reportUncheckedGroup,
   sanitizeQuotedValue,
   stripUnsafeCharacters,
 } from '../helpers.js';
@@ -37,12 +38,12 @@ const unapprovedOptionsSchema = z
     // `additional` keys are matched case-insensitively (`findTerm` → `termPattern`), so `Use` and
     // `use` claim the same span; JSON key order would otherwise decide which alternatives list
     // applies. Reject only when the conflicting keys actually disagree (#125).
-    for (const group of findCaseConflicts(
+    const scan = findCaseConflicts(
       options.additional,
       (a, b) => JSON.stringify(a) === JSON.stringify(b),
-    )) {
-      reportCaseConflict(ctx, group, 'alternatives');
-    }
+    );
+    for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'alternatives');
+    for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'alternatives');
   });
 
 const unapprovedMeta: RuleMetadata = {
@@ -174,9 +175,9 @@ const preferredOptionsSchema = z
   })
   .superRefine((options, ctx) => {
     // Same case-insensitive span-matching conflict as `unapproved-vocabulary` above (#125).
-    for (const group of findCaseConflicts(options.additional, (a, b) => a === b)) {
-      reportCaseConflict(ctx, group, 'replacements');
-    }
+    const scan = findCaseConflicts(options.additional, (a, b) => a === b);
+    for (const group of scan.conflicts) reportCaseConflict(ctx, group, 'replacements');
+    for (const group of scan.unchecked) reportUncheckedGroup(ctx, group, 'replacements');
   });
 
 const preferredMeta: RuleMetadata = {

@@ -378,14 +378,33 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     for (let i = 0; i < 600; i++) additional[`word${i}`] = [`alt${i}`];
 
     const started = Date.now();
-    const conflicts = findCaseConflicts(
-      additional,
-      (a, b) => JSON.stringify(a) === JSON.stringify(b),
-    );
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
     const elapsedMs = Date.now() - started;
 
-    expect(conflicts).toEqual([['Foo', 'foo']]);
+    expect(scan.conflicts).toEqual([['Foo', 'foo']]);
+    expect(scan.unchecked).toEqual([]);
     expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  it('rejects an oversized length bucket instead of silently passing it (Codex review)', () => {
+    // Silently treating a bucket too large to check exhaustively as conflict-free was the first
+    // version of this bound -- rejected on review, because that bucket could still contain a
+    // genuine conflict (`Foo`/`foo` here, buried among 500 unrelated four-code-point keys) and
+    // reporting "no conflict" without having actually checked is a false all-clear. This proves
+    // the corrected behavior: the oversized bucket comes back as `unchecked`, not silently
+    // dropped, regardless of whether it happens to contain a real conflict.
+    // Every filler key is exactly 3 code points, the same length as "Foo"/"foo", so they land in
+    // the one oversized bucket together: 500 filler keys ("000".."499") plus the real pair, 502
+    // entries total, comfortably over `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH` (500).
+    const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
+    for (let i = 0; i < 500; i++) additional[String(i).padStart(3, '0')] = [`alt${i}`];
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]).toHaveLength(502);
+    expect(scan.unchecked[0]).toEqual(expect.arrayContaining(['Foo', 'foo']));
   });
 
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
@@ -396,9 +415,9 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     // An earlier version of `findCaseConflicts` used exactly that canonicalisation as its
     // grouping and would have flagged this pair, incorrectly skipping the whole rule for two
     // keys that do not actually collide.
-    const conflicts = findCaseConflicts({ A: ['alfa'], Ａ: ['fullwidth-a'] }, (a, b) => a === b);
+    const scan = findCaseConflicts({ A: ['alfa'], Ａ: ['fullwidth-a'] }, (a, b) => a === b);
 
-    expect(conflicts).toEqual([]);
+    expect(scan.conflicts).toEqual([]);
   });
 
   it('bucket differing internal whitespace runs together (Codex review)', () => {
@@ -408,12 +427,12 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     // code-point counts. A length-based prefilter keyed on raw code points would put them in
     // different buckets and never test them against each other, silently missing exactly the
     // "object key order decides" conflict #125 exists to reject, for a multi-word phrase.
-    const conflicts = findCaseConflicts(
+    const scan = findCaseConflicts(
       { 'foo bar': ['first'], 'foo  bar': ['second'] },
       (a, b) => JSON.stringify(a) === JSON.stringify(b),
     );
 
-    expect(conflicts).toEqual([['foo bar', 'foo  bar']]);
+    expect(scan.conflicts).toEqual([['foo bar', 'foo  bar']]);
   });
 });
 

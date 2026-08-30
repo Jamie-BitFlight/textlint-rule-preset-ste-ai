@@ -1195,6 +1195,32 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.fix?.text).toBe('foo');
   });
 
+  it('drops a control-derived boundary run even when another doomed character sits between it and the edge (Codex review)', () => {
+    // The boundary check above ran against the original string, before a separate .replace() step
+    // had removed characters that were also going to disappear entirely -- a backspace ahead of a
+    // newline (`\bfoo`, `\b` then `\n` then `foo`) put the newline run at offset 1, not touching
+    // either end of the *original* string, so it collapsed to a space rather than nothing. Only
+    // afterwards did the next step delete the backspace, leaving that space stranded at the true
+    // start of the final string -- the same bug in a different guise. The boundary check now reads
+    // the live string after the entirely-deleting steps have already run, so this collapses
+    // correctly regardless of what used to sit between the control run and the true edge.
+    const backspace = String.fromCharCode(0x08);
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `${backspace}${lf}foo`;
+    const result = analyse('Use the widget here.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('foo');
+  });
+
   it('does not offer or apply a fix that sanitizes to a blank replacement (unapproved-vocabulary, Codex review)', () => {
     // A pack-supplied alternative made entirely of control characters sanitizes to an empty
     // string. checkFixSafety's numeric/negation/modal/ordering checks do not catch a blank

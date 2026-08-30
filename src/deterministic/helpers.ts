@@ -46,7 +46,7 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  *
  * Matched and collapsed as a whole run, not one character at a time, and the run itself spans any
  * ordinary space characters immediately touching a control, not only the controls themselves --
- * three gaps in an earlier version, all confirmed directly by Codex's review on this PR:
+ * four gaps in an earlier version, all confirmed directly by Codex's review on this PR:
  *
  * - A conventional multi-character line break like `\r\n` is two of these controls back to
  *   back; replacing each independently produced `sign  in` (two spaces) for `sign\r\nin`
@@ -58,6 +58,17 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  *   rather than dropped, even though there is no word on that side to separate from:
  *   `stripUnsafeCharacters('\nfoo')` produced `' foo'`, a stray leading space that becomes a
  *   double space once substituted next to the document's own existing separator.
+ * - The boundary check above ran against the *original* string, before the other two
+ *   `.replace()` steps below had removed anything else that was going to disappear entirely --
+ *   `stripUnsafeCharacters('\b\nfoo')` (backspace, then newline) saw the newline run at
+ *   offset 1, not touching either end of the *original* string, so it collapsed to a space
+ *   rather than nothing; only afterwards did the next step delete the backspace, leaving that
+ *   space stranded at the true start of the final string, the identical bug in a different
+ *   guise. This is why the two entirely-deleting steps now run *before* the whitespace-run
+ *   step below, and why that step's boundary check reads the *live* string each `.replace()`
+ *   callback receives as its third argument, not this function's original `text` parameter:
+ *   by the time it runs, every character that is going to vanish already has, so "touches the
+ *   boundary" means the same thing here as it will in the final result.
  *
  * {@link WHITESPACE_RUN_TOUCHING_CONTROL} matches the broader run (controls and ordinary
  * spaces both); the replacer only touches a matched run that actually contains a control
@@ -69,15 +80,24 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
 const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]/u;
 const WHITESPACE_RUN_TOUCHING_CONTROL = /[ \t\n\v\f\r\u0085\u2028\u2029]+/gu;
 
+/**
+ * `\p{Cc}` characters that are not {@link WHITESPACE_SHAPED_CONTROLS} -- the ones with no
+ * word-internal role at all, stripped outright rather than normalised to a space. Excluded via
+ * a negative lookahead rather than a character-class subtraction, which JS regex does not
+ * support directly.
+ */
+const NON_WHITESPACE_CC = /(?![\t\n\v\f\r\u0085])[\p{Cc}]/gu;
+
 export function stripUnsafeCharacters(text: string): string {
   return text
-    .replace(WHITESPACE_RUN_TOUCHING_CONTROL, (run, offset) => {
+    .replace(BIDI_CONTROL_CHARS, '')
+    .replace(NON_WHITESPACE_CC, '')
+    .replace(WHITESPACE_RUN_TOUCHING_CONTROL, (run, offset, liveText) => {
       if (!WHITESPACE_SHAPED_CONTROLS.test(run)) return run;
-      const atBoundary = offset === 0 || offset + run.length === text.length;
+      const atBoundary = offset === 0 || offset + run.length === liveText.length;
       return atBoundary ? '' : ' ';
     })
-    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '')
-    .replace(BIDI_CONTROL_CHARS, '');
+    .replace(/[\p{Zl}\p{Zp}]/gu, '');
 }
 
 /**

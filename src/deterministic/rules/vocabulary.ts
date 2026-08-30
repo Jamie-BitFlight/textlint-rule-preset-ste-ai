@@ -11,6 +11,7 @@ import {
   excerpt,
   findCaseConflicts,
   findTerm,
+  hasVisibleContent,
   matchCapitalisation,
   reportCaseConflict,
   reportUncheckedGroup,
@@ -118,16 +119,18 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
             // sent to the model. Stripping the source once, rather than at each render site, means
             // none of those sinks can be missed by a future addition to this list.
             // Filtered, not just mapped: a pack-supplied alternative made entirely of characters
-            // `stripUnsafeCharacters` strips (control characters, bidi overrides) sanitizes to an
-            // empty string. Keeping it here would offer an empty-string suggestion and, worse,
-            // build a fix that deletes the matched term outright -- `checkFixSafety`'s numeric/
-            // negation/modal/ordering checks do not catch a blank replacement for an ordinary word,
-            // so it would reach `--fix` unchallenged. Treating a blank result the same as "no
+            // `stripUnsafeCharacters` strips (control characters, bidi overrides), or entirely of
+            // characters it intentionally leaves alone but which are invisible on their own (ZWJ,
+            // ZWNJ, soft hyphen -- see `hasVisibleContent`'s doc comment), sanitizes to something
+            // with no visible content. Keeping it here would offer that as a suggestion and, worse,
+            // build a fix that replaces the matched term with nothing a reader can see --
+            // `checkFixSafety`'s numeric/negation/modal/ordering checks do not catch this for an
+            // ordinary word, so it would reach `--fix` unchallenged. Treating this the same as "no
             // alternative supplied" is the same fallback already below for an empty `alternatives`
             // array.
             const alternatives = entry.alternatives
               .map(stripUnsafeCharacters)
-              .filter((alternative) => alternative.trim() !== '');
+              .filter((alternative) => hasVisibleContent(alternative));
             const safeTerm = stripUnsafeCharacters(entry.term);
             const suggestion = alternatives[0];
             let fix: TextFix | undefined;
@@ -261,11 +264,12 @@ export const preferredTerminologyRule: DeterministicRule<z.output<typeof preferr
             // rationale below.
             const safeFrom = stripUnsafeCharacters(entry.from);
             const safeTo = stripUnsafeCharacters(entry.to);
-            // A pack-supplied `to` made entirely of characters `stripUnsafeCharacters` strips
-            // sanitizes to an empty string; `checkFixSafety` does not catch a blank replacement for
-            // an ordinary word, so an unguarded fix would delete the matched term outright and
-            // `--fix` would apply it unchallenged.
-            const hasReplacement = safeTo.trim() !== '';
+            // A pack-supplied `to` with no visible content once sanitized -- whether every
+            // character was stripped outright, or what remains is only invisible format characters
+            // like a lone ZWJ (see `hasVisibleContent`'s doc comment) -- would build a fix that
+            // replaces the matched term with nothing a reader can see; `checkFixSafety` does not
+            // catch this for an ordinary word, so an unguarded fix would reach `--fix` unchallenged.
+            const hasReplacement = hasVisibleContent(safeTo);
             const replacement = hasReplacement
               ? matchCapitalisation(match.text, safeTo)
               : undefined;
@@ -350,10 +354,13 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
             // than what the pack actually declared.
             const safeFrom = stripUnsafeCharacters(entry.from);
             const safeTo = stripUnsafeCharacters(entry.to);
-            // A pack-supplied expansion made entirely of characters `stripUnsafeCharacters` strips
-            // sanitizes to an empty string; `checkFixSafety` does not catch a blank replacement for
-            // an ordinary word, so an unguarded fix would delete the matched contraction outright.
-            const hasReplacement = safeTo.trim() !== '';
+            // A pack-supplied expansion with no visible content once sanitized -- whether every
+            // character was stripped outright, or what remains is only invisible format characters
+            // like a lone ZWJ (see `hasVisibleContent`'s doc comment) -- would build a fix that
+            // replaces the matched contraction with nothing a reader can see; `checkFixSafety` does
+            // not catch this for an ordinary word, so an unguarded fix would reach `--fix`
+            // unchallenged.
+            const hasReplacement = hasVisibleContent(safeTo);
             const replacement = hasReplacement
               ? matchCapitalisation(match.text, safeTo)
               : undefined;

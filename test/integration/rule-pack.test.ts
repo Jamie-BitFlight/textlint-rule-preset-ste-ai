@@ -1185,4 +1185,27 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.suggestions).toEqual([]);
     expect(diagnostic?.message).toContain('no usable expansion');
   });
+
+  it('does not offer or apply a fix made only of invisible format characters (Codex review)', () => {
+    // A replacement made entirely of a lone ZWJ survives both stripUnsafeCharacters (which
+    // intentionally leaves \p{Cf} alone -- it can have a real, local effect on the word it sits
+    // inside) and .trim() (which only strips whitespace) -- so checking merely that the sanitized
+    // value is non-blank was not enough: a ZWJ-only replacement would still build a fix that
+    // replaces the matched word with something invisible.
+    const zwj = String.fromCharCode(0x200d);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: zwj, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
 });

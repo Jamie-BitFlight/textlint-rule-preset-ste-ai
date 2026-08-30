@@ -345,6 +345,24 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(notice?.message).toContain('"Use"');
     expect(notice?.message).toContain('"use"');
   });
+
+  it('catches a Unicode case fold "toLowerCase()" itself does not compute', () => {
+    // `termPattern()`'s `/iu` flag matches on full Unicode case folding, which is a different,
+    // stricter relation than `String.prototype.toLowerCase()` computes -- confirmed directly:
+    // `/s/iu` matches the Latin small letter long s (`ſ`, U+017F), a real span collision, but
+    // `'s'.toLowerCase() !== 'ſ'.toLowerCase()`. A conflict detector keyed on `toLowerCase()`
+    // would silently miss this pair, leaving exactly the object-key-order ambiguity #125 exists
+    // to reject.
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { s: ['sierra'], ſ: ['long-s'] } },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toBeDefined();
+    expect(notice?.detail).toEqual({ ruleId: 'unapproved-vocabulary' });
+  });
 });
 
 describe('no-contractions', () => {

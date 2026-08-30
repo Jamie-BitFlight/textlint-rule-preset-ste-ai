@@ -35,27 +35,46 @@ export function sanitizeQuotedValue(text: string): string {
 }
 
 /**
- * Group the keys of a term map by case-insensitive equality and report every group whose members
- * do not all resolve to the same value.
+ * Group the keys of a term map by {@link sameTermSpan} and report every group whose members do not
+ * all resolve to the same value.
  *
  * `termPattern()` matches case-insensitively, so `Use` and `use` claim the same source span; the
  * first one in object key order silently wins and the other's mapping never applies. That is only
  * a real conflict when the two keys disagree about the replacement — `{ Use: ['employ'], use:
  * ['employ'] }` is redundant but not contradictory.
+ *
+ * Grouping is pairwise (`O(n²)`) rather than a single hash pass, because {@link sameTermSpan} is
+ * not reducible to a hashable key the way `String.prototype.toLowerCase()` is — Unicode case
+ * folding is an equivalence relation checked pairwise, not a function computing one canonical
+ * form per string. `additional` maps are operator- or pack-authored and small (tens of entries at
+ * most), so this cost is not a concern in practice.
  */
 export function findCaseConflicts<T>(
   entries: Readonly<Record<string, T>>,
   valuesEqual: (a: T, b: T) => boolean,
 ): string[][] {
-  const groups = new Map<string, [key: string, value: T][]>();
-  for (const [key, value] of Object.entries(entries)) {
-    const lower = key.toLowerCase();
-    const group = groups.get(lower);
-    if (group === undefined) groups.set(lower, [[key, value]]);
-    else group.push([key, value]);
+  const items = Object.entries(entries);
+  const consumed = new Set<number>();
+  const groups: [key: string, value: T][][] = [];
+  for (let i = 0; i < items.length; i++) {
+    if (consumed.has(i)) continue;
+    const current = items[i];
+    if (current === undefined) continue;
+    const group: [string, T][] = [current];
+    consumed.add(i);
+    for (let j = i + 1; j < items.length; j++) {
+      if (consumed.has(j)) continue;
+      const candidate = items[j];
+      if (candidate === undefined) continue;
+      if (sameTermSpan(current[0], candidate[0])) {
+        group.push(candidate);
+        consumed.add(j);
+      }
+    }
+    groups.push(group);
   }
   const conflicts: string[][] = [];
-  for (const group of groups.values()) {
+  for (const group of groups) {
     if (group.length < 2) continue;
     const first = group[0];
     if (first === undefined) continue;
@@ -101,13 +120,34 @@ export function reportCaseConflict(
   });
 }
 
-/** Build a whole-word, case-insensitive matcher for a term or multi-word phrase. */
-export function termPattern(term: string): RegExp {
-  const escaped = term
+/** Escape regex metacharacters and collapse whitespace runs to a flexible `\s+`. */
+function escapeForMatching(term: string): string {
+  return term
     .trim()
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(/\s+/g, '\\s+');
+}
+
+/** Build a whole-word, case-insensitive matcher for a term or multi-word phrase. */
+export function termPattern(term: string): RegExp {
+  const escaped = escapeForMatching(term);
   return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'giu');
+}
+
+/**
+ * Whether `a` and `b` are the same term for `termPattern()`'s matching purposes — not merely
+ * `String.prototype.toLowerCase()`-equal.
+ *
+ * `/iu` implements full Unicode case folding, which is not the same relation `toLowerCase()`
+ * computes: `/s/iu` matches the Latin small letter long s (`ſ`, U+017F), but `'s'.toLowerCase()
+ * !== 'ſ'.toLowerCase()` — confirmed directly. A case-conflict check keyed on `toLowerCase()`
+ * would therefore miss a real collision between `additional` keys `s` and `ſ`, or their Greek and
+ * Turkish counterparts, leaving exactly the "object key order silently decides" ambiguity #125
+ * exists to reject. This asks the same regex engine `findTerm` actually uses, anchored to the
+ * whole string on both sides, rather than reimplementing its notion of "the same letter".
+ */
+export function sameTermSpan(a: string, b: string): boolean {
+  return new RegExp(`^${escapeForMatching(a)}$`, 'iu').test(b.trim());
 }
 
 export interface TermMatch {

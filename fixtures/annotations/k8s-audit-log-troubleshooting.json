@@ -67,11 +67,87 @@
     "ResponseStarted"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-c",
     "rewriter-b"
   ],
   "notes": "The single sentence-length-descriptive finding is disputed as an empirically-verified tool artifact: masking the markdown link destination breaks the sentence-splitter for the remainder of the paragraph, merging four short, correct sentences into one falsely 'overlong' one. The only genuine, safe defect (an unambiguous contraction) is accepted. Passage p1 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery.",
   "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s3:516",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Auditing allows cluster administrators",
+      "span": {
+        "start": 516,
+        "end": 554
+      },
+      "verdict": "non-violation",
+      "reason": "This is a grammatical clause with a gerund subject, finite verb, and object, not stacked noun modifiers.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s5:621",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 621,
+        "end": 623
+      },
+      "verdict": "non-violation",
+      "reason": "The parallel audit-question list supplies one shared implied event; the proposed antecedents are verbs.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.91
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s6:649",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 649,
+        "end": 651
+      },
+      "verdict": "non-violation",
+      "reason": "The pronoun retains the single audited event referent established by the parallel list.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.92
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s7:668",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 668,
+        "end": 670
+      },
+      "verdict": "non-violation",
+      "reason": "The pronoun retains the single audited event referent established by the parallel list.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.91
+    },
+    {
+      "passageId": "ambiguous-pronoun-candidate:s8:692",
+      "ruleId": "ambiguous-pronoun-candidate",
+      "evaluatorId": "pronoun-antecedent-ambiguity",
+      "quote": "it",
+      "span": {
+        "start": 692,
+        "end": 694
+      },
+      "verdict": "non-violation",
+      "reason": "The parallel list fixes the pronoun as the audited event; the proposed alternatives are verbs.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.93
+    },
     {
       "passageId": "ambiguous-pronoun-candidate:s9:723",
       "ruleId": "ambiguous-pronoun-candidate",
@@ -101,6 +177,21 @@
       "reviewer": "reviewer-c",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s14:1150",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "current backend implementations\ninclude logs files",
+      "span": {
+        "start": 1150,
+        "end": 1200
+      },
+      "verdict": "non-violation",
+      "reason": "The span crosses the finite verb 'include' and forms a clause, not a modifier stack.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.97
     },
     {
       "passageId": "passive-voice-candidate:s15:1233",

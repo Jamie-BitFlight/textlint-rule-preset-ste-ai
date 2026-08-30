@@ -163,11 +163,27 @@
     "`cmake -S llvm -B build -G <generator> [options]`"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-a",
     "rewriter-a"
   ],
   "notes": "One sentence-length-descriptive finding is disputed as a tool segmentation bug, not a prose defect: masking the shallow-clone link's `](url)` destination leaves the anchor's unmatched `[` in the visible text, and the sentence splitter fails to find the sentence boundary at the following period as a result. Passage p4 records a segmentation defect found through this corpus and since fixed in the analyser; it is retained as the audit trail for that discovery.",
   "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s2:286",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "LLVM (including subprojects like Clang",
+      "span": {
+        "start": 286,
+        "end": 324
+      },
+      "verdict": "non-violation",
+      "reason": "LLVM is followed by a parenthetical naming Clang as an example subproject, not stacked modifiers.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
+    },
     {
       "passageId": "ambiguous-pronoun-candidate:s6:946",
       "ruleId": "ambiguous-pronoun-candidate",

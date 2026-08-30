@@ -167,6 +167,34 @@ describe('textlint lint run', () => {
     expect(starts).toHaveLength(2);
   });
 
+  it('runs an explicitly enabled deep pass as one shared analysis', async () => {
+    const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
+    const observer = {
+      analysisStarted: (configuredRules: (typeof starts)[number]) => starts.push(configuredRules),
+    };
+    const configured = [
+      ['passive-voice-candidate', { requireByAgent: true }],
+      ['noun-cluster-candidate', { maxClusterLength: 5 }],
+      ['ambiguous-pronoun-candidate', { minAntecedents: 3 }],
+    ] as const;
+
+    await kernel.lintText('The control module status is checked by the service.\n', {
+      ...options([]),
+      rules: configured.map(([ruleId, ruleOptions]) => ({
+        ruleId,
+        rule: createSteTextlintRule(ruleId, observer),
+        options: ruleOptions,
+      })),
+    });
+
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toHaveLength(14);
+    for (const [ruleId, ruleOptions] of configured) {
+      expect(starts[0]?.get(ruleId)).toEqual(ruleOptions);
+    }
+    expect(starts[0]?.get('no-contractions')).toEqual({ enabled: false });
+  });
+
   it('isolates simultaneous document lifecycles and their rule options', async () => {
     const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
     const observer = {

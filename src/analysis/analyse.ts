@@ -6,7 +6,8 @@ import {
   screenExtraPatterns,
 } from '../core/protected-regions.js';
 import { runDeterministicRules } from '../core/runner.js';
-import { defaultStructureOptions, detectMode, type StructureOptions } from '../core/structure.js';
+import { sentencesOpenImperative } from '../core/pos-tags.js';
+import { defaultStructureOptions, type StructureOptions } from '../core/structure.js';
 import {
   applySuppressions,
   DIRECTIVE_TEXT_REASON,
@@ -29,9 +30,9 @@ import type {
   SuppressionDirective,
   SuppressionRecord,
   TextBlock,
+  TextMode,
 } from '../core/types.js';
 import { deterministicRules } from '../deterministic/index.js';
-import { LlamaCppClient } from '../model-client/llama-client.js';
 import type { ModelTransport } from '../model-client/types.js';
 import { readMarkdownUnitsSync } from '../reader/markdown-reader.js';
 import { readPlainTextUnitsSync } from '../reader/plain-text-reader.js';
@@ -42,7 +43,7 @@ import {
   semanticNotRunNoticeMessage,
   undecidedCandidateReasonMessage,
 } from '../semantic/analyse.js';
-import { SemanticBroker, type SemanticBrokerDeps } from '../semantic/broker.js';
+import type { SemanticBrokerDeps } from '../semantic/broker.js';
 import { resolveOverlappingFixes } from '../core/runner.js';
 
 /**
@@ -89,7 +90,22 @@ function readerBlocksFor(
     regions.filter((r) => r.opaque && !STRUCTURAL_MARKER_KINDS.has(r.kind)).map((r) => r.range),
   );
 
-  return units.map((unit) => unitToBlock(unit, structureOptions, opaqueContentRanges));
+  const masked = units.map((unit) => maskUnitContent(unit, opaqueContentRanges));
+  const needsClassification = units.map((unit) => unit.kind !== 'heading');
+  const classificationInputs = masked.filter((_, index) => needsClassification[index]);
+  const classifications = sentencesOpenImperative(
+    classificationInputs,
+    structureOptions.extraImperativeVerbs,
+  );
+  let classificationIndex = 0;
+  return units.map((unit, index) => {
+    const mode: TextMode = needsClassification[index]
+      ? classifications[classificationIndex++]
+        ? 'procedural'
+        : 'descriptive'
+      : unit.mode;
+    return unitToBlock(unit, mode);
+  });
 }
 
 /**
@@ -139,19 +155,11 @@ const UNIT_KIND_TO_BLOCK_KIND: Readonly<Record<string, BlockKind>> = {
  * title.`` — was misclassified `procedural` as a result. Layering `opaqueContentRanges` on top of
  * `unit.masked` fixes this without disturbing the blockquote-marker masking.
  */
-function unitToBlock(
-  unit: TextUnit,
-  structureOptions: StructureOptions,
-  opaqueContentRanges: readonly SourceRange[],
-): TextBlock {
+function unitToBlock(unit: TextUnit, mode: TextMode): TextBlock {
   const kind = UNIT_KIND_TO_BLOCK_KIND[unit.kind];
   if (kind === undefined) {
     throw new Error(`No BlockKind mapping for reader unit kind "${unit.kind}" (unit ${unit.id}).`);
   }
-  const mode =
-    kind === 'heading'
-      ? unit.mode
-      : detectMode(maskUnitContent(unit, opaqueContentRanges), structureOptions);
   return {
     id: unit.id,
     kind,
@@ -624,28 +632,16 @@ export async function analyseText(
 
   // Overlap resolution is deferred to the merged, post-suppression list below. It has to see the
   // semantic fixes anyway, and a withheld finding must not veto a surviving finding's fix.
-  const transport: ModelTransport =
-    options.transport ??
-    new LlamaCppClient({
-      endpoint: config.semantic.endpoint,
-      requestTimeoutMs: config.semantic.requestTimeoutMs,
-      ...(config.semantic.apiKey === undefined ? {} : { apiKey: config.semantic.apiKey }),
-    });
-
-  const broker = new SemanticBroker(config.semantic, { transport, ...options.brokerDeps });
-
-  const semantic = await analyseSemantically({
-    doc: document,
-    candidates: pass.candidates,
-    broker,
-    config: config.semantic,
-    policy: config.diagnostics,
-    autofix: config.autofix,
-    // The authority the linter acts on, not the authority the pack claims for itself. An
-    // untrusted pack's findings are reported as `supplementary`, never `normative`.
-    ruleStatus: verifiedAuthority(pack, config.trustedRulePackIds),
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  });
+  const semantic = config.semantic.enabled
+    ? await runSemanticAnalysis(document, pass.candidates, config, pack, options)
+    : {
+        ...undecidedCandidateDiagnostics(
+          pass.candidates,
+          config,
+          verifiedAuthority(pack, config.trustedRulePackIds),
+        ),
+        traces: [],
+      };
 
   const suppressed = suppressDiagnostics(
     document,
@@ -681,4 +677,35 @@ export async function analyseText(
     pack,
     config,
   };
+}
+
+async function runSemanticAnalysis(
+  document: AnalysedDocument,
+  candidates: readonly CandidatePassage[],
+  config: SteAiConfig,
+  pack: RulePack,
+  options: AnalyseTextOptions,
+) {
+  const [{ LlamaCppClient }, { SemanticBroker }] = await Promise.all([
+    import('../model-client/llama-client.js'),
+    import('../semantic/broker.js'),
+  ]);
+  const transport: ModelTransport =
+    options.transport ??
+    new LlamaCppClient({
+      endpoint: config.semantic.endpoint,
+      requestTimeoutMs: config.semantic.requestTimeoutMs,
+      ...(config.semantic.apiKey === undefined ? {} : { apiKey: config.semantic.apiKey }),
+    });
+  const broker = new SemanticBroker(config.semantic, { transport, ...options.brokerDeps });
+  return analyseSemantically({
+    doc: document,
+    candidates,
+    broker,
+    config: config.semantic,
+    policy: config.diagnostics,
+    autofix: config.autofix,
+    ruleStatus: verifiedAuthority(pack, config.trustedRulePackIds),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
 }

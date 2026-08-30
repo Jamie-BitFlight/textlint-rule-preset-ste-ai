@@ -54,6 +54,7 @@
     "[Compute Resources document](/docs/concepts/configuration/manage-resources-containers/)"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-c",
     "rewriter-a"
   ],
@@ -178,6 +179,21 @@
       "reviewer": "reviewer-c",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.9
+    },
+    {
+      "passageId": "noun-cluster-candidate:s22:1523",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "See [Compute Resources document",
+      "span": {
+        "start": 1523,
+        "end": 1554
+      },
+      "verdict": "non-violation",
+      "reason": "The scanner crosses the imperative 'See' and link markup; 'Compute Resources' is a document title.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
     }
   ]
 }

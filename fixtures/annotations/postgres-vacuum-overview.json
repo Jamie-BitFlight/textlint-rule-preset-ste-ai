@@ -208,6 +208,7 @@
     "PostgreSQL"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-b",
     "rewriter-b"
   ],
@@ -287,6 +288,21 @@
       "reviewer": "reviewer-b",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.85
+    },
+    {
+      "passageId": "noun-cluster-candidate:s4:530",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "Plain VACUUM (without FULL) simply reclaims space",
+      "span": {
+        "start": 530,
+        "end": 579
+      },
+      "verdict": "non-violation",
+      "reason": "This is a full clause with a command-name subject, parenthetical qualifier, finite verb, and object.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.99
     },
     {
       "passageId": "ambiguous-pronoun-candidate:s4:590",

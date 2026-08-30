@@ -25,6 +25,21 @@ describe('fast sentence segmentation', () => {
     ]);
   });
 
+  it.each(['Stop. Restart.', 'Touch. Restart.', 'Start. Restart.', 'Piano. Restart.'])(
+    'does not read an ordinary word suffix as an abbreviation: %s',
+    (text) => {
+      expect(slices(text)).toEqual([text.slice(0, text.indexOf(' Restart.')), 'Restart.']);
+    },
+  );
+
+  it('distinguishes an internal acronym from a sentence-final acronym', () => {
+    expect(slices('The U.S. Department issued it.')).toEqual(['The U.S. Department issued it.']);
+    expect(slices('It applies in the U.S. Restart the server.')).toEqual([
+      'It applies in the U.S.',
+      'Restart the server.',
+    ]);
+  });
+
   it('ends a numbered technical reference at its final period', () => {
     expect(slices('See Fig. 2. Restart the server.')).toEqual([
       'See Fig. 2.',

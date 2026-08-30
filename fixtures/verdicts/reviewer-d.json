@@ -300,14 +300,14 @@
         "reviewerConfidence": 0.85
       },
       {
-        "passageId": "noun-cluster-candidate:s9:912",
+        "passageId": "noun-cluster-candidate:s9:905",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
-        "quote": "settings dynamically using normal Python syntax",
-        "span": { "start": 912, "end": 959 },
+        "quote": "assign settings dynamically using normal Python syntax",
+        "span": { "start": 905, "end": 959 },
         "verdict": "non-violation",
-        "reason": "This is the object-and-manner tail of \"It can assign settings dynamically using normal Python syntax\": a direct object ('settings'), an adverb ('dynamically'), and a gerund phrase with its own object ('using normal Python syntax'). It is ordinary clause structure, not a stacked noun run, and the only real noun group in it, 'normal Python syntax', is a transparent adjective-adjective-noun phrase with one obvious reading. The heuristic's word count triggered on a verb phrase, not a noun pile.",
-        "reviewerConfidence": 0.9
+        "reason": "This is a verb, object, adverb, and manner phrase; only 'normal Python syntax' is a noun phrase, and it is clear.",
+        "reviewerConfidence": 0.98
       },
       {
         "passageId": "ambiguous-pronoun-candidate:s13:1028",

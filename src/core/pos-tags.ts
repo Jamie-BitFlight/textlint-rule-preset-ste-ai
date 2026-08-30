@@ -2,7 +2,7 @@ import { IMPERATIVE_VERBS } from './imperative-verbs.js';
 import type { Sentence, Word } from './types.js';
 
 /** Fast lexical substrate for edit-time agent feedback. */
-const NEGATIVE_IMPERATIVE_PREFIX = /^(?:do not|don't|never|always)\b/iu;
+const NEGATIVE_IMPERATIVE_PREFIX = /^(?:do not|don['’]t|never|always)\b/iu;
 const LEADING = /^[\s>*_-]+/u;
 const LEADING_MASKED_SUBJECT = /^\uFFFD+\s/u;
 const WORD_RE = /[\p{L}]+(?:['’-][\p{L}]+)*/gu;
@@ -248,8 +248,9 @@ export function isFunctionWord(word: Word, _index: SentencePosIndex): boolean {
   return isKnownFunctionWord(word);
 }
 
-export function isImperativeVerbWord(word: Word, _index: SentencePosIndex): boolean {
-  return !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower) && IMPERATIVE_VERBS.has(word.lower);
+export function isImperativeVerbWord(word: Word, index: SentencePosIndex): boolean {
+  const tags = index.tagsAt(word.range.start) ?? [];
+  return !AMBIGUOUS_AUXILIARY_VERBS.has(word.lower) && isImperativeOpenerTagSet(tags);
 }
 
 export function isImperativeOpenerWord(word: Word, index: SentencePosIndex): boolean {

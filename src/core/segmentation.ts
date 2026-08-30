@@ -30,13 +30,26 @@ const ABBREVIATIONS: ReadonlySet<string> = new Set([
   'excl.',
 ]);
 
-function isAbbreviation(text: string, periodIndex: number): boolean {
-  const prefix = text.slice(Math.max(0, periodIndex - 12), periodIndex + 1).toLowerCase();
+function isAbbreviation(text: string, periodIndex: number, sentenceStart: number): boolean {
   for (const abbreviation of ABBREVIATIONS) {
-    if (prefix.endsWith(abbreviation)) return true;
+    const abbreviationStart = periodIndex + 1 - abbreviation.length;
+    if (abbreviationStart < sentenceStart) continue;
+    if (text.slice(abbreviationStart, periodIndex + 1).toLowerCase() !== abbreviation) continue;
+    const before = text[abbreviationStart - 1];
+    if (before === undefined || /[\s([{"'’]/u.test(before)) return true;
   }
-  // Single initials and acronym components (`A. Smith`, `U.S.`) do not end a sentence.
-  return /(?:^|\s)(?:[a-z]\.){1,4}$/iu.test(prefix);
+
+  const prefix = text.slice(sentenceStart, periodIndex + 1);
+  const initialism = /(?:^|\s)((?:[a-z]\.){1,4})$/iu.exec(prefix);
+  if (initialism === null) return false;
+  const initials = initialism[1]?.match(/[a-z]\./giu)?.length ?? 0;
+  if (initials === 1) return true;
+
+  // A dotted acronym near the start usually modifies the next noun (`The U.S. Department`).
+  // Later in a sentence it is more likely sentence-final (`It applies in the U.S. Restart.`).
+  const beforeAcronym = prefix.slice(0, initialism.index).trim();
+  const priorTokens = beforeAcronym.length === 0 ? 0 : beforeAcronym.split(/\s+/u).length;
+  return priorTokens <= 1;
 }
 
 function pushTrimmed(out: SourceRange[], text: string, start: number, end: number, offset: number) {
@@ -55,7 +68,7 @@ export function segmentSentences(text: string, offset = 0): SourceRange[] {
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
     if (char !== '.' && char !== '!' && char !== '?') continue;
-    if (char === '.' && isAbbreviation(text, index)) continue;
+    if (char === '.' && isAbbreviation(text, index, start)) continue;
     let end = index + 1;
     while (/['’”"\])}]/u.test(text[end] ?? '')) end += 1;
     const next = text[end];

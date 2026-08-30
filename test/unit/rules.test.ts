@@ -556,6 +556,13 @@ describe('one-instruction-per-sentence', () => {
     expect(result.forRule(id)[0]?.category).toBe('deterministic-violation');
   });
 
+  it('honours a configuration-local verb after a conjunction', () => {
+    const result = run('Install the driver and reticulate the splines.\n', {
+      extraImperativeVerbs: ['reticulate'],
+    });
+    expect(result.forRule(id)).toHaveLength(1);
+  });
+
   it('does not flag an inflected third-person verb inside a descriptive relative clause', () => {
     // Inflected forms are absent from the bounded base-form action vocabulary.
     const result = run('Install the agent, which logs events and sends reports.\n');

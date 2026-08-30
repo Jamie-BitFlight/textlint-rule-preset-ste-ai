@@ -46,6 +46,30 @@ example through the real `textlint` CLI's own module resolution. It asserts the 
 findings. Shape-valid is not the same as resolvable. A gap between the two is what broke in pull
 request (PR) [#86](https://github.com/Jamie-BitFlight/textlint-rule-preset-ste-ai/pull/86).
 
+### Fast and deep passes
+
+The normal preset enables the 11 deterministic edit-time rules. It keeps the three broader
+candidate generators off so an agent can run the fast pass after every write. Enable them in a
+separate textlint configuration when a broader human or semantic review is wanted:
+
+```json
+{
+  "rules": {
+    "preset-ste-ai": {
+      "passive-voice-candidate": { "adjudicate": true },
+      "noun-cluster-candidate": { "adjudicate": true },
+      "ambiguous-pronoun-candidate": { "adjudicate": true }
+    }
+  }
+}
+```
+
+With semantic analysis off, this pass reports candidates as `review-required`. To ask the optional
+local model to decide them, also set `semantic.enabled` in the shared configuration below. The
+candidate options can narrow the pass: `requireByAgent` for passive voice, `maxClusterLength` for
+noun clusters, and `minAntecedents` for pronouns. The fast pass never loads or calls the semantic
+service.
+
 ### Severity
 
 Each diagnostic carries the severity of its category (see

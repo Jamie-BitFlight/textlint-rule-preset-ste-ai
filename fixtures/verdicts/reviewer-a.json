@@ -7,14 +7,14 @@
         "passageId": "noun-cluster-candidate:s1:207",
         "ruleId": "noun-cluster-candidate",
         "evaluatorId": "noun-cluster-comprehension",
-        "quote": "SSLEngine\nSSL Engine Operation Switch\nSyntax: SSLEngine",
+        "quote": "SSLEngine\nSSL Engine Operation",
         "span": {
           "start": 207,
-          "end": 262
+          "end": 237
         },
         "verdict": "non-violation",
-        "reason": "The span joins the directive name SSLEngine to its title line 'SSL Engine Operation Switch' and the following 'Syntax: SSLEngine' declaration across line breaks; all three are component identity and reference-page boilerplate (a directive name, its title, and its syntax label), not a prose noun pile a reader must parse.",
-        "reviewerConfidence": 0.85
+        "reason": "The directive identifier and its title are distinct reference-page fields joined across a newline, not a prose noun cluster.",
+        "reviewerConfidence": 0.97
       },
       {
         "passageId": "noun-cluster-candidate:s1:293",
@@ -93,19 +93,6 @@
         "verdict": "non-violation",
         "reason": "Second occurrence of the established component name 'SSL/TLS Protocol Engine'; a real product/component name is never a noun-cluster defect.",
         "reviewerConfidence": 0.9
-      },
-      {
-        "passageId": "noun-cluster-candidate:s9:794",
-        "ruleId": "noun-cluster-candidate",
-        "evaluatorId": "noun-cluster-comprehension",
-        "quote": "mode Switch\nSyntax: SSLFIPS",
-        "span": {
-          "start": 794,
-          "end": 821
-        },
-        "verdict": "non-violation",
-        "reason": "Re-reviewed after the leading 'SSLFIPS' and 'SSL FIPS' identifiers became protected regions, which shortened this candidate from 777-821 to 794-821. What is left is the tail of the directive's title line ('... mode Switch') stitched across a line break onto the following 'Syntax: SSLFIPS' declaration label. 'mode Switch' alone is two words and under the limit; the run only reaches four content words by crossing the newline into a reference-page metadata field. Two adjacent layout fields, not a noun pile a reader must parse — the same structural artefact as the SSLEngine heading above, on a narrower span.",
-        "reviewerConfidence": 0.85
       },
       {
         "passageId": "ambiguous-pronoun-candidate:s11:942",

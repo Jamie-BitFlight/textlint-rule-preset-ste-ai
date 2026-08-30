@@ -20,6 +20,7 @@ describe('fast imperative classification', () => {
     ['Wipe the lens.', true],
     ['Trim the cable.', true],
     ['Do not remove the cover.', true],
+    ['Don’t remove the cover.', true],
     ['Never touch the terminal.', true],
     ['The driver is installed.', false],
     ['Note: remove the cover.', false],
@@ -61,6 +62,12 @@ describe('fast lexical word classes', () => {
 
   it('uses the reviewed verb dictionary for second actions', () => {
     expect(isImperativeOpenerWord(word('Install', 10), index)).toBe(true);
+    expect(isImperativeOpenerWord(word('unit', 26), index)).toBe(false);
+  });
+
+  it('uses configuration-local verbs for second actions', () => {
+    const configured = buildSentencePosIndex(sentence, ['unit']);
+    expect(isImperativeOpenerWord(word('unit', 26), configured)).toBe(true);
     expect(isImperativeOpenerWord(word('unit', 26), index)).toBe(false);
   });
 });

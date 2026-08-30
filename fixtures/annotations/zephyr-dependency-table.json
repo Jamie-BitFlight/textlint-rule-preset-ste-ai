@@ -137,11 +137,27 @@
     "sudo apt install"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-b",
     "rewriter-b"
   ],
   "notes": "Every diagnostic the linter produced on this fixture is a number-unit-format false positive against dotted software version identifiers that live either in list-table cells or in prose that quotes the same version number. No prose sentence in this excerpt has a genuine length, vocabulary, contraction, or punctuation defect, so there is no accepted change: the compliant file is byte-identical to the original apart from the required rewritten-counterpart header line.",
   "candidateAdjudications": [
+    {
+      "passageId": "noun-cluster-candidate:s2:283",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "host tools Zephyr needs",
+      "span": {
+        "start": 283,
+        "end": 306
+      },
+      "verdict": "non-violation",
+      "reason": "'host tools' is a conventional pairing and 'Zephyr needs' is a subject-verb relative clause.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.98
+    },
     {
       "passageId": "noun-cluster-candidate:s4:481",
       "ruleId": "noun-cluster-candidate",
@@ -158,7 +174,7 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "passive-voice-candidate:s10:824",
+      "passageId": "passive-voice-candidate:s9:824",
       "ruleId": "passive-voice-candidate",
       "evaluatorId": "passive-voice-adjudication",
       "quote": "is strongly recommended",

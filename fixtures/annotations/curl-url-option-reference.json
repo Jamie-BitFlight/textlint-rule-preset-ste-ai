@@ -277,6 +277,7 @@
     "`file://`"
   ],
   "reviewers": [
+    "codex-performance-review-2026-08-30",
     "reviewer-b",
     "rewriter-a"
   ],
@@ -298,19 +299,19 @@
       "reviewerConfidence": 0.85
     },
     {
-      "passageId": "noun-cluster-candidate:s2:292",
+      "passageId": "noun-cluster-candidate:s2:262",
       "ruleId": "noun-cluster-candidate",
       "evaluatorId": "noun-cluster-comprehension",
-      "quote": "Long: url\nArg: <url/file",
+      "quote": "SPDX-License-Identifier: curl\nLong: url\nArg: <url/file>\nHelp: URL(s",
       "span": {
-        "start": 292,
-        "end": 316
+        "start": 262,
+        "end": 329
       },
       "verdict": "non-violation",
-      "reason": "Same front-matter block as the adjacent 's1:203' entry: this span joins the key/value metadata lines 'Long: url' and 'Arg: <url/file>' across a newline. Each line is a one-word field name followed by its value; a reader of curl's option-reference front matter parses them independently, line by line, exactly as with the other metadata fields in the same block. There is no noun run and no grouping decision.",
+      "reason": "Separate front-matter metadata fields were joined across line boundaries; this is not a prose noun cluster.",
       "reviewer": "reviewer-b",
       "reviewerKind": "agent",
-      "reviewerConfidence": 0.85
+      "reviewerConfidence": 0.95
     },
     {
       "passageId": "noun-cluster-candidate:s12:691",
@@ -416,6 +417,21 @@
       "reviewer": "reviewer-b",
       "reviewerKind": "agent",
       "reviewerConfidence": 0.6
+    },
+    {
+      "passageId": "noun-cluster-candidate:s17:1440",
+      "ruleId": "noun-cluster-candidate",
+      "evaluatorId": "noun-cluster-comprehension",
+      "quote": "text\nfile, one URL",
+      "span": {
+        "start": 1440,
+        "end": 1458
+      },
+      "verdict": "non-violation",
+      "reason": "The span crosses a comma between a text file and one URL per line; these are separate, ordinary phrases.",
+      "reviewer": "codex-performance-review-2026-08-30",
+      "reviewerKind": "agent",
+      "reviewerConfidence": 0.98
     },
     {
       "passageId": "ambiguous-pronoun-candidate:s18:1469",

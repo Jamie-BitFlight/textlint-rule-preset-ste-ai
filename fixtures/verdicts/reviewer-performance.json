@@ -1,0 +1,262 @@
+{
+  "reviewer": "codex-performance-review-2026-08-30",
+  "reviewerKind": "agent",
+  "verdicts": {
+    "curl-url-option-reference": [
+      {
+        "passageId": "noun-cluster-candidate:s17:1440",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "text\nfile, one URL",
+        "span": {
+          "start": 1440,
+          "end": 1458
+        },
+        "verdict": "non-violation",
+        "reason": "The span crosses a comma between a text file and one URL per line; these are separate, ordinary phrases.",
+        "reviewerConfidence": 0.98
+      }
+    ],
+    "django-settings-configuration": [
+      {
+        "passageId": "noun-cluster-candidate:s2:256",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Django settings file contains",
+        "span": {
+          "start": 256,
+          "end": 285
+        },
+        "verdict": "non-violation",
+        "reason": "The finite verb 'contains' makes this an ordinary subject-verb sequence, not a noun cluster.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "httpd-mod-ssl-directive-config": [
+      {
+        "passageId": "passive-voice-candidate:s6:633",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "is\ndisabled",
+        "span": {
+          "start": 633,
+          "end": 644
+        },
+        "verdict": "non-violation",
+        "reason": "This describes the engine's default state; it is not an instruction with a consequentially hidden actor.",
+        "reviewerConfidence": 0.97
+      },
+      {
+        "passageId": "passive-voice-candidate:s11:997",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be configured",
+        "span": {
+          "start": 997,
+          "end": 1010
+        },
+        "verdict": "non-violation",
+        "reason": "This states a configuration constraint; the responsible actor is immaterial.",
+        "reviewerConfidence": 0.9
+      }
+    ],
+    "httpd-mod-ssl-overview": [
+      {
+        "passageId": "passive-voice-candidate:s5:474",
+        "ruleId": "passive-voice-candidate",
+        "evaluatorId": "passive-voice-adjudication",
+        "quote": "be configured",
+        "span": {
+          "start": 474,
+          "end": 487
+        },
+        "verdict": "non-violation",
+        "reason": "This is a descriptive capability statement about the module, not an instruction obscuring who must act.",
+        "reviewerConfidence": 0.92
+      }
+    ],
+    "k8s-audit-log-troubleshooting": [
+      {
+        "passageId": "noun-cluster-candidate:s3:516",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Auditing allows cluster administrators",
+        "span": {
+          "start": 516,
+          "end": 554
+        },
+        "verdict": "non-violation",
+        "reason": "This is a grammatical clause with a gerund subject, finite verb, and object, not stacked noun modifiers.",
+        "reviewerConfidence": 0.99
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s5:621",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": {
+          "start": 621,
+          "end": 623
+        },
+        "verdict": "non-violation",
+        "reason": "The parallel audit-question list supplies one shared implied event; the proposed antecedents are verbs.",
+        "reviewerConfidence": 0.91
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s6:649",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": {
+          "start": 649,
+          "end": 651
+        },
+        "verdict": "non-violation",
+        "reason": "The pronoun retains the single audited event referent established by the parallel list.",
+        "reviewerConfidence": 0.92
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s7:668",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": {
+          "start": 668,
+          "end": 670
+        },
+        "verdict": "non-violation",
+        "reason": "The pronoun retains the single audited event referent established by the parallel list.",
+        "reviewerConfidence": 0.91
+      },
+      {
+        "passageId": "ambiguous-pronoun-candidate:s8:692",
+        "ruleId": "ambiguous-pronoun-candidate",
+        "evaluatorId": "pronoun-antecedent-ambiguity",
+        "quote": "it",
+        "span": {
+          "start": 692,
+          "end": 694
+        },
+        "verdict": "non-violation",
+        "reason": "The parallel list fixes the pronoun as the audited event; the proposed alternatives are verbs.",
+        "reviewerConfidence": 0.93
+      },
+      {
+        "passageId": "noun-cluster-candidate:s14:1150",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "current backend implementations\ninclude logs files",
+        "span": {
+          "start": 1150,
+          "end": 1200
+        },
+        "verdict": "non-violation",
+        "reason": "The span crosses the finite verb 'include' and forms a clause, not a modifier stack.",
+        "reviewerConfidence": 0.97
+      }
+    ],
+    "k8s-debug-pod-troubleshooting": [
+      {
+        "passageId": "noun-cluster-candidate:s22:1523",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "See [Compute Resources document",
+        "span": {
+          "start": 1523,
+          "end": 1554
+        },
+        "verdict": "non-violation",
+        "reason": "The scanner crosses the imperative 'See' and link markup; 'Compute Resources' is a document title.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "llvm-getting-started-build": [
+      {
+        "passageId": "noun-cluster-candidate:s2:286",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "LLVM (including subprojects like Clang",
+        "span": {
+          "start": 286,
+          "end": 324
+        },
+        "verdict": "non-violation",
+        "reason": "LLVM is followed by a parenthetical naming Clang as an example subproject, not stacked modifiers.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "postgres-vacuum-overview": [
+      {
+        "passageId": "noun-cluster-candidate:s4:530",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "Plain VACUUM (without FULL) simply reclaims space",
+        "span": {
+          "start": 530,
+          "end": 579
+        },
+        "verdict": "non-violation",
+        "reason": "This is a full clause with a command-name subject, parenthetical qualifier, finite verb, and object.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "sqlite-cli-description": [
+      {
+        "passageId": "noun-cluster-candidate:s7:859",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "accessing SQLite database files interactively",
+        "span": {
+          "start": 859,
+          "end": 904
+        },
+        "verdict": "non-violation",
+        "reason": "This is a verb, a conventional noun phrase, and an adverb, not stacked nouns.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "sqlite-vacuum-space-reclaim": [
+      {
+        "passageId": "noun-cluster-candidate:s3:436",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "leaves behind empty space",
+        "span": {
+          "start": 436,
+          "end": 461
+        },
+        "verdict": "non-violation",
+        "reason": "'leaves behind' is a phrasal verb with the ordinary object 'empty space', not a noun cluster.",
+        "reviewerConfidence": 0.99
+      },
+      {
+        "passageId": "noun-cluster-candidate:s7:883",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "largely stored contiguously within",
+        "span": {
+          "start": 883,
+          "end": 917
+        },
+        "verdict": "non-violation",
+        "reason": "The run is adverb, passive verb, adverb, and preposition, so it contains no noun stack.",
+        "reviewerConfidence": 0.99
+      }
+    ],
+    "zephyr-dependency-table": [
+      {
+        "passageId": "noun-cluster-candidate:s2:283",
+        "ruleId": "noun-cluster-candidate",
+        "evaluatorId": "noun-cluster-comprehension",
+        "quote": "host tools Zephyr needs",
+        "span": {
+          "start": 283,
+          "end": 306
+        },
+        "verdict": "non-violation",
+        "reason": "'host tools' is a conventional pairing and 'Zephyr needs' is a subject-verb relative clause.",
+        "reviewerConfidence": 0.98
+      }
+    ]
+  }
+}

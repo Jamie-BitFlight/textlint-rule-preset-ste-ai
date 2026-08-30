@@ -27,12 +27,14 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * format constraint in `src/rule-pack/schema.ts`. Unlike `metadata.id` (`src/core/rule-pack-id.ts`),
  * free display text cannot be reduced to an allowed character set without breaking legitimate
  * non-English terms, so this strips categories of character rather than a fixed list — closing the
- * class the way the id allowlist does, instead of chasing individual characters. Removed:
- * `\p{Cc}` (C0/C1 controls), {@link BIDI_CONTROL_CHARS} (bidirectional overrides and embeddings),
- * and `\p{Zl}`/`\p{Zp}` (line/paragraph separators) — every one of which can rewrite how
- * surrounding terminal or log output reads, or reorder text around it. General Unicode format
- * characters (`\p{Cf}`) outside that explicit list are left alone: a real word or replacement can
- * legitimately need one.
+ * class the way the id allowlist does, instead of chasing individual characters. Removed outright:
+ * `\p{Cc}` (C0/C1 controls) and {@link BIDI_CONTROL_CHARS} (bidirectional overrides and
+ * embeddings) — both of which can rewrite how surrounding terminal or log output reads, or reorder
+ * text around it. `\p{Zl}`/`\p{Zp}` (U+2028/U+2029, the two Unicode line/paragraph separators) need
+ * no separate removal step of their own: both are already members of
+ * {@link WHITESPACE_SHAPED_CONTROLS} below, so the whitespace-run step normalises or drops them the
+ * same way it does any other line-break-shaped control. General Unicode format characters (`\p{Cf}`)
+ * outside that explicit list are left alone: a real word or replacement can legitimately need one.
  *
  * The whitespace-shaped members of those categories — tab, newline, CR, vertical tab, form feed,
  * NEL (U+0085, a C1 control that is also a line break), and the two Unicode line/paragraph
@@ -98,8 +100,7 @@ export function stripUnsafeCharacters(text: string): string {
       if (!WHITESPACE_SHAPED_CONTROLS.test(run)) return run;
       const atBoundary = offset === 0 || offset + run.length === liveText.length;
       return atBoundary ? '' : ' ';
-    })
-    .replace(/[\p{Zl}\p{Zp}]/gu, '');
+    });
 }
 
 /**

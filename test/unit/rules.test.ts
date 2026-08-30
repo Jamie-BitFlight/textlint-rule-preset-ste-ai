@@ -4,7 +4,11 @@ import { analyseDocument } from '../../src/core/document.js';
 import { runDeterministicRules } from '../../src/core/runner.js';
 import type { Diagnostic, DocumentFormat } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
-import { findCaseConflicts } from '../../src/deterministic/helpers.js';
+import {
+  findCaseConflicts,
+  reportUncheckedGroup,
+  type IssueReporter,
+} from '../../src/deterministic/helpers.js';
 import { provisionalRulePack } from '../../src/rule-pack/provisional-pack.js';
 
 interface RunResult {
@@ -370,10 +374,9 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     // entries through the full pipeline just to exercise this one internal boundary would be
     // unwieldy for no extra coverage. `findCaseConflicts` only pays its pairwise `sameTermSpan`
     // cost within a bucket of same-code-point-length keys, bounded by
-    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH` -- measured directly at ~800ms for 2,000
-    // pairwise-distinct same-length entries before that bound existed. `word0`..`word599` spread
-    // across four lengths (5-8 digits), each bucket comfortably under the limit, so `Foo`/`foo`
-    // (the only length-3 pair) still gets a real, confirmed conflict check.
+    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`. `word0`..`word599` spread across four lengths
+    // (5-8 digits), each bucket comfortably under the limit, so `Foo`/`foo` (the only length-3
+    // pair) still gets a real, confirmed conflict check.
     const additional: Record<string, string[]> = { Foo: ['first'], foo: ['second'] };
     for (let i = 0; i < 600; i++) additional[`word${i}`] = [`alt${i}`];
 
@@ -403,16 +406,17 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
 
     expect(scan.conflicts).toEqual([]);
     expect(scan.unchecked).toHaveLength(1);
-    expect(scan.unchecked[0]).toHaveLength(502);
-    expect(scan.unchecked[0]).toEqual(expect.arrayContaining(['Foo', 'foo']));
+    expect(scan.unchecked[0]?.reason).toBe('bucket-too-large');
+    expect(scan.unchecked[0]?.keys).toHaveLength(502);
+    expect(scan.unchecked[0]?.keys).toEqual(expect.arrayContaining(['Foo', 'foo']));
   });
 
   it('bounds total cost across many buckets, not just within one (Codex review)', () => {
     // The per-length bound alone does not stop an untrusted pack from keeping every bucket at
-    // exactly the per-length limit and supplying arbitrarily many buckets. Reproduces Codex's own
-    // repro shape: 50 distinct lengths, 500 entries each (25,000 keys total, every individual
-    // bucket within `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`) -- confirmed to cost ~7.5s across
-    // ~6.2 million comparisons before `MAX_TOTAL_COMPARISONS` existed.
+    // exactly the per-length limit and supplying arbitrarily many buckets: 50 distinct lengths,
+    // 500 entries each (25,000 keys total, every individual bucket within
+    // `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`) reproduces the adversarial shape `MAX_TOTAL_COMPARISONS`
+    // exists to bound.
     const additional: Record<string, string[]> = {};
     for (let bucket = 0; bucket < 50; bucket++) {
       const prefix = 'x'.repeat(bucket);
@@ -428,6 +432,37 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     // At least one bucket exceeded the total budget and came back unchecked rather than being
     // silently treated as conflict-free.
     expect(scan.unchecked.length).toBeGreaterThan(0);
+    expect(scan.unchecked.some((group) => group.reason === 'total-budget-exceeded')).toBe(true);
+  });
+
+  it('reports a total-budget overflow as its own reason, not "bucket too large" (Codex review)', () => {
+    // Four buckets sitting exactly at the per-length limit (500 * 499 / 2 = 124,750 comparisons
+    // each) spend 499,000 of the 500,000-comparison total budget between them. A fifth, much
+    // smaller bucket (50 entries, nowhere near the per-length limit) then pushes the running total
+    // over budget by itself. Before distinguishing the two reasons, both this small bucket and a
+    // genuinely oversized one shared one `unchecked` shape, and `reportUncheckedGroup` always
+    // claimed "too many keys share this length" -- wrong for this bucket, which isn't oversized at
+    // all, just the one that happened to cross a budget earlier buckets already spent most of.
+    const additional: Record<string, string[]> = {};
+    for (let bucket = 0; bucket < 4; bucket++) {
+      const prefix = 'x'.repeat(bucket);
+      for (let i = 0; i < 500; i++)
+        additional[`${prefix}${String(i).padStart(3, '0')}`] = [`v${i}`];
+    }
+    const smallPrefix = 'x'.repeat(10);
+    for (let i = 0; i < 50; i++)
+      additional[`${smallPrefix}${String(i).padStart(2, '0')}`] = [`s${i}`];
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    const smallBucket = scan.unchecked.find((group) => group.keys.length === 50);
+    expect(smallBucket?.reason).toBe('total-budget-exceeded');
+
+    const notices: string[] = [];
+    const ctx: IssueReporter = { addIssue: (issue) => notices.push(issue.message) };
+    if (smallBucket !== undefined) reportUncheckedGroup(ctx, smallBucket, 'alternatives');
+    expect(notices[0]).toContain('total comparison budget');
+    expect(notices[0]).not.toContain('too many to exhaustively check');
   });
 
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {

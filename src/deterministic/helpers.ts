@@ -88,11 +88,12 @@ function codePointLength(term: string): number {
  * reports that whole bucket as {@link CaseConflictScan.unchecked} instead of exhaustively
  * confirming it.
  *
- * The check is quadratic per length bucket — measured directly at roughly 800ms for 2,000
- * pairwise-distinct same-length entries, the DoS-shaped cost Codex's review on this PR flagged
- * (`additional` is reachable from an untrusted pack's own `rules[].options`, per
+ * The check is quadratic per length bucket, which is the DoS-shaped cost Codex's review on this PR
+ * flagged (`additional` is reachable from an untrusted pack's own `rules[].options`, per
  * {@link reportCaseConflict}'s doc comment, so this is a real cost an untrusted pack can impose,
- * not only an operator's own mistake). Silently treating an oversized bucket as conflict-free was
+ * not only an operator's own mistake) — reproduce the shape with a same-length benchmark of a few
+ * thousand entries rather than trusting a one-off measurement committed here. Silently treating an
+ * oversized bucket as conflict-free was
  * tried first and rejected on review: a bucket this large could still contain a genuine conflict
  * (`Foo`/`foo` among 500 unrelated same-length keys, say), and reporting "no conflict" without
  * having checked is a false all-clear. Failing the rule instead, honestly naming the bucket as
@@ -106,23 +107,40 @@ const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
  *
  * {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH} alone bounds cost per bucket, but not in total: an
  * untrusted pack can keep every bucket at exactly that limit and supply arbitrarily many buckets
- * — confirmed directly by Codex's review on this PR, in its own review environment: 50 buckets of
- * 500 entries each (25,000 keys total, every one within the per-bucket limit) cost roughly 7.5s
- * across roughly 6.2 million regex comparisons. Once processing a bucket would push the running
- * total over this budget, that bucket (and every one after it) is reported as
+ * — Codex's review on this PR flagged exactly this shape (many buckets, each individually within
+ * the per-bucket limit). `test/unit/rules.test.ts`'s "bounds total cost across many buckets" test
+ * reproduces the adversarial shape and asserts a wall-clock ceiling directly, rather than this
+ * comment committing a one-off measurement that would drift from the real cost as the
+ * implementation or runtime changes. Once processing a bucket would push the running total over
+ * this budget, that bucket (and every one after it) is reported as
  * {@link CaseConflictScan.unchecked} instead of partially or fully processed — the same
  * fail-closed behaviour as one bucket over the per-length limit, just budgeted globally instead of
- * per length. 500,000 comparisons is comfortably under 200ms measured directly, room for several
- * buckets at the per-length cap or many more smaller ones.
+ * per length. The chosen value leaves room for several buckets at the per-length cap, or many more
+ * smaller ones, before the budget is spent.
  */
 const MAX_TOTAL_COMPARISONS = 500_000;
+
+/**
+ * One {@link CaseConflictScan.unchecked} group, naming both its keys and *why* they went
+ * unconfirmed — a bucket that individually exceeds {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH}
+ * is a different situation for a caller (and a reader of the resulting notice) than a
+ * comfortably-sized bucket that only lost out to {@link MAX_TOTAL_COMPARISONS} because earlier
+ * buckets already spent most of it — collapsing both into one shape would report the wrong
+ * constraint as the reason a rule got skipped.
+ */
+export interface UncheckedGroup {
+  /** The keys in this bucket, unconfirmed either way. */
+  readonly keys: string[];
+  /** Which limit stopped this bucket from being checked. */
+  readonly reason: 'bucket-too-large' | 'total-budget-exceeded';
+}
 
 /** {@link findCaseConflicts}'s result: confirmed conflicts, and buckets too large to confirm. */
 export interface CaseConflictScan {
   /** Groups confirmed, via the real matcher, to map to different values. */
   readonly conflicts: string[][];
-  /** Groups too large to check exhaustively (see {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH}); their case-conflict status was never determined. */
-  readonly unchecked: string[][];
+  /** Groups whose case-conflict status was never determined; see {@link UncheckedGroup.reason}. */
+  readonly unchecked: UncheckedGroup[];
 }
 
 /**
@@ -156,16 +174,16 @@ export function findCaseConflicts<T>(
   }
 
   const groups: [key: string, value: T][][] = [];
-  const unchecked: string[][] = [];
+  const unchecked: UncheckedGroup[] = [];
   let comparisonsSpent = 0;
   for (const bucket of byLength.values()) {
     if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) {
-      unchecked.push(bucket.map(([key]) => key));
+      unchecked.push({ keys: bucket.map(([key]) => key), reason: 'bucket-too-large' });
       continue;
     }
     const bucketCost = (bucket.length * (bucket.length - 1)) / 2;
     if (comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS) {
-      unchecked.push(bucket.map(([key]) => key));
+      unchecked.push({ keys: bucket.map(([key]) => key), reason: 'total-budget-exceeded' });
       continue;
     }
     comparisonsSpent += bucketCost;
@@ -237,8 +255,15 @@ export function reportCaseConflict(
 }
 
 /**
- * Report one `findCaseConflicts` {@link CaseConflictScan.unchecked} group: too many keys of the
- * same length to confirm, one way or the other, whether any of them collide.
+ * Report one `findCaseConflicts` {@link CaseConflictScan.unchecked} group: keys that could not be
+ * confirmed, one way or the other, whether any of them collide.
+ *
+ * The message names which limit stopped the check ({@link UncheckedGroup.reason}) rather than
+ * always blaming this group's own length: a bucket well under
+ * {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH} can still end up unchecked if earlier buckets
+ * already spent most of {@link MAX_TOTAL_COMPARISONS}, and telling that caller "too many keys
+ * share this length" would misidentify the actual constraint and the actual fix (reduce keys
+ * overall, not just within this length).
  *
  * Names a sample rather than every key, both because the full list can be long and because each
  * key is display text (see {@link reportCaseConflict}'s doc comment on provenance) sanitized the
@@ -246,22 +271,25 @@ export function reportCaseConflict(
  */
 export function reportUncheckedGroup(
   ctx: IssueReporter,
-  group: readonly string[],
+  group: UncheckedGroup,
   noun: 'alternatives' | 'replacements',
 ): void {
-  const sample = group
+  const sample = group.keys
     .slice(0, 3)
     .map((key) => `"${sanitizeQuotedValue(key)}"`)
     .join(', ');
-  ctx.addIssue({
-    code: 'custom',
-    path: ['additional'],
-    message:
-      `${group.length} keys (for example ${sample}) are the same length once whitespace runs ` +
-      `are normalised — too many to exhaustively check for a case-insensitive collision over ` +
-      `their ${noun}. Reduce how many keys share this length, or split them across more than ` +
-      'one rule configuration.',
-  });
+  const message =
+    group.reason === 'bucket-too-large'
+      ? `${group.keys.length} keys (for example ${sample}) are the same length once whitespace ` +
+        `runs are normalised — too many to exhaustively check for a case-insensitive collision ` +
+        `over their ${noun}. Reduce how many keys share this length, or split them across more ` +
+        'than one rule configuration.'
+      : `${group.keys.length} keys (for example ${sample}) could not be checked for a ` +
+        `case-insensitive collision over their ${noun}: checking them would exceed the total ` +
+        `comparison budget shared across every key length in this "additional" map, even though ` +
+        'this group alone is well within the per-length limit. Reduce the total number of keys ' +
+        'across all lengths, or split them across more than one rule configuration.';
+  ctx.addIssue({ code: 'custom', path: ['additional'], message });
 }
 
 /** Escape regex metacharacters and collapse whitespace runs to a flexible `\s+`. */

@@ -2,21 +2,40 @@ import { proseWords } from '../core/document.js';
 import type { Sentence, SourceRange, TextBlock, Word } from '../core/types.js';
 
 /**
+ * Unicode bidirectional-control code points: the ones actually capable of reordering how
+ * surrounding text visually renders (the Trojan Source attack class), rather than every character
+ * Unicode classifies as "format" (`\p{Cf}`). Listed explicitly rather than derived from a broader
+ * property, because `\p{Cf}` also contains characters with a real, local effect on the word they
+ * sit inside — ZWJ (U+200D, joins emoji into one glyph), ZWNJ (U+200C, controls letter-joining in
+ * Persian/Arabic script), soft hyphen — none of which move *surrounding* text the way a bidi
+ * override does. `stripUnsafeCharacters` (below) used to strip the whole `\p{Cf}` category and, in
+ * doing so, mangled exactly that class of legitimate rule-pack replacement text (confirmed
+ * directly: stripping ZWJ from `👩‍🔧` produces `👩🔧`, a different emoji).
+ *
+ * ALM, LRM, RLM (U+061C, U+200E, U+200F): directional marks with no visible glyph of their own.
+ * LRE/RLE/PDF/LRO/RLO (U+202A–U+202E) and LRI/RLI/FSI/PDI (U+2066–U+2069): the embedding, override
+ * and isolate controls.
+ */
+const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
+
+/**
  * Remove characters that make a supplier-controlled string actively dangerous once it is
- * interpolated into rendered output (a diagnostic `message`, a fix `rationale`) — not merely
- * unusual-looking ones.
+ * interpolated into rendered output (a diagnostic `message`, a fix `rationale`) or written into a
+ * document (a fix's actual replacement text) — not merely unusual-looking ones.
  *
  * Rule-pack text fields such as `preferred.to`, `unapproved.alternatives` and `note` carry no
  * format constraint in `src/rule-pack/schema.ts`. Unlike `metadata.id` (`src/core/rule-pack-id.ts`),
  * free display text cannot be reduced to an allowed character set without breaking legitimate
  * non-English terms, so this strips categories of character rather than a fixed list — closing the
  * class the way the id allowlist does, instead of chasing individual characters. Removed:
- * `\p{Cc}`/`\p{Cf}` (C0/C1 controls, zero-width and bidirectional-override characters) and
- * `\p{Zl}`/`\p{Zp}` (line/paragraph separators), any of which can rewrite how surrounding terminal
- * or log output reads.
+ * `\p{Cc}` (C0/C1 controls), {@link BIDI_CONTROL_CHARS} (bidirectional overrides and embeddings),
+ * and `\p{Zl}`/`\p{Zp}` (line/paragraph separators) — every one of which can rewrite how
+ * surrounding terminal or log output reads, or reorder text around it. General Unicode format
+ * characters (`\p{Cf}`) outside that explicit list are left alone: a real word or replacement can
+ * legitimately need one.
  */
 export function stripUnsafeCharacters(text: string): string {
-  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '');
+  return text.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '').replace(BIDI_CONTROL_CHARS, '');
 }
 
 /**

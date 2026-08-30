@@ -1046,4 +1046,27 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(meta['to']).toBeDefined();
     expect(meta['note']).toBeDefined();
   });
+
+  it('preserves a legitimate zero-width joiner in replacement text (Codex review)', () => {
+    // `stripUnsafeCharacters` originally removed the entire Unicode "format" category (`\p{Cf}`),
+    // which also contains characters with a real, local effect on the word they sit inside, not
+    // just bidi overrides. ZWJ (U+200D) is the clearest case: it is what makes a multi-codepoint
+    // emoji sequence render as one glyph. Stripping it from a rule pack's real replacement text
+    // would corrupt exactly the text `safeSubstitution: true` promises is meaning-preserving.
+    const zwj = String.fromCharCode(0x200d);
+    const manTechnologist = `\u{1F468}${zwj}\u{1F4BB}`; // U+1F468 U+200D U+1F4BB
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: manTechnologist, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe(manTechnologist);
+    expect(diagnostic?.fix?.text).toContain(zwj);
+  });
 });

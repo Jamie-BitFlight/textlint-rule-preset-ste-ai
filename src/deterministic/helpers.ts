@@ -168,6 +168,12 @@ const MAX_TOTAL_COMPARISONS = 500_000;
  * committing a one-off measurement. Once a bucket's own or the running weighted total would exceed
  * this budget, it is reported as {@link CaseConflictScan.unchecked} the same way as the other two
  * limits.
+ *
+ * A later round of the same review found this budget itself had a gap: it only weighed the
+ * pairwise scan's cost, not the fixed per-key self-test cost `findCaseConflicts` runs before that
+ * scan (see its own comment on `selfTestWork`) — a bucket too small to cost anything pairwise
+ * (a singleton, say) still paid that self-test cost with nothing here to bound it across many such
+ * buckets. `selfTestWork` is now included in what this budget tracks.
  */
 const MAX_TOTAL_COMPARISON_WORK = 25_000_000;
 
@@ -240,7 +246,16 @@ export function findCaseConflicts<T>(
       continue;
     }
     const bucketCost = (bucket.length * (bucket.length - 1)) / 2;
-    const bucketWork = bucketCost * maxRawLength;
+    // Two self-tests per key (`sameTermSpan` and `termPattern`, below), each proportional to the
+    // bucket's raw length — this is the per-key work the pairwise `bucketWork` term does not
+    // cover. Without it, a bucket costs nothing by this budget's own accounting whenever
+    // `bucket.length` is small (a singleton bucket has `bucketCost === 0` regardless of its key's
+    // length), so a pack supplying many singleton buckets of long keys — never colliding, so
+    // never bucketed together, so never contributing pairwise cost — would still impose unbounded
+    // self-test work with nothing here to stop it. Confirmed as a real gap by Codex's review on
+    // this PR.
+    const selfTestWork = 2 * bucket.length * maxRawLength;
+    const bucketWork = bucketCost * maxRawLength + selfTestWork;
     if (
       comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS ||
       workSpent + bucketWork > MAX_TOTAL_COMPARISON_WORK
@@ -448,12 +463,28 @@ export interface TermMatch {
  *
  * Matching runs against `sentence.masked`, so a term can never match inside protected content.
  * Returned ranges are absolute offsets into the source document.
+ *
+ * `termPattern(term)`'s compiled `RegExp` only fully compiles on first execution (confirmed
+ * directly: construction alone never throws, no matter how long or pathologically-shaped `term`
+ * is — the failure surfaces lazily, inside `matchAll` here), and the size at which that lazy
+ * compile fails is sensitive to how much call stack is already in use at the point of execution —
+ * confirmed directly, the same term and the same pattern shape can succeed at a shallow stack
+ * depth and fail deeper in a real call chain. `findCaseConflicts`'s own self-test of this same
+ * shape, at schema-validation time, cannot rule this out for every later call from a different
+ * point in the call stack at document-analysis time — this is `findTerm`'s own, independent
+ * guard, not a duplicate of that one. A term this pathological is never going to usefully match
+ * real prose anyway, so treating the failure as "no match in this sentence" costs nothing a
+ * legitimate rule pack or config would ever need.
  */
 export function findTerm(sentence: Sentence, term: string): TermMatch[] {
   const out: TermMatch[] = [];
-  for (const m of sentence.masked.matchAll(termPattern(term))) {
-    const start = sentence.range.start + m.index;
-    out.push({ range: { start, end: start + m[0].length }, text: m[0] });
+  try {
+    for (const m of sentence.masked.matchAll(termPattern(term))) {
+      const start = sentence.range.start + m.index;
+      out.push({ range: { start, end: start + m[0].length }, text: m[0] });
+    }
+  } catch {
+    return [];
   }
   return out;
 }

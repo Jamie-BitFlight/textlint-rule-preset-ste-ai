@@ -6,6 +6,7 @@ import type { Diagnostic, DocumentFormat } from '../../src/core/types.js';
 import { deterministicRules } from '../../src/deterministic/index.js';
 import {
   findCaseConflicts,
+  findTerm,
   reportUncheckedGroup,
   type IssueReporter,
 } from '../../src/deterministic/helpers.js';
@@ -629,6 +630,29 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
   });
 
+  it('charges the per-key self-test cost to the total budget too (Codex review)', () => {
+    // MAX_TOTAL_COMPARISON_WORK weighed the pairwise scan's cost, but the fixed per-key self-test
+    // (sameTermSpan and termPattern, both above) runs before that scan and was not counted at all.
+    // A near-singleton bucket costs almost nothing pairwise (bucketCost is 0 for a true singleton,
+    // 1 for a pair, and so on) regardless of key length, so a pack distributing many long keys
+    // across many distinct lengths -- never colliding, so never bucketed together, so never
+    // contributing pairwise cost -- could impose unbounded self-test work with nothing here to
+    // stop it before this fix. 6,500 keys of ~2,000 code points each, spread across enough
+    // distinct lengths that no bucket approaches EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH (500) or
+    // MAX_TOTAL_COMPARISONS (500,000 pairs) on their own, reproduces the shape: self-test cost
+    // alone accumulates enough to trip MAX_TOTAL_COMPARISON_WORK partway through.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 6500; i++) {
+      const key = `${'x'.repeat(2000)}${'q'.repeat(i % 50)}${i}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked.length).toBeGreaterThan(0);
+    for (const group of scan.unchecked) expect(group.reason).toBe('total-budget-exceeded');
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth
@@ -655,6 +679,23 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     );
 
     expect(scan.conflicts).toEqual([['foo bar', 'foo  bar']]);
+  });
+
+  it('findTerm degrades to no match instead of crashing on a pathological term (Codex review)', () => {
+    // findCaseConflicts's own self-test at schema-validation time cannot guarantee findTerm won't
+    // still fail later at document-analysis time: the underlying regex engine's lazy-compile
+    // failure threshold is sensitive to how much call stack is already in use at the point of
+    // execution, and the two call sites run from different points in the call stack. findTerm
+    // guards its own termPattern execution independently, rather than relying solely on that
+    // earlier check, so a pathological term degrades to "no match in this sentence" instead of
+    // crashing the whole analysis run.
+    const doc = analyseDocument({ id: 't', format: 'markdown', text: 'Use the widget.\n' });
+    const sentence = doc.sentences[0];
+    if (sentence === undefined) throw new Error('expected at least one sentence');
+
+    const pathological = `a${'x'.repeat(100_000)}`;
+    expect(() => findTerm(sentence, pathological)).not.toThrow();
+    expect(findTerm(sentence, pathological)).toEqual([]);
   });
 });
 

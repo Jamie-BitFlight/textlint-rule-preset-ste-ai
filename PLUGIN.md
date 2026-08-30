@@ -53,8 +53,8 @@ machine-local instructions, including imports that resolve to `CLAUDE.local.md`.
 follows an import or symbolic link only when the canonical target is shared. The target must also
 stay inside the repository. External targets and Cursor `@filename` references are unsupported.
 Unreadable evidence, ambiguous applicability, and conflicting Claude memory produce an incomplete
-result. The preparer replaces JSON larger than 96 KiB with a small incomplete result. That bound
-leaves working context for the Haiku reviewer.
+result. The preparer replaces JSON that exceeds its serialized-output limit with a small incomplete
+result. The limit leaves working context for the Haiku reviewer.
 
 These boundaries prevent reviewed filenames from becoming shell syntax. They do not turn a model
 review into a formal proof. Claude Code loads project memory into custom agents. The reviewer treats

@@ -272,7 +272,21 @@ export function findCaseConflicts<T>(
       // applies to any key a peer already claimed as its own `candidate` before its own turn as
       // `current` arrived. Self-testing every key up front, before any pairwise work, exercises
       // every key's own compile-safety exactly once regardless of the role it plays below.
-      for (const [key] of bucket) sameTermSpan(key, key);
+      //
+      // `sameTermSpan`'s anchored `^...$` pattern is not a reliable proxy for `termPattern`'s own
+      // lookaround-boundary shape (the one `findTerm` actually uses to match this key against real
+      // document text): confirmed directly, a `RegExp` object survives construction no matter how
+      // long the pattern is — the compile step that can throw `SyntaxError` for an oversized or
+      // pathologically-shaped pattern happens lazily, on first execution (`.test()`/`.exec()`/
+      // `.matchAll()`), not at `new RegExp(...)` time — and the two shapes hit that lazy-compile
+      // failure at different sizes for the same content. Self-testing `sameTermSpan` alone missed
+      // exactly this: a key that `sameTermSpan` accepted still failed once actually exercised
+      // through `termPattern`. Both shapes are self-tested here, each executed (not merely
+      // constructed) so the lazy compile step is actually forced.
+      for (const [key] of bucket) {
+        sameTermSpan(key, key);
+        termPattern(key).test(key);
+      }
 
       const bucketGroups: [key: string, value: T][][] = [];
       const consumed = new Set<number>();

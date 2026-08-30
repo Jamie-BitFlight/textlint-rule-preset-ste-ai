@@ -603,6 +603,25 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]?.keys).toHaveLength(1);
   });
 
+  it('self-tests the actual termPattern shape too, not only sameTermSpan (Codex review)', () => {
+    // Confirmed directly: a compiled RegExp survives construction no matter how long the pattern
+    // is -- the compile step that can throw for an oversized or pathologically-shaped pattern
+    // happens lazily, on first *execution* (.test()/.exec()/.matchAll()), not at `new RegExp(...)`
+    // time. termPattern's lookaround-boundary shape (the one findTerm actually executes against
+    // real document text) is not guaranteed to hit that lazy-compile failure at the same size as
+    // sameTermSpan's anchored `^...$` shape for the same content, so self-testing only one of the
+    // two shapes leaves the other's failure mode unguarded. Both shapes are executed here.
+    const additional: Record<string, string[]> = {
+      [`a${'x'.repeat(100_000)}`]: ['only'],
+    };
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.conflicts).toEqual([]);
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('comparison-failed');
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

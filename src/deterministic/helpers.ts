@@ -46,7 +46,7 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  *
  * Matched and collapsed as a whole run, not one character at a time, and the run itself spans any
  * ordinary space characters immediately touching a control, not only the controls themselves --
- * two gaps in an earlier version, both confirmed directly by Codex's review on this PR:
+ * three gaps in an earlier version, all confirmed directly by Codex's review on this PR:
  *
  * - A conventional multi-character line break like `\r\n` is two of these controls back to
  *   back; replacing each independently produced `sign  in` (two spaces) for `sign\r\nin`
@@ -54,21 +54,28 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * - Indentation around a line break (`sign \r\n in`) left the *adjacent* ordinary spaces
  *   untouched, since they are not themselves one of these controls, producing `sign   in`
  *   (three spaces) instead of one.
+ * - A run touching either end of the *whole replacement string* was still collapsed to a space
+ *   rather than dropped, even though there is no word on that side to separate from:
+ *   `stripUnsafeCharacters('\nfoo')` produced `' foo'`, a stray leading space that becomes a
+ *   double space once substituted next to the document's own existing separator.
  *
  * {@link WHITESPACE_RUN_TOUCHING_CONTROL} matches the broader run (controls and ordinary
- * spaces both); the replacer only collapses a matched run to one space when
- * {@link WHITESPACE_SHAPED_CONTROLS} actually finds a control character inside it, leaving a
- * run of *only* ordinary spaces -- legitimate, pack-authored text with no control character in
- * it at all -- untouched.
+ * spaces both); the replacer only touches a matched run that actually contains a control
+ * character (per {@link WHITESPACE_SHAPED_CONTROLS}), leaving a run of *only* ordinary spaces --
+ * legitimate, pack-authored text with no control character in it at all -- untouched. A
+ * control-bearing run touching either end of the whole string collapses to nothing; one that
+ * doesn't collapses to a single space.
  */
 const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]/u;
 const WHITESPACE_RUN_TOUCHING_CONTROL = /[ \t\n\v\f\r\u0085\u2028\u2029]+/gu;
 
 export function stripUnsafeCharacters(text: string): string {
   return text
-    .replace(WHITESPACE_RUN_TOUCHING_CONTROL, (run) =>
-      WHITESPACE_SHAPED_CONTROLS.test(run) ? ' ' : run,
-    )
+    .replace(WHITESPACE_RUN_TOUCHING_CONTROL, (run, offset) => {
+      if (!WHITESPACE_SHAPED_CONTROLS.test(run)) return run;
+      const atBoundary = offset === 0 || offset + run.length === text.length;
+      return atBoundary ? '' : ' ';
+    })
     .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '')
     .replace(BIDI_CONTROL_CHARS, '');
 }

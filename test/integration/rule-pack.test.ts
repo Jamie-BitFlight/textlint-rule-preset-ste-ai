@@ -1174,6 +1174,27 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.fix?.text).toBe('sign  in');
   });
 
+  it('drops a control-derived run at the replacement boundary instead of leaving a stray space (Codex review)', () => {
+    // A control-bearing run touching either end of the whole replacement string was still
+    // collapsed to a space, not dropped, even though there is no word on that side to separate
+    // from: `stripUnsafeCharacters('\nfoo')` produced `' foo'`, a stray leading space that turns
+    // into a double space once substituted next to the document's own existing separator.
+    const lf = String.fromCharCode(0x0a);
+    const replacement = `${lf}foo`;
+    const result = analyse('Use the widget here.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('foo');
+  });
+
   it('does not offer or apply a fix that sanitizes to a blank replacement (unapproved-vocabulary, Codex review)', () => {
     // A pack-supplied alternative made entirely of control characters sanitizes to an empty
     // string. checkFixSafety's numeric/negation/modal/ordering checks do not catch a blank

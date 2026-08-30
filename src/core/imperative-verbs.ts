@@ -11,19 +11,10 @@
  * `power`, `contact`, `access`, `report`, `label`, `mark`, `screen`) because those produce
  * frequent misclassification of descriptive sentences.
  *
- * As of the `compromise` integration (`src/core/pos-tags.ts`), this list is no longer consulted
- * as a `Set.has()` membership test anywhere outside that module. Its role changed to:
- *  1. a domain lexicon taught to `compromise` via `addWords`, so `compromise`'s own
- *     context-sensitive tagger can recognise these words as verbs (`compromise`'s stock
- *     general-English lexicon does not know `torque`, `flash`, `ping`, `source`, `sync`,
- *     `query`, `rebase`, `unset`, `serialise` and others here as verbs — confirmed directly);
- *  2. a fallback for the rare case where `compromise`'s tokenisation of a sentence does not align
- *     with this project's own word tokeniser, so a lookup miss degrades to the old behaviour
- *     instead of silently doing nothing.
- * The words themselves, and their documented exclusions above, are unchanged — only how they are
- * consumed changed. Noun/verb disambiguation for an ambiguous word (`record`, `file`, `access`,
- * `test`, `set` … still tag as `Noun` in a noun context and `Verb` in a verb context) is now
- * handled by `compromise`'s grammar, not by this list.
+ * The fast edit-time classifier performs direct membership checks against this set. It does not
+ * load a statistical tagger or mutate a process-global lexicon. `extraImperativeVerbs` are merged
+ * per run, preserving configuration isolation. This bounded grammar deliberately gives up
+ * context-sensitive noun/verb disambiguation for low startup cost and predictable throughput.
  */
 export const IMPERATIVE_VERBS: ReadonlySet<string> = new Set([
   // generic action
@@ -161,6 +152,8 @@ export const IMPERATIVE_VERBS: ReadonlySet<string> = new Set([
   'wear',
   'withdraw',
   'write',
+  'wipe',
+  'trim',
   // software specific
   'build',
   'commit',

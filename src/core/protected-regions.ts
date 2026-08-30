@@ -364,7 +364,7 @@ const mathPass: Pass = {
  * `[text](destination "title")` — protect the destination, keep the link text as prose.
  *
  * The lookbehind matters: masking the `]` as well would leave the opening `[` unpaired, and
- * sentence-splitter's pair tracking then treats the remainder of the block as being inside a
+ * a sentence splitter's pair tracking can then treat the remainder of the block as being inside a
  * bracket, collapsing every following sentence into one. The mask must keep brackets balanced.
  */
 const linkDestinationPass: Pass = {

@@ -4,7 +4,6 @@ import { buildSentencePosIndex, type SentencePosIndex } from './pos-tags.js';
 import { gateFix, type DeterministicRule, type RuleInput } from './rule.js';
 import { isSafeRulePackId } from './rule-pack-id.js';
 import { rangesOverlap } from './text.js';
-import { buildWinkPosIndex, type WinkPosIndex } from './wink-tags.js';
 import type {
   AnalysedDocument,
   CandidatePassage,
@@ -54,20 +53,11 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
   const blockById = new Map<string, TextBlock>(doc.blocks.map((b) => [b.id, b]));
   const packSpecs = new Map(pack.rules.map((r) => [r.ruleId, r]));
   const posIndexes = new WeakMap<object, SentencePosIndex>();
-  const winkIndexes = new WeakMap<object, WinkPosIndex>();
   const posIndexFor: RuleInput['posIndexFor'] = (sentence) => {
     let index = posIndexes.get(sentence);
     if (index === undefined) {
       index = buildSentencePosIndex(sentence, config.extraImperativeVerbs);
       posIndexes.set(sentence, index);
-    }
-    return index;
-  };
-  const winkIndexFor: RuleInput['winkIndexFor'] = (sentence) => {
-    let index = winkIndexes.get(sentence);
-    if (index === undefined) {
-      index = buildWinkPosIndex(sentence.masked);
-      winkIndexes.set(sentence, index);
     }
     return index;
   };
@@ -111,7 +101,6 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
       blockById,
       extraImperativeVerbs: config.extraImperativeVerbs,
       posIndexFor,
-      winkIndexFor,
     };
 
     const output = rule.run(input);

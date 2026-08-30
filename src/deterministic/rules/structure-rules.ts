@@ -165,6 +165,8 @@ export const oneInstructionPerSentenceRule: DeterministicRule<
       const words = sentence.words.filter((w) => w.protectedKind === undefined);
       const first = words[0];
       if (first === undefined) continue;
+      if (!sentence.masked.includes(',') && !words.some((word) => conjunctions.has(word.lower)))
+        continue;
       if (!sentenceOpensImperative(sentence.masked, extraImperativeVerbs)) continue;
       const posIndex = posIndexFor(sentence);
 

@@ -480,6 +480,32 @@ describe('run-level notices, reported once regardless of which rules are enabled
     expect(notices).toHaveLength(1);
   });
 
+  it('reports an unknown shared rule id once through an enabled handler', async () => {
+    const shared = { rules: { 'not-a-real-rule': { enabled: true } } };
+    const result = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          rule: mustGetRule('unapproved-vocabulary'),
+          options: { shared },
+        },
+        {
+          ruleId: 'no-contractions',
+          rule: mustGetRule('no-contractions'),
+          options: { shared },
+        },
+      ],
+    });
+    const notices = result.messages.filter((message) =>
+      message.message.includes('unknown-rule-id'),
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.message).toContain('not-a-real-rule');
+    expect(['unapproved-vocabulary', 'no-contractions']).toContain(notices[0]?.ruleId);
+  });
+
   it('surfaces distinct notices from different rules, not just whichever ran first', async () => {
     // Found in external review of PR #73, on the fix above: `getAnalysis` computes a config
     // scoped to whichever rule is calling it, so two rules can genuinely compute *different*
@@ -538,9 +564,14 @@ describe('run-level notices, reported once regardless of which rules are enabled
 });
 
 describe('preset shape', () => {
-  it('exposes one rule module per core rule and enables them all by default', () => {
+  it('exposes every rule and keeps semantic candidate generators opt-in', () => {
     expect(Object.keys(rules)).toHaveLength(14);
-    expect(Object.values(rulesConfig).every((v) => v === true)).toBe(true);
+    expect(
+      Object.entries(rulesConfig)
+        .filter(([, enabled]) => !enabled)
+        .map(([id]) => id)
+        .toSorted(),
+    ).toEqual(['ambiguous-pronoun-candidate', 'noun-cluster-candidate', 'passive-voice-candidate']);
     for (const rule of Object.values(rules)) {
       expect(typeof rule).toBe('object');
       expect('linter' in rule && 'fixer' in rule).toBe(true);

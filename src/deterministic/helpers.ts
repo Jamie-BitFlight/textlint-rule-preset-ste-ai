@@ -15,6 +15,73 @@ export interface TermMatch {
   readonly text: string;
 }
 
+export interface IndexedTermMatch extends TermMatch {
+  readonly termIndex: number;
+}
+
+/**
+ * Build one sentence scanner for a priority-ordered term list.
+ *
+ * The zero-width lookahead considers every UTF-16 position, including overlapping candidates.
+ * Matches are then processed in term-priority order and claimed exactly like the former nested
+ * `for sentence -> for term -> findTerm` loops, but the sentence is traversed only once.
+ */
+export function buildClaimingTermScanner(
+  terms: readonly string[],
+): (sentence: Sentence) => readonly IndexedTermMatch[] {
+  if (terms.some((term) => term.trim().length === 0)) {
+    return (sentence) => {
+      const claimed: SourceRange[] = [];
+      const out: IndexedTermMatch[] = [];
+      for (const [termIndex, term] of terms.entries()) {
+        for (const match of findTerm(sentence, term)) {
+          if (
+            claimed.some((range) => match.range.start < range.end && range.start < match.range.end)
+          )
+            continue;
+          claimed.push(match.range);
+          out.push({ ...match, termIndex });
+        }
+      }
+      return out;
+    };
+  }
+
+  const alternatives = terms.map((term, index) => {
+    const escaped = term
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    return `(?<t${index}>${escaped}(?![\\p{L}\\p{N}_]))`;
+  });
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])(?=(?:${alternatives.join('|')}))`, 'giu');
+
+  return (sentence) => {
+    const candidates: IndexedTermMatch[] = [];
+    for (const match of sentence.masked.matchAll(pattern)) {
+      const groups = match.groups ?? {};
+      for (let termIndex = 0; termIndex < terms.length; termIndex += 1) {
+        const text = groups[`t${termIndex}`];
+        if (text === undefined) continue;
+        const start = sentence.range.start + match.index;
+        candidates.push({ range: { start, end: start + text.length }, text, termIndex });
+        break;
+      }
+    }
+    candidates.sort(
+      (a, b) =>
+        a.termIndex - b.termIndex || a.range.start - b.range.start || a.range.end - b.range.end,
+    );
+    const claimed: SourceRange[] = [];
+    return candidates.filter((match) => {
+      if (claimed.some((range) => match.range.start < range.end && range.start < match.range.end))
+        return false;
+      claimed.push(match.range);
+      return true;
+    });
+  };
+}
+
 /**
  * Find every occurrence of `term` in a sentence.
  *

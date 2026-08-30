@@ -1208,4 +1208,26 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.suggestions).toEqual([]);
     expect(diagnostic?.message).toContain('blank once sanitized');
   });
+
+  it('does not offer or apply a fix made only of a variation selector (Codex review)', () => {
+    // hasVisibleContent's first version excluded only \p{Cf} and whitespace, but a variation
+    // selector (U+FE0F) is general category Mn, not Cf, and is equally invisible on its own --
+    // confirmed as a real gap by review. A replacement of only U+FE0F passed the \p{Cf}-based
+    // check and still built a fix replacing the matched word with something invisible.
+    const vs16 = String.fromCodePoint(0xfe0f);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: vs16, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
 });

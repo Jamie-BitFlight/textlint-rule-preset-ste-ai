@@ -59,21 +59,24 @@ export function stripUnsafeCharacters(text: string): string {
 }
 
 /**
- * Whether `text` has at least one visible character, rather than only whitespace and/or Unicode
- * format characters (`\p{Cf}`: ZWJ, ZWNJ, soft hyphen, ...).
+ * Whether `text` has at least one visible character, rather than only whitespace and/or code
+ * points Unicode itself designates as invisible by default.
  *
- * `stripUnsafeCharacters` intentionally leaves `\p{Cf}` alone — it can have a real, local effect
- * on the word it sits inside (its own doc comment covers ZWJ joining an emoji sequence into one
- * glyph, ZWNJ controlling Persian/Arabic letter-joining) — but a replacement made of *nothing but*
- * such characters, with no visible base character for any of them to modify, renders as nothing.
- * Confirmed as a real gap by Codex's review on this PR: a lone ZWJ survives both
- * `stripUnsafeCharacters` and `.trim()` (neither strips nor counts as whitespace), so checking a
- * sanitized replacement is merely non-blank after those two steps was not enough — a
- * `safeSubstitution` fix built from it would still replace a visible word with something
- * invisible.
+ * `stripUnsafeCharacters` intentionally leaves `\p{Cf}` (ZWJ, ZWNJ, soft hyphen, ...) alone — it
+ * can have a real, local effect on the word it sits inside (its own doc comment covers ZWJ joining
+ * an emoji sequence into one glyph, ZWNJ controlling Persian/Arabic letter-joining) — but a
+ * replacement made of *nothing but* such characters, with no visible base character for any of
+ * them to modify, renders as nothing. This first shipped checking only `\p{Cf}`, and a follow-up
+ * round of the same review found that an equally invisible-on-its-own character can sit outside
+ * that category — confirmed directly, a variation selector (U+FE0F) is general category `Mn`, not
+ * `Cf`, and a combining grapheme joiner (U+034F) likewise, so a `\p{Cf}` exclusion alone let either
+ * slip through as "visible." Rather than continue enumerating categories one finding at a time,
+ * this uses Unicode's own `Default_Ignorable_Code_Point` property, defined for exactly this
+ * purpose (a code point with no visible glyph by default) and confirmed directly to already cover
+ * every case above, ZWJ and the emoji-sequence exception included.
  */
 export function hasVisibleContent(text: string): boolean {
-  return /[^\p{Cf}\s]/u.test(text);
+  return /[^\p{Default_Ignorable_Code_Point}\s]/u.test(text);
 }
 
 /**

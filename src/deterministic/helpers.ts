@@ -100,6 +100,23 @@ function codePointLength(term: string): number {
  */
 const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
 
+/**
+ * Total pairwise `sameTermSpan` comparisons {@link findCaseConflicts} will attempt across every
+ * length bucket combined, not just within any one bucket.
+ *
+ * {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH} alone bounds cost per bucket, but not in total: an
+ * untrusted pack can keep every bucket at exactly that limit and supply arbitrarily many buckets
+ * — confirmed directly by Codex's review on this PR, in its own review environment: 50 buckets of
+ * 500 entries each (25,000 keys total, every one within the per-bucket limit) cost roughly 7.5s
+ * across roughly 6.2 million regex comparisons. Once processing a bucket would push the running
+ * total over this budget, that bucket (and every one after it) is reported as
+ * {@link CaseConflictScan.unchecked} instead of partially or fully processed — the same
+ * fail-closed behaviour as one bucket over the per-length limit, just budgeted globally instead of
+ * per length. 500,000 comparisons is comfortably under 200ms measured directly, room for several
+ * buckets at the per-length cap or many more smaller ones.
+ */
+const MAX_TOTAL_COMPARISONS = 500_000;
+
 /** {@link findCaseConflicts}'s result: confirmed conflicts, and buckets too large to confirm. */
 export interface CaseConflictScan {
   /** Groups confirmed, via the real matcher, to map to different values. */
@@ -140,11 +157,18 @@ export function findCaseConflicts<T>(
 
   const groups: [key: string, value: T][][] = [];
   const unchecked: string[][] = [];
+  let comparisonsSpent = 0;
   for (const bucket of byLength.values()) {
     if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) {
       unchecked.push(bucket.map(([key]) => key));
       continue;
     }
+    const bucketCost = (bucket.length * (bucket.length - 1)) / 2;
+    if (comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS) {
+      unchecked.push(bucket.map(([key]) => key));
+      continue;
+    }
+    comparisonsSpent += bucketCost;
     const consumed = new Set<number>();
     for (let i = 0; i < bucket.length; i++) {
       if (consumed.has(i)) continue;

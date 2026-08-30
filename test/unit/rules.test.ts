@@ -407,6 +407,29 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]).toEqual(expect.arrayContaining(['Foo', 'foo']));
   });
 
+  it('bounds total cost across many buckets, not just within one (Codex review)', () => {
+    // The per-length bound alone does not stop an untrusted pack from keeping every bucket at
+    // exactly the per-length limit and supplying arbitrarily many buckets. Reproduces Codex's own
+    // repro shape: 50 distinct lengths, 500 entries each (25,000 keys total, every individual
+    // bucket within `EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH`) -- confirmed to cost ~7.5s across
+    // ~6.2 million comparisons before `MAX_TOTAL_COMPARISONS` existed.
+    const additional: Record<string, string[]> = {};
+    for (let bucket = 0; bucket < 50; bucket++) {
+      const prefix = 'x'.repeat(bucket);
+      for (let i = 0; i < 500; i++)
+        additional[`${prefix}${String(i).padStart(3, '0')}`] = [`v${i}`];
+    }
+
+    const started = Date.now();
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+    const elapsedMs = Date.now() - started;
+
+    expect(elapsedMs).toBeLessThan(2000);
+    // At least one bucket exceeded the total budget and came back unchecked rather than being
+    // silently treated as conflict-free.
+    expect(scan.unchecked.length).toBeGreaterThan(0);
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

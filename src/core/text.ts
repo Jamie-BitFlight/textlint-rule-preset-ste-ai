@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 
 import type { SourcePosition, SourceRange, Word } from './types.js';
@@ -136,16 +137,24 @@ export function trimRange(text: string, range: SourceRange): SourceRange {
  * Stable content hash (SHA-256, hex). Deterministic across processes and platforms.
  *
  * Used only as a cache/dedup key (`SemanticTrace.contentHash`, `SemanticBroker`'s request cache,
- * `textlint/adapter.ts`'s config-fingerprint) — an opaque, collision-resistant string, never parsed
- * or compared to a fixed length by any caller. Each part is hashed with a trailing separator so
- * `contentHash('ab', 'c')` and `contentHash('a', 'bc')` cannot collide by concatenation alone, the
- * same property the previous FNV-1a implementation preserved by mixing a delimiter after every part.
+ * `textlint/adapter.ts`'s shared-config fingerprint). Consumers treat the digest as an opaque,
+ * collision-resistant string. Each part is encoded as its UTF-16 code-unit length followed by its
+ * exact UTF-16LE code units. The framing preserves boundaries and lone surrogates.
  */
-export function contentHash(...parts: readonly string[]): string {
+export function contentHashParts(parts: readonly string[]): string {
   const hash = createHash('sha256');
-  for (const part of parts) {
-    hash.update(part);
-    hash.update('\x1f');
+  const length = Buffer.allocUnsafe(8);
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (part === undefined) throw new Error('Content-hash part disappeared during hashing.');
+    length.writeBigUInt64BE(BigInt(part.length));
+    hash.update(length);
+    hash.update(part, 'utf16le');
   }
   return hash.digest('hex');
+}
+
+/** Variadic convenience wrapper for {@link contentHashParts}. */
+export function contentHash(...parts: readonly string[]): string {
+  return contentHashParts(parts);
 }

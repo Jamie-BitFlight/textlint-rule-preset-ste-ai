@@ -117,6 +117,56 @@ describe('textlint lint run', () => {
     expect(starts[0]?.get('no-contractions')).toEqual({});
   });
 
+  it('does not let a malformed shared override join a valid configuration group', async () => {
+    const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
+    const observer = {
+      analysisStarted: (configuredRules: (typeof starts)[number]) => starts.push(configuredRules),
+    };
+    const result = kernel.lintText('Use the tool.\n', {
+      ...options([]),
+      rules: [
+        {
+          ruleId: 'no-contractions',
+          rule: createSteTextlintRule('no-contractions', observer),
+          options: { shared: { approvedTerms: [] } },
+        },
+        {
+          ruleId: 'punctuation-constraints',
+          rule: createSteTextlintRule('punctuation-constraints', observer),
+          options: { shared: { approvedTerms: [() => 'Utilise'] } },
+        },
+      ],
+    });
+
+    await expect(result).rejects.toThrow(/approvedTerms/);
+    expect(starts).toHaveLength(2);
+  });
+
+  it('keeps insertion-order variants in separate configuration groups', async () => {
+    const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
+    const observer = {
+      analysisStarted: (configuredRules: (typeof starts)[number]) => starts.push(configuredRules),
+    };
+    const result = await kernel.lintText('Use the tool.\n', {
+      ...options([]),
+      rules: [
+        {
+          ruleId: 'no-contractions',
+          rule: createSteTextlintRule('no-contractions', observer),
+          options: { shared: { approvedTerms: [], extraImperativeVerbs: [] } },
+        },
+        {
+          ruleId: 'punctuation-constraints',
+          rule: createSteTextlintRule('punctuation-constraints', observer),
+          options: { shared: { extraImperativeVerbs: [], approvedTerms: [] } },
+        },
+      ],
+    });
+
+    expect(result.messages).toHaveLength(0);
+    expect(starts).toHaveLength(2);
+  });
+
   it('isolates simultaneous document lifecycles and their rule options', async () => {
     const starts: ReadonlyMap<string, Readonly<Record<string, unknown>>>[] = [];
     const observer = {

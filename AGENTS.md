@@ -124,7 +124,9 @@ session model.
 Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
 warrants one.
 
-Pick the cheaper tier when the choice between two is unclear. Escalate on failure.
+Pick the cheaper tier when the choice between two is unclear. Escalate the tier on a
+quality-of-output failure. Do not escalate on a session-limit or token-limit failure. That case is
+retryable instead. See `## Delegation gotchas` below.
 
 ## Delegation gotchas
 

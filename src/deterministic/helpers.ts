@@ -67,6 +67,40 @@ export function findCaseConflicts<T>(
   return conflicts;
 }
 
+/**
+ * Minimal shape `ctx.addIssue` needs, matching zod v4's `$RefinementCtx` — kept structural so this
+ * helper does not depend on zod's internal types directly.
+ */
+export interface IssueReporter {
+  addIssue(issue: { code: 'custom'; path: PropertyKey[]; message: string }): void;
+}
+
+/**
+ * Report one `findCaseConflicts` group through a `superRefine` context, naming the conflicting
+ * keys.
+ *
+ * The keys themselves are supplier-controlled in the same sense `preferred.to`/`unapproved
+ * .alternatives` are (`options.additional` is user config, but `rule.optionsSchema.safeParse`
+ * also runs against `packSpec.options` — src/core/runner.ts's `rawOptions = { ...packSpec
+ * ?.options, ...stripControlKeys(userConfig) }` — and `rulePackRuleSpecSchema.options` is an
+ * unconstrained `z.record(z.string(), z.unknown())`, src/rule-pack/schema.ts). This message is
+ * rendered verbatim by the CLI and the textlint adapter's notice reporting, the same as
+ * `Diagnostic.message`, so the keys go through {@link sanitizeQuotedValue} before interpolation.
+ */
+export function reportCaseConflict(
+  ctx: IssueReporter,
+  group: readonly string[],
+  noun: 'alternatives' | 'replacements',
+): void {
+  ctx.addIssue({
+    code: 'custom',
+    path: ['additional'],
+    message:
+      `${group.map((key) => `"${sanitizeQuotedValue(key)}"`).join(' and ')} are case-equivalent ` +
+      `keys that resolve to the same source span but map to different ${noun}.`,
+  });
+}
+
 /** Build a whole-word, case-insensitive matcher for a term or multi-word phrase. */
 export function termPattern(term: string): RegExp {
   const escaped = term

@@ -317,6 +317,34 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(result.notices.filter((n) => n.level === 'error')).toHaveLength(1);
     expect(result.diagnostics.some((d) => d.ruleId === 'no-contractions')).toBe(true);
   });
+
+  it('sanitizes the conflicting keys before naming them in the notice message', () => {
+    // A pack's own `rules[].options` field is an unconstrained `z.record(z.string(),
+    // z.unknown())` (`rulePackRuleSpecSchema` in `src/rule-pack/schema.ts`) and is merged as the
+    // base of `rawOptions` before schema validation (`src/core/runner.ts`), so a case-conflicting
+    // `additional` key can itself be pack-controlled, not just operator-typed. The notice message
+    // is rendered verbatim by the CLI and by the textlint adapter's run-level notice reporting, so
+    // it needs the same control-character/bidi-override stripping as `Diagnostic.message`.
+    //
+    // The bidi-override character sits *inside* both keys, at the same position, so the keys stay
+    // case-equivalent (`.toLowerCase()` doesn't touch it) -- appending it only to one key instead
+    // would make the two keys genuinely different strings, not case variants, and the conflict
+    // detector would never fire at all.
+    const bidiOverride = String.fromCharCode(0x202e);
+    const keyA = `U${bidiOverride}se`;
+    const keyB = `u${bidiOverride}se`;
+    const result = runRaw({
+      rules: {
+        'unapproved-vocabulary': { additional: { [keyA]: ['employ'], [keyB]: ['apply'] } },
+      },
+    });
+
+    const notice = result.notices.find((n) => n.code === 'rule-options-invalid');
+    expect(notice?.message).toBeDefined();
+    expect(notice?.message).not.toContain(bidiOverride);
+    expect(notice?.message).toContain('"Use"');
+    expect(notice?.message).toContain('"use"');
+  });
 });
 
 describe('no-contractions', () => {

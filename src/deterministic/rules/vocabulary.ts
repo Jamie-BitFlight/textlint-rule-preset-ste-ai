@@ -12,6 +12,7 @@ import {
   findCaseConflicts,
   findTerm,
   matchCapitalisation,
+  reportCaseConflict,
   sanitizeQuotedValue,
   stripUnsafeCharacters,
 } from '../helpers.js';
@@ -40,13 +41,7 @@ const unapprovedOptionsSchema = z
       options.additional,
       (a, b) => JSON.stringify(a) === JSON.stringify(b),
     )) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['additional'],
-        message:
-          `${group.map((key) => `"${key}"`).join(' and ')} are case-equivalent keys that ` +
-          'resolve to the same source span but map to different alternatives.',
-      });
+      reportCaseConflict(ctx, group, 'alternatives');
     }
   });
 
@@ -96,7 +91,17 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
               continue;
             claimed.push(match.range);
 
-            const alternatives = entry.alternatives;
+            // Stripped once, here: `entry.alternatives` is supplier-controlled (the pack's
+            // `unapprovedTermSchema.alternatives`, or a project's own `additional` entry) and
+            // feeds every use below -- the displayed message, the fix `rationale`, the actual
+            // `fix.text` a caller applies to the document, the `Diagnostic.suggestions` array
+            // (`src/textlint/adapter.ts` builds its own rendered copy from this, but an editor's
+            // "apply fix" path writes this array's own value straight into the file too), `meta`
+            // (serialised verbatim by `steai lint --json`), and the semantic-adjudication payload
+            // sent to the model. Stripping the source once, rather than at each render site, means
+            // none of those sinks can be missed by a future addition to this list.
+            const alternatives = entry.alternatives.map(stripUnsafeCharacters);
+            const safeTerm = stripUnsafeCharacters(entry.term);
             const suggestion = alternatives[0];
             let fix: TextFix | undefined;
             if (entry.safeSubstitution && suggestion !== undefined) {
@@ -104,7 +109,7 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
                 range: match.range,
                 text: matchCapitalisation(match.text, suggestion),
                 rationale:
-                  `Rule pack marks "${sanitizeQuotedValue(entry.term)}" → ` +
+                  `Rule pack marks "${sanitizeQuotedValue(safeTerm)}" → ` +
                   `"${sanitizeQuotedValue(suggestion)}" as meaning-preserving.`,
                 safety: 'deterministic-meaning-preserving',
               };
@@ -124,9 +129,9 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
                 suggestions: alternatives,
                 ...(fix === undefined ? {} : { fix }),
                 meta: {
-                  term: entry.term,
+                  term: safeTerm,
                   safeSubstitution: entry.safeSubstitution,
-                  ...(entry.note === undefined ? {} : { note: entry.note }),
+                  ...(entry.note === undefined ? {} : { note: stripUnsafeCharacters(entry.note) }),
                 },
               }),
             );
@@ -170,13 +175,7 @@ const preferredOptionsSchema = z
   .superRefine((options, ctx) => {
     // Same case-insensitive span-matching conflict as `unapproved-vocabulary` above (#125).
     for (const group of findCaseConflicts(options.additional, (a, b) => a === b)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['additional'],
-        message:
-          `${group.map((key) => `"${key}"`).join(' and ')} are case-equivalent keys that ` +
-          'resolve to the same source span but map to different replacements.',
-      });
+      reportCaseConflict(ctx, group, 'replacements');
     }
   });
 
@@ -220,29 +219,35 @@ export const preferredTerminologyRule: DeterministicRule<z.output<typeof preferr
             if (claimed.some((c) => match.range.start < c.end && c.start < match.range.end))
               continue;
             claimed.push(match.range);
-            const replacement = matchCapitalisation(match.text, entry.to);
+            // Stripped once: `entry.to`/`entry.from` are supplier-controlled and feed the fix
+            // text actually written to the document, `Diagnostic.suggestions`, and `meta`
+            // (serialised verbatim by `steai lint --json`), not only the rendered message and
+            // rationale below.
+            const safeFrom = stripUnsafeCharacters(entry.from);
+            const safeTo = stripUnsafeCharacters(entry.to);
+            const replacement = matchCapitalisation(match.text, safeTo);
             const fix: TextFix | undefined = entry.safeSubstitution
               ? {
                   range: match.range,
                   text: replacement,
                   rationale:
-                    `Rule pack marks "${sanitizeQuotedValue(entry.from)}" → ` +
-                    `"${sanitizeQuotedValue(entry.to)}" as a spelling choice.`,
+                    `Rule pack marks "${sanitizeQuotedValue(safeFrom)}" → ` +
+                    `"${sanitizeQuotedValue(safeTo)}" as a spelling choice.`,
                   safety: 'deterministic-meaning-preserving',
                 }
               : undefined;
             diagnostics.push(
               buildDiagnostic(preferredMeta, policy, {
                 category: 'deterministic-violation',
-                message: `Use "${sanitizeQuotedValue(entry.to)}" instead of "${match.text}".`,
+                message: `Use "${sanitizeQuotedValue(safeTo)}" instead of "${match.text}".`,
                 range: match.range,
                 evidence: excerpt(sentence.raw),
                 suggestions: [replacement],
                 ...(fix === undefined ? {} : { fix }),
                 meta: {
-                  from: entry.from,
-                  to: entry.to,
-                  ...(entry.note === undefined ? {} : { note: entry.note }),
+                  from: safeFrom,
+                  to: safeTo,
+                  ...(entry.note === undefined ? {} : { note: stripUnsafeCharacters(entry.note) }),
                 },
               }),
             );
@@ -289,14 +294,22 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
         // Match both the straight apostrophe and U+2019.
         for (const variant of variantsOf(entry.from)) {
           for (const match of findTerm(sentence, variant)) {
-            const replacement = matchCapitalisation(match.text, entry.to);
+            // Stripped once: `entry.from`/`entry.to` are pack-supplied (`pack.contractions`) and
+            // feed the fix text actually written to the document and `meta` (serialised verbatim
+            // by `steai lint --json`), not only the rendered message and rationale. Matching above
+            // still uses the raw `entry.from` -- stripping would not change a legitimate
+            // contraction's apostrophe, but there is no reason to match against anything other
+            // than what the pack actually declared.
+            const safeFrom = stripUnsafeCharacters(entry.from);
+            const safeTo = stripUnsafeCharacters(entry.to);
+            const replacement = matchCapitalisation(match.text, safeTo);
             const fix: TextFix | undefined = entry.safeSubstitution
               ? {
                   range: match.range,
                   text: replacement,
                   rationale:
-                    `"${sanitizeQuotedValue(entry.from)}" expands unambiguously to ` +
-                    `"${sanitizeQuotedValue(entry.to)}".`,
+                    `"${sanitizeQuotedValue(safeFrom)}" expands unambiguously to ` +
+                    `"${sanitizeQuotedValue(safeTo)}".`,
                   safety: 'deterministic-meaning-preserving',
                 }
               : undefined;
@@ -313,7 +326,7 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
                 evidence: excerpt(sentence.raw),
                 suggestions: [replacement],
                 ...(fix === undefined ? {} : { fix }),
-                meta: { contraction: entry.from, ambiguous: !entry.safeSubstitution },
+                meta: { contraction: safeFrom, ambiguous: !entry.safeSubstitution },
               }),
             );
           }

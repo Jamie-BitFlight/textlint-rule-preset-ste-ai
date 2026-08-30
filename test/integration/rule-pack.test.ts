@@ -963,6 +963,17 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.message?.match(/"/g)).toHaveLength(4);
     expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
     expect(diagnostic?.fix?.rationale).not.toContain(BIDI_OVERRIDE);
+    // `entry.to` is stripped once, at the source, before it becomes `fix.text` or `suggestions` --
+    // not just before it is interpolated into `message`/`rationale`. `fix.text` is the value
+    // `textlint --fix` (or an editor's "apply fix") writes straight into the document, so a
+    // control character or bidi override reaching it would corrupt the file being linted, not
+    // just a rendered message. A literal `"` is not stripped here (unlike in the quoted message),
+    // since this is the real replacement text, not display text wrapped in a template's quotes.
+    expect(diagnostic?.fix?.text).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.text).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.fix?.text).toContain('"');
+    expect(diagnostic?.suggestions?.[0]).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.suggestions?.[0]).not.toContain(BIDI_OVERRIDE);
   });
 
   it("sanitizes unapproved-vocabulary's alternatives before they reach the message", () => {
@@ -980,13 +991,19 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
     expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
     expect(diagnostic?.fix?.rationale).not.toContain(CONTROL_CHAR);
-    // `Diagnostic.suggestions` itself stays raw at this (core) layer: it is the value the
-    // textlint adapter's autofix path substitutes into the document verbatim, not display text.
-    // `src/textlint/adapter.ts` sanitizes its own copy only when it renders a suggestion as a
-    // message (`Replace with "..."`) -- see the e2e coverage in
-    // `test/e2e/textlint-run.test.ts`'s "sanitizes a rule-pack-controlled alternative in the
-    // rendered suggestion message" case, which exercises that render path directly.
-    expect(diagnostic?.suggestions).toEqual([FORGED]);
+    // `entry.alternatives` is stripped once, at the source (`unapprovedVocabularyRule` in
+    // `src/deterministic/rules/vocabulary.ts`), before it becomes `Diagnostic.suggestions` or
+    // `fix.text` -- not just before it reaches `message`/`rationale`. `fix.text` is what
+    // `textlint --fix` (or an editor's "apply fix") writes straight into the document, and
+    // `suggestions` is what `src/textlint/adapter.ts` uses for its own suggestion `fix` too, so
+    // both need the control character and bidi override gone, not only the rendered copies. The
+    // literal `"` survives here (unlike in `message`, which wraps the value in its own quotes):
+    // this is real replacement text, not a display string.
+    expect(diagnostic?.suggestions?.[0]).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.suggestions?.[0]).not.toContain(BIDI_OVERRIDE);
+    expect(diagnostic?.suggestions?.[0]).toContain('"');
+    expect(diagnostic?.fix?.text).not.toContain(CONTROL_CHAR);
+    expect(diagnostic?.fix?.text).not.toContain(BIDI_OVERRIDE);
   });
 
   it('sanitizes a project-configured (non-pack) additional entry the same way', () => {
@@ -1001,5 +1018,32 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
     expect(diagnostic?.message).not.toContain(CONTROL_CHAR);
     expect(diagnostic?.message).not.toContain(BIDI_OVERRIDE);
+  });
+
+  it("sanitizes meta fields, which the CLI's --json output serialises verbatim", () => {
+    // `Diagnostic.message`/`fix.rationale` are what a human reads on a terminal, but `steai lint
+    // --json` writes the whole `Diagnostic` object -- `meta` included -- straight to stdout via
+    // `JSON.stringify`. `JSON.stringify` escapes the C0 controls covered by the JSON spec's own
+    // short escapes (`\b`, `\n`, ...), but a bidi-override character (`‮`) is not one of
+    // those and passes through raw, so `meta` needs the same stripping as the rendered fields.
+    const result = analyse('Use the gadget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'gadget', to: FORGED, safeSubstitution: false, note: FORGED }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    const meta = diagnostic?.meta ?? {};
+    for (const value of Object.values(meta)) {
+      if (typeof value !== 'string') continue;
+      expect(value).not.toContain(CONTROL_CHAR);
+      expect(value).not.toContain(BIDI_OVERRIDE);
+    }
+    expect(meta['to']).toBeDefined();
+    expect(meta['note']).toBeDefined();
   });
 });

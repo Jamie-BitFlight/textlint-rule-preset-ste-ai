@@ -117,16 +117,36 @@ const EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH = 500;
  * fail-closed behaviour as one bucket over the per-length limit, just budgeted globally instead of
  * per length. The chosen value leaves room for several buckets at the per-length cap, or many more
  * smaller ones, before the budget is spent.
+ *
+ * This counts comparisons, not the work each one costs — see {@link MAX_TOTAL_COMPARISON_WORK} for
+ * the budget that closes that gap.
  */
 const MAX_TOTAL_COMPARISONS = 500_000;
+
+/**
+ * Total `pairs × key-length` work {@link findCaseConflicts} will attempt across every length
+ * bucket combined, alongside (not instead of) {@link MAX_TOTAL_COMPARISONS}.
+ *
+ * {@link MAX_TOTAL_COMPARISONS} treats every `sameTermSpan` comparison as equal-cost, but a regex
+ * match's cost scales with the length of the strings it matches — Codex's review on this PR found
+ * that a bucket comfortably within the pair-count budget can still be expensive if its keys are
+ * individually very long: every key sharing one length bucket, so the whole bucket's cost scales
+ * with `pairs × length`, not `pairs` alone. `test/unit/rules.test.ts`'s "bounds total cost by key
+ * length" test reproduces the shape (few hundred same-bucket keys, each long) directly, rather
+ * than this comment committing a one-off measurement. Once a bucket's own or the running weighted
+ * total would exceed this budget, it is reported as {@link CaseConflictScan.unchecked} the same
+ * way as the other two limits.
+ */
+const MAX_TOTAL_COMPARISON_WORK = 25_000_000;
 
 /**
  * One {@link CaseConflictScan.unchecked} group, naming both its keys and *why* they went
  * unconfirmed — a bucket that individually exceeds {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH}
  * is a different situation for a caller (and a reader of the resulting notice) than a
- * comfortably-sized bucket that only lost out to {@link MAX_TOTAL_COMPARISONS} because earlier
- * buckets already spent most of it — collapsing both into one shape would report the wrong
- * constraint as the reason a rule got skipped.
+ * comfortably-sized bucket that only lost out to the total {@link MAX_TOTAL_COMPARISONS} or
+ * {@link MAX_TOTAL_COMPARISON_WORK} budget because earlier buckets already spent most of it —
+ * collapsing both into one shape would report the wrong constraint as the reason a rule got
+ * skipped.
  */
 export interface UncheckedGroup {
   /** The keys in this bucket, unconfirmed either way. */
@@ -176,17 +196,23 @@ export function findCaseConflicts<T>(
   const groups: [key: string, value: T][][] = [];
   const unchecked: UncheckedGroup[] = [];
   let comparisonsSpent = 0;
-  for (const bucket of byLength.values()) {
+  let workSpent = 0;
+  for (const [length, bucket] of byLength.entries()) {
     if (bucket.length > EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH) {
       unchecked.push({ keys: bucket.map(([key]) => key), reason: 'bucket-too-large' });
       continue;
     }
     const bucketCost = (bucket.length * (bucket.length - 1)) / 2;
-    if (comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS) {
+    const bucketWork = bucketCost * length;
+    if (
+      comparisonsSpent + bucketCost > MAX_TOTAL_COMPARISONS ||
+      workSpent + bucketWork > MAX_TOTAL_COMPARISON_WORK
+    ) {
       unchecked.push({ keys: bucket.map(([key]) => key), reason: 'total-budget-exceeded' });
       continue;
     }
     comparisonsSpent += bucketCost;
+    workSpent += bucketWork;
     const consumed = new Set<number>();
     for (let i = 0; i < bucket.length; i++) {
       if (consumed.has(i)) continue;
@@ -261,9 +287,9 @@ export function reportCaseConflict(
  * The message names which limit stopped the check ({@link UncheckedGroup.reason}) rather than
  * always blaming this group's own length: a bucket well under
  * {@link EXHAUSTIVE_FOLD_SCAN_LIMIT_PER_LENGTH} can still end up unchecked if earlier buckets
- * already spent most of {@link MAX_TOTAL_COMPARISONS}, and telling that caller "too many keys
- * share this length" would misidentify the actual constraint and the actual fix (reduce keys
- * overall, not just within this length).
+ * already spent most of {@link MAX_TOTAL_COMPARISONS} or {@link MAX_TOTAL_COMPARISON_WORK}, and
+ * telling that caller "too many keys share this length" would misidentify the actual constraint
+ * and the actual fix (reduce keys overall, or their length, not just how many share this length).
  *
  * Names a sample rather than every key, both because the full list can be long and because each
  * key is display text (see {@link reportCaseConflict}'s doc comment on provenance) sanitized the
@@ -287,8 +313,8 @@ export function reportUncheckedGroup(
       : `${group.keys.length} keys (for example ${sample}) could not be checked for a ` +
         `case-insensitive collision over their ${noun}: checking them would exceed the total ` +
         `comparison budget shared across every key length in this "additional" map, even though ` +
-        'this group alone is well within the per-length limit. Reduce the total number of keys ' +
-        'across all lengths, or split them across more than one rule configuration.';
+        'this group alone is well within the per-length limit. Reduce the total number of keys, ' +
+        'their length, or split them across more than one rule configuration.';
   ctx.addIssue({ code: 'custom', path: ['additional'], message });
 }
 

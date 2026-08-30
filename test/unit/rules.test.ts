@@ -465,6 +465,27 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(notices[0]).not.toContain('too many to exhaustively check');
   });
 
+  it('bounds total cost by key length as well as comparison count (Codex review)', () => {
+    // MAX_TOTAL_COMPARISONS alone assumes every comparison costs the same, but a regex match's
+    // cost scales with the length of the strings it matches -- a bucket comfortably within both
+    // the per-bucket limit (500) and the total pair-count budget (500,000) can still be expensive
+    // if its keys are individually very long. 500 keys of 201 code points each: 124,750 pairs,
+    // under every count-based limit, but 124,750 * 201 code points of matching work exceeds
+    // MAX_TOTAL_COMPARISON_WORK -- confirmed directly, before this bound existed, to take multiple
+    // seconds for keys an order of magnitude longer than this.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String(i).padStart(3, '0')}${'x'.repeat(198)}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

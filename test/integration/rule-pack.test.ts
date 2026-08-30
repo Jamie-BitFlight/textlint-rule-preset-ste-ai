@@ -1091,4 +1091,24 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
     expect(diagnostic?.fix?.text).toBe('sign in');
   });
+
+  it('normalises NEL (U+0085) to a space too, not just ASCII whitespace controls (Codex review)', () => {
+    // The first version of the tab/newline fix above listed only the ASCII C0 whitespace controls
+    // and missed NEL (U+0085), a C1 control that is also a legitimate line break -- so a
+    // schema-permitted replacement containing it still deleted straight through a word boundary.
+    const nel = String.fromCharCode(0x85);
+    const replacement = `sign${nel}in`;
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: replacement, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix?.text).toBe('sign in');
+  });
 });

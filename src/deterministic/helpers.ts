@@ -35,16 +35,16 @@ const BIDI_CONTROL_CHARS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
  * legitimately need one.
  *
  * The whitespace-shaped members of those categories — tab, newline, CR, vertical tab, form feed,
- * and the two Unicode line/paragraph separators — are normalised to an ordinary space rather than
- * deleted outright, and normalised *before* the rest of the category is stripped. This sanitizer
- * runs on the actual replacement text a fix writes into a document, not just display strings
- * (`sanitizeQuotedValue`'s doc comment on `note` is the display-only exception, not the rule) — so
- * a legitimately schema-permitted pack value like `sign\tin` or `do\nnot` deleting straight to
- * `signin`/`donot` would silently glue two words together, corrupting the actual suggestion and
- * fix. Every other control character in these categories has no legitimate word-internal role, so
- * it is still deleted rather than replaced.
+ * NEL (U+0085, a C1 control that is also a line break), and the two Unicode line/paragraph
+ * separators — are normalised to an ordinary space rather than deleted outright, and normalised
+ * *before* the rest of the category is stripped. This sanitizer runs on the actual replacement
+ * text a fix writes into a document, not just display strings (`sanitizeQuotedValue`'s doc comment
+ * on `note` is the display-only exception, not the rule) — so a legitimately schema-permitted pack
+ * value like `sign\tin` or `do\nnot` deleting straight to `signin`/`donot` would silently glue two
+ * words together, corrupting the actual suggestion and fix. Every other control character in these
+ * categories has no legitimate word-internal role, so it is still deleted rather than replaced.
  */
-const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u2028\u2029]/gu;
+const WHITESPACE_SHAPED_CONTROLS = /[\t\n\v\f\r\u0085\u2028\u2029]/gu;
 
 export function stripUnsafeCharacters(text: string): string {
   return text
@@ -148,16 +148,26 @@ const MAX_TOTAL_COMPARISONS = 500_000;
  * individually very long, so the whole bucket's cost scales with `pairs × length`, not `pairs`
  * alone.
  *
- * The length used is each bucket's *raw*, un-whitespace-collapsed code-point count (tracked
- * alongside the bucket during grouping), not {@link codePointLength} — a follow-up round of the
- * same review found that `codePointLength` collapsing a long whitespace run to one unit made a key
- * built almost entirely of whitespace bucket as short, even though `escapeForMatching`/
- * {@link sameTermSpan} still scan every one of those whitespace characters on every comparison.
- * Charging the collapsed length would have let exactly that shape bypass this budget.
- * `test/unit/rules.test.ts`'s "bounds total cost by key length" and "...uncollapsed whitespace"
- * tests reproduce both shapes directly, rather than this comment committing a one-off measurement.
- * Once a bucket's own or the running weighted total would exceed this budget, it is reported as
- * {@link CaseConflictScan.unchecked} the same way as the other two limits.
+ * The length used is each bucket's *raw, untrimmed* code-point count (tracked alongside the bucket
+ * during grouping), not {@link codePointLength} — two follow-up rounds of the same review each
+ * found a different way the collapsed/trimmed length under-charges the real cost:
+ *
+ * - `codePointLength` collapses a long *internal* whitespace run to one unit, but
+ *   `escapeForMatching`/{@link sameTermSpan} still scan every one of those whitespace characters
+ *   on every comparison, so a key built almost entirely of internal whitespace bucketed (and
+ *   costed) as short.
+ * - Trimming *leading/trailing* whitespace before measuring hid the same problem in the other
+ *   direction: `escapeForMatching`'s own `.trim()` call, and `sameTermSpan`'s `b.trim()`, each cost
+ *   time proportional to the *untrimmed* length regardless of how much they strip, so a key with a
+ *   long leading or trailing run was still expensive to re-trim on every comparison even though the
+ *   trimmed result was short.
+ *
+ * Charging the collapsed or trimmed length would have let either shape bypass this budget.
+ * `test/unit/rules.test.ts`'s "bounds total cost by key length", "...uncollapsed whitespace", and
+ * "...untrimmed length" tests reproduce all three shapes directly, rather than this comment
+ * committing a one-off measurement. Once a bucket's own or the running weighted total would exceed
+ * this budget, it is reported as {@link CaseConflictScan.unchecked} the same way as the other two
+ * limits.
  */
 const MAX_TOTAL_COMPARISON_WORK = 25_000_000;
 
@@ -210,7 +220,7 @@ export function findCaseConflicts<T>(
   const byLength = new Map<number, { bucket: [key: string, value: T][]; maxRawLength: number }>();
   for (const item of items) {
     const length = codePointLength(item[0]);
-    const rawLength = Array.from(item[0].trim()).length;
+    const rawLength = Array.from(item[0]).length;
     const entry = byLength.get(length);
     if (entry === undefined) byLength.set(length, { bucket: [item], maxRawLength: rawLength });
     else {

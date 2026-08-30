@@ -542,6 +542,26 @@ describe('case-equivalent "additional" keys are rejected, not silently order-dep
     expect(scan.unchecked[0]?.keys).toHaveLength(500);
   });
 
+  it('charges the work budget for untrimmed leading/trailing whitespace too (Codex review)', () => {
+    // The raw-length fix above measured Array.from(item[0].trim()).length -- trimming before
+    // counting hid exactly the whitespace that costs time: escapeForMatching's own .trim() call,
+    // and sameTermSpan's b.trim(), each scan the full untrimmed string regardless of how much they
+    // end up stripping. 500 distinct three-character keys each followed by 3,000 trailing spaces
+    // all bucket at the same short trimmed length (3), so a length charge that also trims hides
+    // the real per-comparison re-trim cost the same way the internal-whitespace case did above.
+    const additional: Record<string, string[]> = {};
+    for (let i = 0; i < 500; i++) {
+      const key = `${String(i).padStart(3, '0')}${' '.repeat(3000)}`;
+      additional[key] = [`v${i}`];
+    }
+
+    const scan = findCaseConflicts(additional, (a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(scan.unchecked).toHaveLength(1);
+    expect(scan.unchecked[0]?.reason).toBe('total-budget-exceeded');
+    expect(scan.unchecked[0]?.keys).toHaveLength(500);
+  });
+
   it('never merges keys the real matcher treats as distinct (Codex review)', () => {
     // A cheap canonicalisation broad enough to unify every case `sameTermSpan` recognises (Greek
     // final sigma, the Latin long s) is also broad enough to over-merge: ASCII `A` and fullwidth

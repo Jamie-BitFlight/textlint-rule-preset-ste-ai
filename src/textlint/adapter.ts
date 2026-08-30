@@ -9,6 +9,7 @@ import { analyseText, type AnalysisResult } from '../analysis/analyse.js';
 import type { SteAiConfigInput } from '../core/config.js';
 import type { Diagnostic } from '../core/types.js';
 import { deterministicRules, findDeterministicRule } from '../deterministic/index.js';
+import { tryConfigFingerprint } from './config-fingerprint.js';
 import { loadSharedConfig } from './shared-config.js';
 
 /**
@@ -67,29 +68,6 @@ const reportedRunNoticesFor = new WeakMap<object, Set<string>>();
 export interface SteRuleOptions {
   readonly shared?: SteAiConfigInput;
   readonly [key: string]: unknown;
-}
-
-/**
- * Serialize a `shared` override for compatibility grouping.
- *
- * Object insertion order is preserved because some rule option maps resolve equal-length keys in
- * insertion order. Arrays preserve JSON's `undefined` and sparse-slot semantics. The grouping key
- * must never combine configurations that can produce different results.
- */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    const entries = [];
-    for (let i = 0; i < value.length; i += 1) {
-      const entry = value[i];
-      entries.push(entry === undefined ? 'null' : stableStringify(entry));
-    }
-    return `[${entries.join(',')}]`;
-  }
-  if (!isPlainObject(value)) return JSON.stringify(value);
-  const entries = Object.keys(value)
-    .filter((key) => value[key] !== undefined)
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
-  return `{${entries.join(',')}}`;
 }
 
 /**
@@ -228,10 +206,9 @@ async function coordinatedAnalysis(
   // once lets every enabled preset rule register its real options before any analysis begins.
   await Promise.resolve();
   run.analyses ??= analyseRegistrationGroups(run.registrations, text, filePath, baseDir);
-  const groupKey = stableStringify(registration.shared ?? {});
-  const analysis = (await run.analyses).get(groupKey);
+  const analysis = (await run.analyses).get(registration.ruleId);
   if (analysis === undefined) {
-    throw new Error(`No analysis group was created for rule "${registration.ruleId}".`);
+    throw new Error(`No analysis was created for rule "${registration.ruleId}".`);
   }
   return analysis;
 }
@@ -243,11 +220,13 @@ async function analyseRegistrationGroups(
   baseDir: string | undefined,
 ): Promise<ReadonlyMap<string, AnalysisResult>> {
   const groups = new Map<
-    string,
+    string | RuleRegistration,
     { shared: SteAiConfigInput | undefined; registrations: RuleRegistration[] }
   >();
   for (const registration of registrations.values()) {
-    const key = stableStringify(registration.shared ?? {});
+    const fingerprint = tryConfigFingerprint(registration.shared ?? {});
+    // An unsafe value gets its own group. Validation still receives the original value below.
+    const key = fingerprint ?? registration;
     const group = groups.get(key);
     if (group === undefined) {
       groups.set(key, { shared: registration.shared, registrations: [registration] });
@@ -258,7 +237,7 @@ async function analyseRegistrationGroups(
 
   const results = new Map<string, AnalysisResult>();
   await Promise.all(
-    [...groups].map(async ([key, group]) => {
+    [...groups.values()].map(async (group) => {
       const invoked = new Set(group.registrations.map(({ ruleId }) => ruleId));
       const options = new Map<string, Record<string, unknown>>();
       for (const rule of deterministicRules) {
@@ -268,7 +247,10 @@ async function analyseRegistrationGroups(
         options.set(registration.ruleId, registration.ownOptions);
       }
       group.registrations[0]?.observer?.analysisStarted(options);
-      results.set(key, await getAnalysis(text, filePath, baseDir, group.shared, options));
+      const analysis = await getAnalysis(text, filePath, baseDir, group.shared, options);
+      for (const registration of group.registrations) {
+        results.set(registration.ruleId, analysis);
+      }
     }),
   );
   return results;

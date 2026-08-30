@@ -117,7 +117,17 @@ export const unapprovedVocabularyRule: DeterministicRule<z.output<typeof unappro
             // (serialised verbatim by `steai lint --json`), and the semantic-adjudication payload
             // sent to the model. Stripping the source once, rather than at each render site, means
             // none of those sinks can be missed by a future addition to this list.
-            const alternatives = entry.alternatives.map(stripUnsafeCharacters);
+            // Filtered, not just mapped: a pack-supplied alternative made entirely of characters
+            // `stripUnsafeCharacters` strips (control characters, bidi overrides) sanitizes to an
+            // empty string. Keeping it here would offer an empty-string suggestion and, worse,
+            // build a fix that deletes the matched term outright -- `checkFixSafety`'s numeric/
+            // negation/modal/ordering checks do not catch a blank replacement for an ordinary word,
+            // so it would reach `--fix` unchallenged. Treating a blank result the same as "no
+            // alternative supplied" is the same fallback already below for an empty `alternatives`
+            // array.
+            const alternatives = entry.alternatives
+              .map(stripUnsafeCharacters)
+              .filter((alternative) => alternative.trim() !== '');
             const safeTerm = stripUnsafeCharacters(entry.term);
             const suggestion = alternatives[0];
             let fix: TextFix | undefined;
@@ -251,24 +261,36 @@ export const preferredTerminologyRule: DeterministicRule<z.output<typeof preferr
             // rationale below.
             const safeFrom = stripUnsafeCharacters(entry.from);
             const safeTo = stripUnsafeCharacters(entry.to);
-            const replacement = matchCapitalisation(match.text, safeTo);
-            const fix: TextFix | undefined = entry.safeSubstitution
-              ? {
-                  range: match.range,
-                  text: replacement,
-                  rationale:
-                    `Rule pack marks "${sanitizeQuotedValue(safeFrom)}" → ` +
-                    `"${sanitizeQuotedValue(safeTo)}" as a spelling choice.`,
-                  safety: 'deterministic-meaning-preserving',
-                }
+            // A pack-supplied `to` made entirely of characters `stripUnsafeCharacters` strips
+            // sanitizes to an empty string; `checkFixSafety` does not catch a blank replacement for
+            // an ordinary word, so an unguarded fix would delete the matched term outright and
+            // `--fix` would apply it unchallenged.
+            const hasReplacement = safeTo.trim() !== '';
+            const replacement = hasReplacement
+              ? matchCapitalisation(match.text, safeTo)
               : undefined;
+            const fix: TextFix | undefined =
+              entry.safeSubstitution && replacement !== undefined
+                ? {
+                    range: match.range,
+                    text: replacement,
+                    rationale:
+                      `Rule pack marks "${sanitizeQuotedValue(safeFrom)}" → ` +
+                      `"${sanitizeQuotedValue(safeTo)}" as a spelling choice.`,
+                    safety: 'deterministic-meaning-preserving',
+                  }
+                : undefined;
+            const message = hasReplacement
+              ? `Use "${sanitizeQuotedValue(safeTo)}" instead of "${match.text}".`
+              : `"${match.text}" should not be used here, but the rule pack's replacement is ` +
+                'blank once sanitized.';
             diagnostics.push(
               buildDiagnostic(preferredMeta, policy, {
                 category: 'deterministic-violation',
-                message: `Use "${sanitizeQuotedValue(safeTo)}" instead of "${match.text}".`,
+                message,
                 range: match.range,
                 evidence: excerpt(sentence.raw),
-                suggestions: [replacement],
+                suggestions: replacement === undefined ? [] : [replacement],
                 ...(fix === undefined ? {} : { fix }),
                 meta: {
                   from: safeFrom,
@@ -328,29 +350,39 @@ export const noContractionsRule: DeterministicRule<z.output<typeof contractionOp
             // than what the pack actually declared.
             const safeFrom = stripUnsafeCharacters(entry.from);
             const safeTo = stripUnsafeCharacters(entry.to);
-            const replacement = matchCapitalisation(match.text, safeTo);
-            const fix: TextFix | undefined = entry.safeSubstitution
-              ? {
-                  range: match.range,
-                  text: replacement,
-                  rationale:
-                    `"${sanitizeQuotedValue(safeFrom)}" expands unambiguously to ` +
-                    `"${sanitizeQuotedValue(safeTo)}".`,
-                  safety: 'deterministic-meaning-preserving',
-                }
+            // A pack-supplied expansion made entirely of characters `stripUnsafeCharacters` strips
+            // sanitizes to an empty string; `checkFixSafety` does not catch a blank replacement for
+            // an ordinary word, so an unguarded fix would delete the matched contraction outright.
+            const hasReplacement = safeTo.trim() !== '';
+            const replacement = hasReplacement
+              ? matchCapitalisation(match.text, safeTo)
               : undefined;
+            const fix: TextFix | undefined =
+              entry.safeSubstitution && replacement !== undefined
+                ? {
+                    range: match.range,
+                    text: replacement,
+                    rationale:
+                      `"${sanitizeQuotedValue(safeFrom)}" expands unambiguously to ` +
+                      `"${sanitizeQuotedValue(safeTo)}".`,
+                    safety: 'deterministic-meaning-preserving',
+                  }
+                : undefined;
+            const expansionText =
+              replacement === undefined
+                ? 'the rule pack supplies no usable expansion.'
+                : `Write "${sanitizeQuotedValue(replacement)}".`;
             diagnostics.push(
               buildDiagnostic(contractionMeta, policy, {
                 category: 'deterministic-violation',
                 message:
-                  `Do not use the contraction "${match.text}". ` +
-                  `Write "${sanitizeQuotedValue(replacement)}".` +
+                  `Do not use the contraction "${match.text}". ${expansionText}` +
                   (entry.safeSubstitution
                     ? ''
                     : ` ${entry.note === undefined ? 'Confirm the intended sense.' : stripUnsafeCharacters(entry.note)}`),
                 range: match.range,
                 evidence: excerpt(sentence.raw),
-                suggestions: [replacement],
+                suggestions: replacement === undefined ? [] : [replacement],
                 ...(fix === undefined ? {} : { fix }),
                 meta: { contraction: safeFrom, ambiguous: !entry.safeSubstitution },
               }),

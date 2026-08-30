@@ -1133,4 +1133,56 @@ describe('rule pack: untrusted text reaching a rendered message is neutralised (
     const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
     expect(diagnostic?.fix?.text).toBe('sign in');
   });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (unapproved-vocabulary, Codex review)', () => {
+    // A pack-supplied alternative made entirely of control characters sanitizes to an empty
+    // string. checkFixSafety's numeric/negation/modal/ordering checks do not catch a blank
+    // replacement for an ordinary word, so an unguarded fix would delete the matched term outright
+    // and `--fix` would apply it unchallenged.
+    const blank = String.fromCharCode(0x08);
+    const result = analyse('Utilise the bracket.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [{ term: 'utilise', alternatives: [blank], safeSubstitution: true }],
+          preferred: [],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'unapproved-vocabulary');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('no approved alternative');
+  });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (preferred-terminology, Codex review)', () => {
+    const blank = String.fromCharCode(0x08);
+    const result = analyse('Use the widget.\n', {
+      rulePack: pack({
+        dictionary: {
+          approved: [],
+          unapproved: [],
+          preferred: [{ from: 'widget', to: blank, safeSubstitution: true }],
+        },
+      }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'preferred-terminology');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('blank once sanitized');
+  });
+
+  it('does not offer or apply a fix that sanitizes to a blank replacement (no-contractions, Codex review)', () => {
+    const blank = String.fromCharCode(0x08);
+    const result = analyse("Don't touch the busbar.\n", {
+      rulePack: pack({ contractions: [{ from: "don't", to: blank, safeSubstitution: true }] }),
+    });
+
+    const diagnostic = result.diagnostics.find((d) => d.ruleId === 'no-contractions');
+    expect(diagnostic?.fix).toBeUndefined();
+    expect(diagnostic?.suggestions).toEqual([]);
+    expect(diagnostic?.message).toContain('no usable expansion');
+  });
 });

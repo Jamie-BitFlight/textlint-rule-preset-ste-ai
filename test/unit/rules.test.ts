@@ -272,6 +272,11 @@ describe('punctuation-constraints', () => {
     expect(run('The value is set...\n').quotesFor(id)).toContain('...');
   });
 
+  it('ignores the dynamic-command marker in a Claude skill', () => {
+    const command = '!`/bin/sh "${CLAUDE_SKILL_DIR}/scripts/prepare-review.sh"`\n';
+    expect(run(command).forRule(id)).toHaveLength(0);
+  });
+
   it('flags parentheses only inside an instruction', () => {
     expect(run('Remove the cover (see Fig. 2) now.\n').quotesFor(id)).toContain('(see Fig. 2)');
     expect(run('The cover (aluminium) is heavy.\n').quotesFor(id)).not.toContain('(aluminium)');

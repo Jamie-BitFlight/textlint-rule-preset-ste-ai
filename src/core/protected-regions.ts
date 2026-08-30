@@ -299,7 +299,13 @@ const referenceDefinitionPass: Pass = {
   find: regexPass(/^[ \t]{0,3}\[[^\]\n]+\]:[ \t]*\S+[ \t]*(?:"[^"\n]*")?[ \t]*$/gm),
 };
 
-/** Inline code spans with backtick-run matching. */
+/**
+ * Inline code spans with backtick-run matching.
+ *
+ * Claude skill files also use a line-leading `!` immediately before an inline code span as a
+ * dynamic-command marker. Include that marker in the protected range so prose rules do not read
+ * it as an exclamation mark while the command itself is masked.
+ */
 const inlineCodePass: Pass = {
   kind: 'inline-code',
   opaque: true,
@@ -339,7 +345,10 @@ const inlineCodePass: Pass = {
         i += runLength;
         continue;
       }
-      out.push({ start: i, end });
+      const lineStart = masked.lastIndexOf('\n', i - 1) + 1;
+      const linePrefix = masked.slice(lineStart, i);
+      const start = /^[ \t]{0,3}!$/.test(linePrefix) ? i - 1 : i;
+      out.push({ start, end });
       i = end;
     }
     return out;

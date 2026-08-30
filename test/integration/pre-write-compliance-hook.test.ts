@@ -67,48 +67,62 @@ function makeScratchDir(prefix: string): string {
 
 function installStubTextlint(
   projectDir: string,
-  options: { mode?: 'normal' | 'trap' | 'trap-exit'; withGlob?: boolean } = {},
+  options: {
+    mode?: 'normal' | 'trap' | 'trap-exit';
+    withGlob?: boolean;
+    delayMs?: number;
+    paddingBytes?: number;
+  } = {},
 ): void {
   const textlintDir = join(projectDir, 'node_modules/textlint');
-  const binDir = join(textlintDir, 'bin');
-  mkdirSync(binDir, { recursive: true });
+  mkdirSync(textlintDir, { recursive: true });
   writeFileSync(
     join(textlintDir, 'package.json'),
     JSON.stringify({
       name: 'textlint',
       version: '15.8.0',
-      bin: { textlint: './bin/textlint.js' },
+      main: './index.js',
       dependencies: { glob: '^13.0.6' },
     }),
   );
   writeFileSync(join(projectDir, '.stub-scenario.json'), JSON.stringify(options));
   writeFileSync(
-    join(binDir, 'textlint.js'),
+    join(textlintDir, 'index.js'),
     [
       "'use strict';",
       "const fs = require('node:fs');",
       "const path = require('node:path');",
-      "const projectDir = path.resolve(__dirname, '../../..');",
+      "const projectDir = path.resolve(__dirname, '../..');",
       "const scenario = JSON.parse(fs.readFileSync(path.join(projectDir, '.stub-scenario.json')));",
-      "const stdin = fs.readFileSync(0, 'utf8');",
-      "fs.appendFileSync(path.join(projectDir, '.stub-calls.jsonl'), JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), stdin }) + '\\n');",
-      "fs.writeFileSync(path.join(projectDir, '.stub-started'), 'started');",
-      "fs.writeFileSync(path.join(projectDir, '.stub-pid'), String(process.pid));",
-      "if (scenario.mode === 'trap') {",
-      "  process.on('SIGTERM', () => process.stdout.write('[{\"messages\":[]}]'));",
-      '  setInterval(() => {}, 1000);',
-      "} else if (scenario.mode === 'trap-exit') {",
-      "  process.on('SIGTERM', () => process.stdout.end('[{\"messages\":[]}]', () => process.exit(0)));",
-      '  setInterval(() => {}, 1000);',
-      '} else {',
-      '  const messages = [];',
-      "  if (stdin.includes('STE_VIOLATION')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'new violation', severity: 2, line: 1, column: 1 });",
-      "  if (stdin.includes('STE_ONE')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'first violation', severity: 2, line: 1, column: 1 });",
-      "  if (stdin.includes('STE_TWO')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'second violation', severity: 2, line: 1, column: 1 });",
-      "  if (stdin.includes('OTHER_VIOLATION')) messages.push({ ruleId: 'other-rule', message: 'unrelated violation', severity: 2, line: 1, column: 1 });",
-      "  process.stdout.write(JSON.stringify([{ filePath: 'stdin.md', messages }]));",
-      '  process.exitCode = messages.length > 0 ? 1 : 0;',
-      '}',
+      'exports.loadTextlintrc = async ({ configFilePath }) => {',
+      "  fs.appendFileSync(path.join(projectDir, '.stub-loads.jsonl'), JSON.stringify({ pid: process.pid, cwd: process.cwd(), configFilePath }) + '\\n');",
+      '  return { configFilePath };',
+      '};',
+      'exports.createLinter = ({ descriptor, cwd }) => ({',
+      '  async lintText(content, filePath) {',
+      "    fs.appendFileSync(path.join(projectDir, '.stub-calls.jsonl'), JSON.stringify({ pid: process.pid, configFilePath: descriptor.configFilePath, cwd, content, filePath }) + '\\n');",
+      "    fs.writeFileSync(path.join(projectDir, '.stub-started'), 'started');",
+      "    fs.writeFileSync(path.join(projectDir, '.stub-pid'), String(process.pid));",
+      "    if (scenario.mode === 'trap') {",
+      "      process.on('SIGTERM', () => process.stdout.write('[{\"messages\":[]}]'));",
+      '      setInterval(() => {}, 1000);',
+      '      await new Promise(() => {});',
+      "    } else if (scenario.mode === 'trap-exit') {",
+      "      process.on('SIGTERM', () => process.stdout.end('[{\"messages\":[]}]', () => process.exit(0)));",
+      '      setInterval(() => {}, 1000);',
+      '      await new Promise(() => {});',
+      '    }',
+      '    if (Number.isFinite(scenario.delayMs)) await new Promise((resolve) => setTimeout(resolve, scenario.delayMs));',
+      '    const messages = [];',
+      "    if (content.includes('STE_VIOLATION')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'new violation', severity: 2, line: 1, column: 1 });",
+      "    if (content.includes('STE_ONE')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'first violation', severity: 2, line: 1, column: 1 });",
+      "    if (content.includes('STE_TWO')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'second violation', severity: 2, line: 1, column: 1 });",
+      "    if (content.includes('OTHER_VIOLATION')) messages.push({ ruleId: 'other-rule', message: 'unrelated violation', severity: 2, line: 1, column: 1 });",
+      "    if (content.includes('MALFORMED_MESSAGE')) messages.push({ ruleId: 'ste-ai/stub-rule', message: 'malformed violation', severity: 2 });",
+      "    if (content.includes('MALFORMED_RESULT')) return null;",
+      "    return { filePath, messages, padding: 'x'.repeat(scenario.paddingBytes || 0) };",
+      '  },',
+      '});',
       '',
     ].join('\n'),
   );
@@ -126,6 +140,8 @@ function makeStubProject(
     mode?: 'normal' | 'trap' | 'trap-exit';
     rules?: Record<string, unknown>;
     withGlob?: boolean;
+    delayMs?: number;
+    paddingBytes?: number;
   } = {},
 ): string {
   const projectDir = makeScratchDir('ste-ai-hook-');
@@ -140,7 +156,13 @@ function makeStubProject(
   return projectDir;
 }
 
-function readCalls(projectDir: string): Array<{ args: string[]; cwd: string; stdin: string }> {
+function readCalls(projectDir: string): Array<{
+  pid: number;
+  configFilePath: string;
+  cwd: string;
+  content: string;
+  filePath: string;
+}> {
   const callLog = join(projectDir, '.stub-calls.jsonl');
   if (!existsSync(callLog)) return [];
   return readFileSync(callLog, 'utf8')
@@ -148,6 +170,40 @@ function readCalls(projectDir: string): Array<{ args: string[]; cwd: string; std
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+function readLoads(projectDir: string): Array<{
+  pid: number;
+  cwd: string;
+  configFilePath: string;
+}> {
+  const loadLog = join(projectDir, '.stub-loads.jsonl');
+  if (!existsSync(loadLog)) return [];
+  return readFileSync(loadLog, 'utf8')
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function copyHookWithLimits(options: { timeoutMs?: number; maxResultBytes?: number }): string {
+  const copiedHookDir = makeScratchDir('ste-ai-hook-limits-');
+  const copiedHookPath = join(copiedHookDir, 'hook.cjs');
+  let source = readFileSync(hookPath, 'utf8');
+  if (options.timeoutMs !== undefined) {
+    source = source.replace(
+      'const TEXTLINT_TIMEOUT_MS = 20_000;',
+      `const TEXTLINT_TIMEOUT_MS = ${String(options.timeoutMs)};`,
+    );
+  }
+  if (options.maxResultBytes !== undefined) {
+    source = source.replace(
+      'const MAX_RESULT_BYTES = 5 * 1024 * 1024;',
+      `const MAX_RESULT_BYTES = ${String(options.maxResultBytes)};`,
+    );
+  }
+  writeFileSync(copiedHookPath, source);
+  return copiedHookPath;
 }
 
 async function waitForFile(filePath: string, timeoutMs = 5_000): Promise<void> {
@@ -334,7 +390,7 @@ describe('block-noncompliant-prose hook', () => {
     expect(readCalls(projectDir)).toHaveLength(0);
   });
 
-  it('matches trailing-slash directory patterns exactly like the pinned CLI', () => {
+  it('matches trailing-slash directory patterns like the pinned textlint ignore implementation', () => {
     const shallowProject = makeStubProject({ ignore: 'generated/\n' });
     const shallowPath = join(shallowProject, 'generated/doc.md');
     expect(
@@ -343,7 +399,7 @@ describe('block-noncompliant-prose hook', () => {
         tool_input: { file_path: shallowPath, content: 'STE_VIOLATION' },
       }).status,
     ).toBe(2);
-    expect(readCalls(shallowProject)).toHaveLength(1);
+    expect(readCalls(shallowProject)).toHaveLength(2);
 
     const recursiveProject = makeStubProject({ ignore: 'generated/**\n' });
     const recursivePath = join(recursiveProject, 'generated/doc.md');
@@ -367,7 +423,7 @@ describe('block-noncompliant-prose hook', () => {
     ).toBe(2);
   });
 
-  it('uses stdin with the real target filename and the selected config directory', () => {
+  it('uses one target-owned worker with the real filename and selected config', () => {
     const projectDir = makeStubProject();
     const filePath = join(projectDir, 'doc.md');
     writeFileSync(filePath, 'Existing content.\n');
@@ -380,19 +436,61 @@ describe('block-noncompliant-prose hook', () => {
     ).toBe(2);
 
     const calls = readCalls(projectDir);
+    const loads = readLoads(projectDir);
     expect(calls).toHaveLength(2);
-    expect(calls.map((call) => call.stdin)).toEqual(['Existing content.\n', proposed]);
+    expect(loads).toHaveLength(1);
+    expect(calls.map((call) => call.content)).toEqual(['Existing content.\n', proposed]);
+    expect(new Set(calls.map((call) => call.pid)).size).toBe(1);
+    expect(loads[0]?.pid).toBe(calls[0]?.pid);
+    expect(loads[0]?.cwd).toBe(projectDir);
+    expect(loads[0]?.configFilePath).toBe(join(projectDir, '.textlintrc.json'));
     for (const call of calls) {
       expect(call.cwd).toBe(projectDir);
-      const filenameIndex = call.args.indexOf('--stdin-filename');
-      expect(filenameIndex).toBeGreaterThanOrEqual(0);
-      expect(call.args[filenameIndex + 1]).toBe(filePath);
-      expect(call.args).toContain('--stdin');
+      expect(call.configFilePath).toBe(join(projectDir, '.textlintrc.json'));
+      expect(call.filePath).toBe(filePath);
     }
     expect(readdirSync(projectDir).some((name) => name.startsWith('.ste-ai-hook-'))).toBe(false);
   });
 
-  it('blocks a violating first write without linting the empty baseline', () => {
+  it('preserves a full timeout budget for each linted version', () => {
+    // Two 3-second lints exceed the copied hook's 5-second aggregate window. Each remains well
+    // inside its own 5-second window, including under coverage instrumentation and CI contention.
+    const projectDir = makeStubProject({ delayMs: 3_000 });
+    const filePath = join(projectDir, 'doc.md');
+    writeFileSync(filePath, 'Existing content.\n');
+    const limitedHook = copyHookWithLimits({ timeoutMs: 5_000 });
+    expect(
+      runProjectHook(
+        projectDir,
+        {
+          tool_name: 'Write',
+          tool_input: { file_path: filePath, content: 'STE_VIOLATION\n' },
+        },
+        limitedHook,
+      ).status,
+    ).toBe(2);
+    expect(readCalls(projectDir)).toHaveLength(2);
+  });
+
+  it('preserves a full output budget for each linted version', () => {
+    const projectDir = makeStubProject({ paddingBytes: 700 });
+    const filePath = join(projectDir, 'doc.md');
+    writeFileSync(filePath, 'Existing content.\n');
+    const limitedHook = copyHookWithLimits({ maxResultBytes: 1_024 });
+    expect(
+      runProjectHook(
+        projectDir,
+        {
+          tool_name: 'Write',
+          tool_input: { file_path: filePath, content: 'STE_VIOLATION\n' },
+        },
+        limitedHook,
+      ).status,
+    ).toBe(2);
+    expect(readCalls(projectDir)).toHaveLength(2);
+  });
+
+  it('blocks a violating first write after linting the empty baseline', () => {
     const projectDir = makeStubProject();
     const filePath = join(projectDir, 'new.md');
     expect(
@@ -401,12 +499,38 @@ describe('block-noncompliant-prose hook', () => {
         tool_input: { file_path: filePath, content: 'STE_VIOLATION' },
       }).status,
     ).toBe(2);
-    expect(readCalls(projectDir)).toHaveLength(1);
+    expect(readCalls(projectDir).map((call) => call.content)).toEqual(['', 'STE_VIOLATION']);
     expect(existsSync(filePath)).toBe(false);
   });
 
+  it('fails open when the target textlint API returns a malformed result', () => {
+    const projectDir = makeStubProject();
+    const filePath = join(projectDir, 'doc.md');
+    writeFileSync(filePath, 'Existing content.\n');
+    expect(
+      runProjectHook(projectDir, {
+        tool_name: 'Write',
+        tool_input: { file_path: filePath, content: 'STE_VIOLATION MALFORMED_RESULT\n' },
+      }).status,
+    ).toBe(0);
+    expect(readCalls(projectDir)).toHaveLength(2);
+  });
+
+  it('fails open when the target textlint API returns a message without a location', () => {
+    const projectDir = makeStubProject();
+    const filePath = join(projectDir, 'doc.md');
+    writeFileSync(filePath, 'Existing content.\n');
+    expect(
+      runProjectHook(projectDir, {
+        tool_name: 'Write',
+        tool_input: { file_path: filePath, content: 'MALFORMED_MESSAGE\n' },
+      }).status,
+    ).toBe(0);
+    expect(readCalls(projectDir)).toHaveLength(2);
+  });
+
   it(
-    'blocks a violating first write with the real pinned textlint CLI',
+    'blocks a violating first write with the real pinned textlint API',
     () => {
       const filePath = join(repoRoot, 'docs/.ste-ai-real-first-write-test.md');
       expect(existsSync(filePath)).toBe(false);
@@ -477,7 +601,7 @@ describe('block-noncompliant-prose hook', () => {
         copiedHookPath,
       ).status,
     ).toBe(2);
-    expect(readCalls(projectDir)).toHaveLength(1);
+    expect(readCalls(projectDir)).toHaveLength(2);
   });
 
   it.skipIf(process.platform === 'win32')(

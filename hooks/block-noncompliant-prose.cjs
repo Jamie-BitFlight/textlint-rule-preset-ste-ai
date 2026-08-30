@@ -16,7 +16,8 @@ const { createRequire } = require('node:module');
 
 const TEXTLINT_TIMEOUT_MS = 20_000;
 const SIGKILL_GRACE_MS = 2_000;
-const MAX_STDOUT_BYTES = 5 * 1024 * 1024;
+const MAX_RESULT_BYTES = 5 * 1024 * 1024;
+const IS_LINT_WORKER = process.argv[2] === '--lint-worker';
 
 let pendingChild;
 
@@ -59,11 +60,13 @@ function cleanupPending() {
   }
 }
 
-for (const signal of ['SIGTERM', 'SIGINT']) {
-  process.on(signal, () => {
-    cleanupPending();
-    process.exit(0);
-  });
+if (!IS_LINT_WORKER) {
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.on(signal, () => {
+      cleanupPending();
+      process.exit(0);
+    });
+  }
 }
 
 function readStdin() {
@@ -102,7 +105,7 @@ function findSteAiConfig(startDir) {
 }
 
 /**
- * Resolve both the JavaScript CLI and glob matcher from the selected textlint installation.
+ * Resolve both the public API and glob matcher from the selected textlint installation.
  * Resolving each dependency from its owner supports flat npm and isolated pnpm layouts without
  * depending on the plugin's own installation directory.
  */
@@ -111,21 +114,18 @@ function resolveTextlintRuntime(configDir) {
   const packageJsonPath = projectRequire.resolve('textlint/package.json');
   const packageDir = path.dirname(packageJsonPath);
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const binValue =
-    typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin?.textlint;
-  if (typeof binValue !== 'string') throw new Error('textlint does not expose a textlint CLI');
   if (typeof packageJson.dependencies?.glob !== 'string') {
     throw new Error('textlint does not declare glob as a direct dependency');
   }
 
-  const cliPath = path.resolve(packageDir, binValue);
-  const relativeCliPath = path.relative(packageDir, cliPath);
+  const apiPath = projectRequire.resolve('textlint');
+  const relativeApiPath = path.relative(packageDir, apiPath);
   if (
-    relativeCliPath === '..' ||
-    relativeCliPath.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeCliPath)
+    relativeApiPath === '..' ||
+    relativeApiPath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeApiPath)
   ) {
-    throw new Error('textlint CLI resolves outside its package');
+    throw new Error('textlint API resolves outside its package');
   }
 
   const textlintRequire = createRequire(packageJsonPath);
@@ -134,7 +134,7 @@ function resolveTextlintRuntime(configDir) {
     throw new Error('textlint glob dependency does not expose Glob and Ignore');
   }
 
-  return { cliPath, Glob: glob.Glob, Ignore: glob.Ignore };
+  return { apiPath, Glob: glob.Glob, Ignore: glob.Ignore };
 }
 
 function loadIgnorePatterns(ignoreFilePath) {
@@ -150,7 +150,7 @@ function loadIgnorePatterns(ignoreFilePath) {
 
 /**
  * Classify the real target with glob's public Ignore implementation, which is the matcher used by
- * the pinned textlint CLI. `childrenIgnored` models walker pruning without treating a trailing
+ * the selected textlint installation. `childrenIgnored` models walker pruning without treating a trailing
  * slash such as `generated/` as if it were the recursive pattern `generated/**`.
  */
 function isIgnoredByTextlint(runtime, lintCwd, realFilePath) {
@@ -178,47 +178,84 @@ function isIgnoredByTextlint(runtime, lintCwd, realFilePath) {
 }
 
 function parseErrors(jsonOutput) {
-  const results = JSON.parse(jsonOutput);
-  if (!Array.isArray(results)) throw new Error('textlint JSON output is not an array');
-  return results.flatMap((result) => {
-    const messages = Array.isArray(result?.messages) ? result.messages : [];
-    return messages.filter(
-      (message) => message.severity === 2 && message.ruleId?.startsWith('ste-ai/'),
-    );
-  });
+  const result = JSON.parse(jsonOutput);
+  if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+    throw new Error('textlint result is not an object');
+  }
+  if (!Array.isArray(result.messages)) throw new Error('textlint result has no messages array');
+  const messages = result.messages;
+  if (
+    !messages.every(
+      (message) =>
+        typeof message === 'object' &&
+        message !== null &&
+        !Array.isArray(message) &&
+        typeof message.message === 'string' &&
+        Number.isInteger(message.severity) &&
+        Number.isInteger(message.line) &&
+        message.line > 0 &&
+        Number.isInteger(message.column) &&
+        message.column > 0 &&
+        (message.ruleId === undefined ||
+          message.ruleId === null ||
+          typeof message.ruleId === 'string'),
+    )
+  ) {
+    throw new Error('textlint result has a malformed message');
+  }
+  return messages.filter(
+    (message) => message.severity === 2 && message.ruleId?.startsWith('ste-ai/'),
+  );
 }
 
-/** Lint in-memory content under the real target identity without writing a temporary file. */
-function countErrors(runtime, configPath, lintCwd, realFilePath, content) {
-  // textlint 15 treats a truly empty stdin as "no input" and prints help instead of JSON. An
-  // empty document cannot contain a finding, so its exact result is known without a subprocess.
-  if (content.length === 0) return Promise.resolve([]);
+/** Load textlint once, then lint every supplied content version under the real target identity. */
+async function runLintWorker() {
+  try {
+    const payload = JSON.parse(readStdin());
+    if (typeof payload !== 'object' || payload === null) throw new Error('invalid worker payload');
+    const { apiPath, configPath, lintCwd, realFilePath, contents } = payload;
+    if (
+      !path.isAbsolute(apiPath) ||
+      !path.isAbsolute(configPath) ||
+      !path.isAbsolute(lintCwd) ||
+      !path.isAbsolute(realFilePath) ||
+      !Array.isArray(contents) ||
+      !contents.every((content) => typeof content === 'string')
+    ) {
+      throw new Error('invalid worker payload');
+    }
 
+    const textlint = require(apiPath);
+    if (
+      typeof textlint.loadTextlintrc !== 'function' ||
+      typeof textlint.createLinter !== 'function'
+    ) {
+      throw new Error('textlint does not expose its public programmatic API');
+    }
+    const descriptor = await textlint.loadTextlintrc({ configFilePath: configPath });
+    const linter = textlint.createLinter({ descriptor, cwd: lintCwd });
+    for (const content of contents) {
+      const result = await linter.lintText(content, realFilePath);
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+    }
+  } catch {
+    process.exitCode = 1;
+  }
+}
+
+/** Lint all content versions in one isolated process without writing temporary files. */
+function countErrors(runtime, configPath, lintCwd, realFilePath, contents) {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [
-        runtime.cliPath,
-        '--config',
-        configPath,
-        '--format',
-        'json',
-        '--no-color',
-        '--stdin',
-        '--stdin-filename',
-        realFilePath,
-      ],
-      {
-        cwd: lintCwd,
-        stdio: ['pipe', 'pipe', 'ignore'],
-        detached: process.platform !== 'win32',
-        windowsHide: true,
-      },
-    );
+    const child = spawn(process.execPath, [__filename, '--lint-worker'], {
+      cwd: lintCwd,
+      stdio: ['pipe', 'pipe', 'ignore'],
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+    });
     pendingChild = child;
 
-    let stdout = '';
-    let stdoutBytes = 0;
+    let stdoutBuffer = Buffer.alloc(0);
+    const lintedErrors = [];
     let settled = false;
     let timedOut = false;
     let termTimer;
@@ -236,14 +273,53 @@ function countErrors(runtime, configPath, lintCwd, realFilePath, content) {
       reject(error);
     };
 
+    const armTimeout = () => {
+      clearTimeout(termTimer);
+      termTimer = setTimeout(() => {
+        timedOut = true;
+        terminateTree(child, 'SIGTERM');
+        killTimer = setTimeout(() => {
+          terminateTree(child, 'SIGKILL');
+          child.stdin.destroy();
+          child.stdout.destroy();
+          fail(new Error('textlint timed out'));
+        }, SIGKILL_GRACE_MS);
+      }, TEXTLINT_TIMEOUT_MS);
+    };
+
     child.stdout.on('data', (chunk) => {
-      stdoutBytes += chunk.length;
-      if (stdoutBytes > MAX_STDOUT_BYTES) {
-        terminateTree(child, 'SIGKILL');
-        fail(new Error('textlint produced too much output'));
-        return;
+      if (settled) return;
+      stdoutBuffer = Buffer.concat([stdoutBuffer, chunk]);
+      for (;;) {
+        const newline = stdoutBuffer.indexOf(0x0a);
+        if (newline < 0) break;
+        const frame = stdoutBuffer.subarray(0, newline);
+        stdoutBuffer = stdoutBuffer.subarray(newline + 1);
+        if (frame.length === 0 || frame.length > MAX_RESULT_BYTES) {
+          terminateTree(child, 'SIGKILL');
+          fail(new Error('textlint produced an invalid result frame'));
+          return;
+        }
+        try {
+          lintedErrors.push(parseErrors(frame.toString('utf8')));
+        } catch (error) {
+          terminateTree(child, 'SIGKILL');
+          fail(error);
+          return;
+        }
+        if (lintedErrors.length > contents.length) {
+          terminateTree(child, 'SIGKILL');
+          fail(new Error('textlint returned too many results'));
+          return;
+        }
+        // Each content version keeps the full timeout that a separate CLI call had before the
+        // worker batched configuration loading.
+        armTimeout();
       }
-      stdout += chunk;
+      if (stdoutBuffer.length > MAX_RESULT_BYTES) {
+        terminateTree(child, 'SIGKILL');
+        fail(new Error('textlint produced too much output for one result'));
+      }
     });
     child.stdin.on('error', (error) => {
       if (error?.code !== 'EPIPE') {
@@ -258,32 +334,31 @@ function countErrors(runtime, configPath, lintCwd, realFilePath, content) {
         fail(new Error('textlint timed out'));
         return;
       }
-      if ((code !== 0 && code !== 1) || signal !== null || stdout.trim() === '') {
+      if (
+        code !== 0 ||
+        signal !== null ||
+        stdoutBuffer.length !== 0 ||
+        lintedErrors.length !== contents.length
+      ) {
         fail(new Error('textlint did not produce a complete lint report'));
         return;
       }
-      try {
-        const errors = parseErrors(stdout);
-        settled = true;
-        clearState();
-        resolve(errors);
-      } catch (error) {
-        fail(error);
-      }
+      settled = true;
+      clearState();
+      resolve(lintedErrors);
     });
 
-    termTimer = setTimeout(() => {
-      timedOut = true;
-      terminateTree(child, 'SIGTERM');
-      killTimer = setTimeout(() => {
-        terminateTree(child, 'SIGKILL');
-        child.stdin.destroy();
-        child.stdout.destroy();
-        fail(new Error('textlint timed out'));
-      }, SIGKILL_GRACE_MS);
-    }, TEXTLINT_TIMEOUT_MS);
+    armTimeout();
 
-    child.stdin.end(content);
+    child.stdin.end(
+      JSON.stringify({
+        apiPath: runtime.apiPath,
+        configPath,
+        lintCwd,
+        realFilePath,
+        contents,
+      }),
+    );
   });
 }
 
@@ -359,8 +434,10 @@ async function main() {
     }
     if (typeof wouldBeContent !== 'string') return;
 
-    const before = await countErrors(runtime, found.configPath, eventCwd, filePath, currentContent);
-    const after = await countErrors(runtime, found.configPath, eventCwd, filePath, wouldBeContent);
+    const [before, after] = await countErrors(runtime, found.configPath, eventCwd, filePath, [
+      currentContent,
+      wouldBeContent,
+    ]);
     const newFindings = diffNewMessages(before, after);
     if (newFindings.length === 0) return;
 
@@ -389,4 +466,8 @@ async function main() {
   }
 }
 
-void main();
+if (IS_LINT_WORKER) {
+  void runLintWorker();
+} else {
+  void main();
+}

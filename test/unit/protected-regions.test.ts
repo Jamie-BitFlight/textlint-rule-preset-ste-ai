@@ -89,6 +89,12 @@ describe('protected-region extraction', () => {
   const cases: readonly [string, string, ProtectedRegionKind, string][] = [
     ['fenced code', '```bash\nrm -rf /tmp/x\n```\n', 'fenced-code', '```bash\nrm -rf /tmp/x\n```'],
     ['inline code', 'Set `MAX_RETRIES` now.\n', 'inline-code', '`MAX_RETRIES`'],
+    [
+      'Claude dynamic command',
+      '!`/bin/sh "${CLAUDE_SKILL_DIR}/scripts/prepare-review.sh"`\n',
+      'inline-code',
+      '!`/bin/sh "${CLAUDE_SKILL_DIR}/scripts/prepare-review.sh"`',
+    ],
     ['url', 'See https://example.com/x for more.\n', 'url', 'https://example.com/x'],
     ['email', 'Write to ops@example.com now.\n', 'email', 'ops@example.com'],
     ['absolute path', 'Edit /etc/hosts first.\n', 'file-path', '/etc/hosts'],

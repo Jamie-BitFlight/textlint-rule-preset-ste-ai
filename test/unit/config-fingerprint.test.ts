@@ -3,9 +3,7 @@ import { tryConfigFingerprint } from '../../src/textlint/config-fingerprint.js';
 
 describe('tryConfigFingerprint', () => {
   it('distinguishes exact primitive values and insertion order', () => {
-    expect(tryConfigFingerprint({})).not.toBe(
-      tryConfigFingerprint({ approvedTerms: undefined }),
-    );
+    expect(tryConfigFingerprint({})).not.toBe(tryConfigFingerprint({ approvedTerms: undefined }));
     expect(tryConfigFingerprint({ value: -0 })).not.toBe(tryConfigFingerprint({ value: 0 }));
     expect(tryConfigFingerprint({ first: 1, second: 2 })).not.toBe(
       tryConfigFingerprint({ second: 2, first: 1 }),

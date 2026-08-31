@@ -602,7 +602,7 @@ function undecidedCandidateDiagnostics(
       {
         code: 'semantic-disabled',
         level: 'info',
-        message: semanticNotRunNoticeMessage(candidates.length),
+        message: semanticNotRunNoticeMessage(candidates.length, config.semantic.enabled),
         detail: { candidates: candidates.length },
       },
     ],

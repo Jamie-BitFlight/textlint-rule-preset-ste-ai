@@ -49,4 +49,23 @@ describe('the deterministic-only CLI path and the semantic-disabled broker path 
     expect(fromDeterministic?.message).toBeDefined();
     expect(fromBroker?.message).toBe(fromDeterministic?.message);
   });
+
+  it('does not call semantic adjudication "disabled" when config actually enables it', () => {
+    // `analyseTextDeterministic` never contacts the semantic service regardless of
+    // `config.semantic.enabled` -- its own doc comment says so -- but until this fix its
+    // `semantic-disabled` notice claimed "which is disabled" even when the caller's own config set
+    // `semantic.enabled: true` and simply invoked this deterministic-only entry point directly (the
+    // combination `ste-ai lint --semantic --deterministic-only` produces). Confirmed directly: the
+    // message text was previously identical for `enabled: true` and `enabled: false`.
+    const enabled = analyseTextDeterministic(text, { config: { semantic: { enabled: true } } });
+    const disabled = analyseTextDeterministic(text, { config: { semantic: { enabled: false } } });
+
+    const fromEnabled = enabled.notices.find((n) => n.code === 'semantic-disabled');
+    const fromDisabled = disabled.notices.find((n) => n.code === 'semantic-disabled');
+
+    expect(fromEnabled?.message).toBeDefined();
+    expect(fromEnabled?.message).not.toContain('is disabled');
+    expect(fromDisabled?.message).toContain('is disabled');
+    expect(fromEnabled?.message).not.toBe(fromDisabled?.message);
+  });
 });

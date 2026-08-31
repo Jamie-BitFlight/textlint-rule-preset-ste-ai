@@ -111,15 +111,19 @@ Set the `model` parameter explicitly on every delegated call. This covers `Agent
 `agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
 session model.
 
-- `haiku` — mechanical bulk work. Renames, boilerplate, format conversion, and log triage fit
-  here.
-- `sonnet` — the default tier. It suits well-specified implementation with clear acceptance
-  criteria.
-- `opus` — genuinely tricky work. Concurrency, subtle algorithms, adversarial verify panels, and
-  gnarly debugging fit here.
-- `fable` — rare. It earns its cost only when independence from the orchestrator's own context is
-  the point. An adversarial review of the orchestrator's own plan is one example. A large diff is
-  another.
+Each tier below names its Anthropic model first and its OpenAI counterpart second. Only the
+Anthropic names are valid `model` values for the `Agent` tool in this repository. Read the OpenAI
+name as the matching tier to pick when the work runs on another harness.
+
+- **Small** — `haiku`, `luna`. Quick bounded work. Renames, boilerplate, format conversion, and
+  log triage fit here.
+- **Medium** — `sonnet`, `terra`. The default tier. It suits standard instruction-driven work with
+  clear acceptance criteria.
+- **Large** — `opus`, `sol`. Architecture, coordination, and planning. Concurrency, subtle
+  algorithms, adversarial verify panels, and gnarly debugging fit here too.
+- **Independent** — `fable`. No size tier fits this one. It earns its cost only when independence
+  from the orchestrator's own context is the point. An adversarial review of the orchestrator's own
+  plan is one example. A large diff is another.
 
 Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
 warrants one.

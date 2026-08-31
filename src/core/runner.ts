@@ -74,6 +74,18 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
 
   notices.push(...unknownRuleIdNotices(config, rules));
 
+  // Whether the *pack itself* is trusted, independent of what any one rule entry declares. Hoisted
+  // above the loop: `pack` and `config.trustedRulePackIds` are the same for every rule this run, so
+  // this is a single membership check per document, not one per enabled rule.
+  const packTrusted = config.trustedRulePackIds.includes(pack.metadata.id);
+
+  // `pack.metadata.id` is invariant for the whole run, so its safety check (see the citation-safety
+  // comment at this value's one use site below) and the resulting display string are computed once
+  // here rather than once per diagnostic an untrusted pack's rules produce.
+  const safePackId = isSafeRulePackId(pack.metadata.id)
+    ? pack.metadata.id
+    : '<id omitted: does not match the expected pack-id format>';
+
   for (const rule of rules) {
     const id = rule.meta.id;
     if (options.onlyRuleId !== undefined && options.onlyRuleId !== id) continue;
@@ -119,27 +131,36 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
     // A pack may raise a rule's authority and supply its own citation. Without this the pack's
     // `status`/`sourceRef` were parsed, validated and then ignored, so an authorised pack changed
     // nothing a reader could see. `verifiedAuthority` still caps an untrusted pack.
-    const packStatus =
+    //
+    // Bundled as one value, rather than a separate `packStatus` alongside `packSpec`: the two used
+    // to be checked independently below (`packSpec === undefined || packStatus === undefined`)
+    // even though `verifiedRuleStatus` never returns `undefined`, so the second half of that check
+    // could only ever agree with the first — one derived value with one `undefined` check keeps
+    // that redundancy from silently reappearing if a future edit to `verifiedRuleStatus` legitimately
+    // introduces its own `undefined` case, which the old pair of checks would have then conflated
+    // with "no pack entry for this rule."
+    const packInfo =
       packSpec === undefined
         ? undefined
-        : verifiedRuleStatus(packSpec.status, pack, config.trustedRulePackIds);
+        : {
+            spec: packSpec,
+            status: verifiedRuleStatus(packSpec.status, pack, config.trustedRulePackIds),
+          };
 
-    // Whether the *pack itself* is trusted, independent of what any one rule entry declares.
-    // `sourceRef` trust cannot be inferred from whether `packStatus` was downgraded (#66's original
-    // gap): an untrusted pack that declares `status: "supplementary"` directly, rather than
-    // `"normative"`, is never downgraded — `verifiedRuleStatus` only ever touches a `"normative"`
-    // declaration — so gating on the downgrade let that pack's citation straight through.
-    const packTrusted = config.trustedRulePackIds.includes(pack.metadata.id);
-
+    // `sourceRef` trust (via `packTrusted`, hoisted above the loop) cannot be inferred from whether
+    // `packInfo.status` was downgraded (#66's original gap): an untrusted pack that declares
+    // `status: "supplementary"` directly, rather than `"normative"`, is never downgraded —
+    // `verifiedRuleStatus` only ever touches a `"normative"` declaration — so gating on the downgrade
+    // let that pack's citation straight through.
     for (const diagnostic of output.diagnostics) {
       const processed = postProcess(diagnostic, rule, doc, config, blockById, severityOverride);
       if (processed === null) continue;
       diagnostics.push(
-        packSpec === undefined || packStatus === undefined
+        packInfo === undefined
           ? processed
           : {
               ...processed,
-              ruleStatus: packStatus,
+              ruleStatus: packInfo.status,
               meta: {
                 ...processed.meta,
                 // String-comparing `sourceRef` against `rule.meta.sourceRef` was tried and found
@@ -171,8 +192,8 @@ export function runDeterministicRules(options: RunOptions): DeterministicRunResu
                 // closes the class instead of extending the list.
                 sourceRef:
                   pack === provisionalRulePack || packTrusted
-                    ? packSpec.sourceRef
-                    : `unverified citation from untrusted rule pack "${isSafeRulePackId(pack.metadata.id) ? pack.metadata.id : '<id omitted: does not match the expected pack-id format>'}"`,
+                    ? packInfo.spec.sourceRef
+                    : `unverified citation from untrusted rule pack "${safePackId}"`,
               },
             },
       );

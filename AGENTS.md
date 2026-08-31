@@ -115,13 +115,19 @@ So set the `model` parameter explicitly on every delegated call. This covers `Ag
 `agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
 session model.
 
-The tiers below are size classes, not a closed list of names. Each one names its Anthropic model
-first and its OpenAI counterpart second. Any other vendor's model substitutes freely at the
-equivalent size. Match the size class rather than the name.
+The tiers below are size classes, not a closed list of names. Each one names an Anthropic model
+first and its OpenAI counterpart second. Both names are anchors. Neither defines the class.
 
-One limit applies to that substitution. The `Agent` tool in this repository accepts only the
-Anthropic names as `model` values. Substitute by size when the work runs on another harness. Pass
-the Anthropic name when the work runs on this one.
+Some harnesses expose a far wider model list than those two vendors. Kilo Code and OpenCode are two
+of them. Place any unlisted model by its own position inside its vendor's family. The fast and
+cheap member of a family is Small. The balanced everyday member is Medium. The flagship reasoning
+member is Large. Match that position rather than any name written here.
+
+Treat a model as the smaller class when its position is unclear. The escalation rule below covers
+the case where that choice proves wrong.
+
+One limit applies on this repository's own harness. The `Agent` tool accepts only the Anthropic
+names as `model` values. Substitute by size class anywhere else.
 
 - **Small** — `haiku`, `luna`. Quick bounded work. Renames, boilerplate, format conversion, and
   log triage fit here.

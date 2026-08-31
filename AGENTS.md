@@ -107,13 +107,21 @@ them.
 
 ## Delegating to subagents
 
-Set the `model` parameter explicitly on every delegated call. This covers `Agent`-tool calls and
+Every delegated call gets a right-sized model. Two failures break that rule. An accidental model is
+one picked without matching the work to a size. An inherited model is one the harness supplied
+because the call omitted the `model` parameter.
+
+So set the `model` parameter explicitly on every delegated call. This covers `Agent`-tool calls and
 `agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
 session model.
 
-Each tier below names its Anthropic model first and its OpenAI counterpart second. Only the
-Anthropic names are valid `model` values for the `Agent` tool in this repository. Read the OpenAI
-name as the matching tier to pick when the work runs on another harness.
+The tiers below are size classes, not a closed list of names. Each one names its Anthropic model
+first and its OpenAI counterpart second. Any other vendor's model substitutes freely at the
+equivalent size. Match the size class rather than the name.
+
+One limit applies to that substitution. The `Agent` tool in this repository accepts only the
+Anthropic names as `model` values. Substitute by size when the work runs on another harness. Pass
+the Anthropic name when the work runs on this one.
 
 - **Small** — `haiku`, `luna`. Quick bounded work. Renames, boilerplate, format conversion, and
   log triage fit here.

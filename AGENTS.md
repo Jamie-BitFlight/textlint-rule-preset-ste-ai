@@ -115,34 +115,28 @@ So set the `model` parameter explicitly on every delegated call. This covers `Ag
 `agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
 session model.
 
-The tiers below are size classes, not a closed list of names. Each one names an Anthropic model
-first and its OpenAI counterpart second. Both names are anchors. Neither defines the class.
+The classes below are sizes, not a closed list of names. Each one names an Anthropic model first
+and its OpenAI counterpart second. Both are anchors. Neither defines the class.
 
-Some harnesses expose a far wider model list than those two vendors. Kilo Code and OpenCode are two
-of them. Place any unlisted model by its own position inside its vendor's family. The fast and
-cheap member of a family is Small. The balanced everyday member is Medium. The flagship reasoning
-member is Large. Match that position rather than any name written here.
-
-Treat a model as the smaller class when its position is unclear. The escalation rule below covers
-the case where that choice proves wrong.
-
-One limit applies on this repository's own harness. The `Agent` tool accepts only the Anthropic
-names as `model` values. Substitute by size class anywhere else.
+Select from the models your own harness offers. Pick the one whose size fits the task. Kilo Code
+and OpenCode each expose a far wider list than those two vendors. A harness knows the sizes in its
+own catalogue. Claude Code is the narrow case. Its `Agent` tool accepts only `haiku`, `sonnet`,
+`opus`, and `fable` as `model` values.
 
 - **Small** — `haiku`, `luna`. Quick bounded work. Renames, boilerplate, format conversion, and
   log triage fit here.
-- **Medium** — `sonnet`, `terra`. The default tier. It suits standard instruction-driven work with
+- **Medium** — `sonnet`, `terra`. The default class. It suits standard instruction-driven work with
   clear acceptance criteria.
 - **Large** — `opus`, `sol`. Architecture, coordination, and planning. Concurrency, subtle
   algorithms, adversarial verify panels, and gnarly debugging fit here too.
-- **Independent** — `fable`. No size tier fits this one. It earns its cost only when independence
+- **Independent** — `fable`. No size class fits this one. It earns its cost only when independence
   from the orchestrator's own context is the point. An adversarial review of the orchestrator's own
   plan is one example. A large diff is another.
 
 Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
 warrants one.
 
-Pick the cheaper tier when the choice between two is unclear. Escalate the tier on a
+Pick the cheaper class when the choice between two is unclear. Escalate the class on a
 quality-of-output failure. Do not escalate on a session-limit or token-limit failure. That case is
 retryable instead. See `## Delegation gotchas` below.
 
@@ -236,7 +230,7 @@ One or two sentences covering the rough shape and cost is enough. Wait for the u
 Their "yes" is the opt-in.
 
 Every `agent()` call inside a workflow script must set the `model` parameter explicitly. Choose
-the tier per "Delegating to subagents" above, with one tightening. Never use a `fable` agent in a
+the class per "Delegating to subagents" above, with one tightening. Never use a `fable` agent in a
 dynamic workflow. Approval does not lift that. Only `haiku`, `sonnet`, and `opus` belong in a
 workflow stage. A warranted `fable` review runs after the workflow completes instead. It runs as a
 standalone `Agent`-tool call. It still needs the user's approval first.

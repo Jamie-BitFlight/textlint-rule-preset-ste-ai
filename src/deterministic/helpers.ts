@@ -382,11 +382,15 @@ export function findCaseConflicts<T>(
         if (current === undefined) continue;
         const group: [string, T][] = [current];
         consumed.add(i);
+        // `sameTermSpan(current[0], ...)` would recompile the same pattern from `current[0]` on
+        // every `j` below; `current` is fixed for the whole inner loop, so the pattern (identical
+        // to what `sameTermSpan` itself builds) is built once here and reused via `.test()`.
+        const currentPattern = new RegExp(`^${escapeForMatching(current[0])}$`, 'iu');
         for (let j = i + 1; j < bucket.length; j++) {
           if (consumed.has(j)) continue;
           const candidate = bucket[j];
           if (candidate === undefined) continue;
-          if (sameTermSpan(current[0], candidate[0])) {
+          if (currentPattern.test(candidate[0].trim())) {
             group.push(candidate);
             consumed.add(j);
           }

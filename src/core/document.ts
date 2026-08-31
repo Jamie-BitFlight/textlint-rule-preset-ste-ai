@@ -96,17 +96,31 @@ export interface DocumentPreparation {
   readonly regions: readonly ProtectedRegion[];
 }
 
-export function prepareDocument(
-  doc: SourceDocument,
+/**
+ * The one formula for merging a document's format with caller-supplied protected-region options.
+ * Shared by {@link prepareDocument} (which uses the result) and {@link analyseDocument}'s
+ * preparation-ownership check (which only needs it to compare against an already-prepared value) —
+ * a hand-duplicated copy of this formula in the latter would drift from the former unnoticed if a
+ * field were ever added here.
+ */
+function mergedProtectedRegionOptions(
+  format: SourceDocument['format'],
   options: Partial<ProtectedRegionOptions> = {},
-): DocumentPreparation {
-  const protectedOptions: ProtectedRegionOptions = {
+): ProtectedRegionOptions {
+  return {
     ...defaultProtectedRegionOptions,
-    format: doc.format,
+    format,
     ...options,
     approvedTerms: [...(options.approvedTerms ?? defaultProtectedRegionOptions.approvedTerms)],
     extraPatterns: [...(options.extraPatterns ?? defaultProtectedRegionOptions.extraPatterns)],
   };
+}
+
+export function prepareDocument(
+  doc: SourceDocument,
+  options: Partial<ProtectedRegionOptions> = {},
+): DocumentPreparation {
+  const protectedOptions = mergedProtectedRegionOptions(doc.format, options);
   const detectionText = normalizeLineEndings(doc.text);
   return {
     sourceText: doc.text,
@@ -180,21 +194,30 @@ export function analyseDocument(
 
   // Detection runs against a copy whose CRLF carriage returns are spaces. Length is preserved, so
   // every range is equally valid against `doc.text`, which is what all `raw` slices come from.
+  //
+  // The ownership check below only applies when a caller supplied its own `preparation` (the
+  // production analysis layer, reusing one `prepareDocument` call across every rule for a
+  // document): only then can it possibly mismatch `doc`/`options.protectedRegions`. When this
+  // function computes `preparation` itself, on the line right above, it is by construction built
+  // from the very `doc`/`options.protectedRegions` being checked against — recomputing and
+  // comparing on every call added the cost of the check to the common (no-reuse) path for a result
+  // already guaranteed by construction.
   const preparation = options.preparation ?? prepareDocument(doc, options.protectedRegions);
-  const expectedProtectedOptions: ProtectedRegionOptions = {
-    ...defaultProtectedRegionOptions,
-    format: doc.format,
-    ...options.protectedRegions,
-  };
-  const preparedOptions = preparation.protectedOptions;
-  if (
-    preparation.sourceText !== doc.text ||
-    preparation.format !== doc.format ||
-    preparedOptions.format !== expectedProtectedOptions.format ||
-    !equalStringArrays(preparedOptions.approvedTerms, expectedProtectedOptions.approvedTerms) ||
-    !equalStringArrays(preparedOptions.extraPatterns, expectedProtectedOptions.extraPatterns)
-  ) {
-    throw new Error('Document preparation does not belong to this source and configuration.');
+  if (options.preparation !== undefined) {
+    const expectedProtectedOptions = mergedProtectedRegionOptions(
+      doc.format,
+      options.protectedRegions,
+    );
+    const preparedOptions = preparation.protectedOptions;
+    if (
+      preparation.sourceText !== doc.text ||
+      preparation.format !== doc.format ||
+      preparedOptions.format !== expectedProtectedOptions.format ||
+      !equalStringArrays(preparedOptions.approvedTerms, expectedProtectedOptions.approvedTerms) ||
+      !equalStringArrays(preparedOptions.extraPatterns, expectedProtectedOptions.extraPatterns)
+    ) {
+      throw new Error('Document preparation does not belong to this source and configuration.');
+    }
   }
   const { detectionText, regions } = preparation;
   const opaqueRanges = opaqueRangesOf(regions);

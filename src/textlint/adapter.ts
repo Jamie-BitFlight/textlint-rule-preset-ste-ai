@@ -394,11 +394,30 @@ export function createSteTextlintRule(
         // AST once and shares it), and a fresh object every subsequent call, so this reports each
         // distinct notice exactly once per run regardless of which rule computed it, with no
         // explicit reset between runs to forget.
+        //
+        // A notice naming a specific rule in `detail.ruleId` (`rule-options-invalid`) is reported
+        // only by that rule's own handler, so textlint attributes the resulting message's `ruleId`
+        // to the rule the notice is actually about, not to whichever handler's turn came first (see
+        // "surfaces distinct notices from different rules" in test/e2e/textlint-run.test.ts).
+        // That attribution only makes sense when the named rule is actually registered this run --
+        // `unknown-rule-id`'s own `detail.ruleId` is, by construction, never one of them (it names
+        // the misconfigured id the run rejected), so gating on an exact match unconditionally made
+        // it unreachable through every handler and left the misconfiguration with no trace in the
+        // report, the exact silent-drop this whole mechanism exists to prevent. Falling through to
+        // "whichever handler arrives first reports it" for an unregistered `ruleId` restores that
+        // guarantee while leaving the registered-rule attribution above untouched.
+        const registeredRuleIds = documentRuns.get(node)?.registrations;
         let reportedForNode = reportedRunNoticesFor.get(node);
         for (const notice of analysis.notices) {
           if (notice.level === 'info') continue;
           const noticeRuleId = notice.detail?.['ruleId'];
-          if (typeof noticeRuleId === 'string' && noticeRuleId !== ruleId) continue;
+          if (
+            typeof noticeRuleId === 'string' &&
+            noticeRuleId !== ruleId &&
+            registeredRuleIds?.has(noticeRuleId) === true
+          ) {
+            continue;
+          }
           const identity = JSON.stringify([notice.code, notice.message]);
           if (reportedForNode?.has(identity) === true) continue;
           if (reportedForNode === undefined) {

@@ -101,19 +101,18 @@ The same principle is restated in config: `src/core/config.ts:126-132`:
 
 ### Where it is enforced today
 
-| Site                            | Code                                                 | What it caps                                                                    |
-| ------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `src/rule-pack/loader.ts:80-82` | `packPermitsConformanceClaim`                        | whether output may use conformance wording                                      |
-| `src/rule-pack/loader.ts:96-97` | `verifiedAuthority`                                  | run-level authority scalar                                                      |
-| `src/core/runner.ts`            | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
-| `src/analysis/analyse.ts:292`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on `review-required` diagnostics                                   |
-| `src/analysis/analyse.ts:607`   | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on every semantic diagnostic                                       |
-| `src/cli/main.ts:190-196`       | both loader functions                                | `packAuthority`, `declaredAuthority`, `conformanceClaim` per file in CLI output |
+| Site                      | Code                                                 | What it caps                                                                    |
+| ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `src/rule-pack/loader.ts` | `packPermitsConformanceClaim`                        | whether output may use conformance wording                                      |
+| `src/rule-pack/loader.ts` | `verifiedAuthority`                                  | run-level authority scalar                                                      |
+| `src/core/runner.ts`      | `verifiedRuleStatus` (private)                       | the `ruleStatus` on a pack-supplied rule's diagnostics                          |
+| `src/analysis/analyse.ts` | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on `review-required` diagnostics                                   |
+| `src/analysis/analyse.ts` | `verifiedAuthority(pack, config.trustedRulePackIds)` | `ruleStatus` on every semantic diagnostic                                       |
+| `src/cli/main.ts`         | both loader functions                                | `packAuthority`, `declaredAuthority`, `conformanceClaim` per file in CLI output |
 
-All four enforcement points take a single `RulePack`. `resolveRulePack` returns exactly one
-(`src/rule-pack/loader.ts:49-56`), and `prepareRun` binds it once for the run
-(`src/analysis/analyse.ts:244`), passing it into every rule as `RuleInput.pack`
-(`src/core/runner.ts:81-89`).
+All four enforcement points take a single `RulePack`. `resolveRulePack` (`src/rule-pack/loader.ts`)
+returns exactly one, and `prepareRun` (`src/analysis/analyse.ts`) binds it once for the run, passing
+it into every rule as `RuleInput.pack` (`src/core/runner.ts`).
 
 ### Structural facts that matter for what follows
 

@@ -42,9 +42,21 @@ export function undecidedCandidateReasonMessage(reason: string): string {
   return `Semantic adjudication did not run, so this candidate was not decided. A reviewer must decide it. Reason: ${reason}`;
 }
 
-/** Companion to {@link undecidedCandidateReasonMessage} for the run-notice summary line. */
-export function semanticNotRunNoticeMessage(count: number): string {
-  return `${count} passage(s) needed semantic adjudication, which is disabled. They are reported as review-required. No compliance conclusion was drawn about them.`;
+/**
+ * Companion to {@link undecidedCandidateReasonMessage} for the run-notice summary line.
+ *
+ * `enabled` names the call site's own `config.semantic.enabled`, not merely "did adjudication
+ * happen": {@link analyseTextDeterministic}'s `undecidedCandidateDiagnostics` (`../analysis/
+ * analyse.ts`) calls this unconditionally on the deterministic-only path, which never contacts the
+ * semantic service regardless of what `config.semantic.enabled` says — so a caller that enables
+ * semantic adjudication in config but still invokes that entry point directly would otherwise get
+ * a message falsely claiming the feature itself is disabled. `analyseSemantically`'s own call
+ * below reaches this notice only when `config.semantic.enabled` is genuinely false (or a candidate's
+ * evaluator is not configured), where "disabled" is accurate.
+ */
+export function semanticNotRunNoticeMessage(count: number, enabled: boolean): string {
+  const reason = enabled ? 'did not run on this pass' : 'is disabled';
+  return `${count} passage(s) needed semantic adjudication, which ${reason}. They are reported as review-required. No compliance conclusion was drawn about them.`;
 }
 
 /**
@@ -203,7 +215,7 @@ export async function analyseSemantically(
     notices.push({
       code: 'semantic-disabled',
       level: 'info',
-      message: semanticNotRunNoticeMessage(disabledCount),
+      message: semanticNotRunNoticeMessage(disabledCount, config.enabled),
       detail: { candidates: disabledCount },
     });
   }

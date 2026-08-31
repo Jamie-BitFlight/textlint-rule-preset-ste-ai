@@ -133,6 +133,11 @@ own catalogue. Claude Code is the narrow case. Its `Agent` tool accepts only `ha
   from the orchestrator's own context is the point. An adversarial review of the orchestrator's own
   plan is one example. A large diff is another.
 
+Small models make excellent validators. A bounded criteria list is what they are best at. So follow
+a piece of work by sending a small fast model to check it against stated criteria. Have it report
+what passed and what failed. This spends little time and few tokens. It also puts a second reader
+on the work.
+
 Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
 warrants one.
 

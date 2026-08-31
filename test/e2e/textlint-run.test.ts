@@ -560,6 +560,29 @@ describe('run-level notices, reported once regardless of which rules are enabled
       'punctuation-constraints',
     ]);
   });
+
+  it('is reported for a misconfigured rule id that matches no real rule (unknown-rule-id)', async () => {
+    // Confirmed via direct reproduction that this used to report nothing at all: `unknown-rule-id`'s
+    // own `detail.ruleId` is the *misconfigured* id by construction, so it can never equal any real
+    // enabled rule's own `ruleId` -- the same per-notice filter that correctly routes a
+    // `rule-options-invalid` notice to the one rule it concerns (the tests above) then matched no
+    // enabled rule at all here, so its `continue` fired for every rule and silently dropped the
+    // notice for everyone, contradicting this describe block's own name.
+    const result = await kernel.lintText(text, {
+      ext: '.md',
+      plugins: [{ pluginId: 'markdown', plugin: markdownPlugin }],
+      rules: [
+        {
+          ruleId: 'unapproved-vocabulary',
+          rule: mustGetRule('unapproved-vocabulary'),
+          options: { shared: { rules: { 'unaproved-vocabulary': { enabled: false } } } },
+        },
+      ],
+    });
+    const notices = result.messages.filter((m) => m.message.includes('unknown-rule-id'));
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.message).toContain('unaproved-vocabulary');
+  });
 });
 
 describe('preset shape', () => {

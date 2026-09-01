@@ -99,6 +99,52 @@ of those tests or CI assertion scripts now assert the old behavior. Update only 
 actually affects, not every file discovery turned up. Definition of done includes removing or
 updating stale tests, CI assertion scripts, and documentation. It is not enough to only add new ones.
 
+## Commit hygiene
+
+Prefer smaller sequential commits when a task touches multiple concerns. Split the work along
+those concern boundaries. One commit per concern reviews better than one commit carrying all of
+them.
+
+## Delegating to subagents
+
+Every delegated call gets a right-sized model. Two failures break that rule. An accidental model is
+one picked without matching the work to a size. An inherited model is one the harness supplied
+because the call omitted the `model` parameter.
+
+So set the `model` parameter explicitly on every delegated call. This covers `Agent`-tool calls and
+`agent()` calls inside a workflow script alike. Omitting the parameter silently inherits the
+session model.
+
+The classes below are sizes, not a closed list of names. Each one names an Anthropic model first
+and its OpenAI counterpart second. Both are anchors. Neither defines the class.
+
+Select from the models your own harness offers. Pick the one whose size fits the task. Kilo Code
+and OpenCode each expose a far wider list than those two vendors. A harness knows the sizes in its
+own catalogue. Claude Code is the narrow case. Its `Agent` tool accepts only `haiku`, `sonnet`,
+`opus`, and `fable` as `model` values.
+
+- **Small** — `haiku`, `luna`. Quick bounded work. Renames, boilerplate, format conversion, and
+  log triage fit here.
+- **Medium** — `sonnet`, `terra`. The default class. It suits standard instruction-driven work with
+  clear acceptance criteria.
+- **Large** — `opus`, `sol`. Architecture, coordination, and planning. Concurrency, subtle
+  algorithms, adversarial verify panels, and gnarly debugging fit here too.
+- **Independent** — `fable`. No size class fits this one. It earns its cost only when independence
+  from the orchestrator's own context is the point. An adversarial review of the orchestrator's own
+  plan is one example. A large diff is another.
+
+Small models make excellent validators. A bounded criteria list is what they are best at. So follow
+a piece of work by sending a small fast model to check it against stated criteria. Have it report
+what passed and what failed. This spends little time and few tokens. It also puts a second reader
+on the work.
+
+Never spawn a `fable` subagent unprompted. Ask the user first, even when the task's complexity
+warrants one.
+
+Pick the cheaper class when the choice between two is unclear. Escalate the class on a
+quality-of-output failure. Do not escalate on a session-limit or token-limit failure. That case is
+retryable instead. See `## Delegation gotchas` below.
+
 ## Delegation gotchas
 
 Read this before dispatching subagents in bulk.
@@ -174,6 +220,25 @@ orchestrator's own direct action, at the same path the same agent already owned.
 `Agent`-tool dispatch. So it stays inside the exception above for orchestrator-performed worktree
 recovery. This differs from a worktree that has real uncommitted edits destroyed outright. Here,
 there is nothing to lose but the empty directory.
+
+## Dynamic workflows (`Workflow` tool)
+
+This section applies to every session, on any model. A dynamic workflow is not something to avoid.
+Consider the `Workflow` tool when a task has three or more independent parallelizable subtasks.
+Consider it too when a task benefits from a pipeline or a judge panel. Then apply the opt-in rule
+below, before invoking it.
+
+Opt-in is a standing rule. Invoke the tool directly when ultracode is on for the session.
+Three signals turn ultracode on. The user types the "ultracode" keyword. The user sets the
+toggle. The user asks for orchestration in their own words. Otherwise propose the workflow first.
+One or two sentences covering the rough shape and cost is enough. Wait for the user's reply.
+Their "yes" is the opt-in.
+
+Every `agent()` call inside a workflow script must set the `model` parameter explicitly. Choose
+the class per "Delegating to subagents" above, with one tightening. Never use a `fable` agent in a
+dynamic workflow. Approval does not lift that. Only `haiku`, `sonnet`, and `opus` belong in a
+workflow stage. A warranted `fable` review runs after the workflow completes instead. It runs as a
+standalone `Agent`-tool call. It still needs the user's approval first.
 
 ## Verifying what an agent did: query its session log, not git state
 

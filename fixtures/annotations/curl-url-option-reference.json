@@ -112,20 +112,12 @@
           "end": 369
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "7.5"
-        }
-      ],
-      "reason": "7.5 is the curl version this option was added in (a front-matter metadata value), not a number-and-unit pair; there is no unit to space out.",
+      "expectedDiagnostics": [],
+      "reason": "7.5 is the curl version this option was added in (a front-matter metadata value), not a number-and-unit pair; there is no unit to space out. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version number 7.5 is unchanged"
       ],
-      "unresolved": [
-        "rule misreads a version number's decimal point as a missing unit space"
-      ],
+      "unresolved": [],
       "status": "disputed",
       "reviewer": "rewriter-a",
       "reviewerKind": "agent",
@@ -244,20 +236,12 @@
           "end": 1390
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "8.13.0"
-        }
-      ],
-      "reason": "8.13.0 is a curl release version number, not a number-and-unit pair.",
+      "expectedDiagnostics": [],
+      "reason": "8.13.0 is a curl release version number, not a number-and-unit pair. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version number 8.13.0 is unchanged"
       ],
-      "unresolved": [
-        "rule misreads a three-part version number's dots as missing unit spaces"
-      ],
+      "unresolved": [],
       "status": "disputed",
       "reviewer": "rewriter-a",
       "reviewerKind": "agent",

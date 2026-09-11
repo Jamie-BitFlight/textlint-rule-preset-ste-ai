@@ -448,24 +448,28 @@ participles rather than selectable nouns.
 These were found by running the rule set over `fixtures/original/` and are recorded as `disputed`
 findings in the adjudication records. They are the honest known limits of the current rule set.
 
-| What fires                                   | On what                                               | Why it is wrong                                                                                 | Mitigation                                                                         |
-| -------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `abbreviation-introduction`                  | `FULL`, `LLVM`, `ON`                                  | Command names, product names and CMake literals are not abbreviations of a longer phrase        | `additionalWellKnown`, or `approvedTerms`                                          |
-| `number-unit-format`                         | `3.20.5`, `2.4.64`, `1910.132`                        | Version strings and regulatory citations are not quantity+unit pairs                            | none needed — report only, never fixed; add to `extraProtectedPatterns` to silence |
-| `punctuation-constraints`                    | `SSL/TLS`                                             | A fixed compound protocol name, not an ambiguous `and/or`                                       | `approvedTerms`                                                                    |
-| `punctuation-constraints`                    | semicolons in an `(i)/(ii)/(iii)` legal list          | List separators in a regulatory enumeration, not run-on joins                                   | `forbidSemicolon: false` for such documents                                        |
-| `punctuation-constraints`, `no-contractions` | `'hello!'` inside an **unfenced** terminal transcript | If the source does not mark a transcript as code, the linter has no way to know it is not prose | fence the transcript, or use `extraProtectedPatterns`                              |
-| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names rendered as text  | Not a sentence at all; there is no punctuation for the segmenter to use                         | none — inherent to unstructured input                                              |
+| What fires                                   | On what                                               | Why it is wrong                                                                                 | Mitigation                                            |
+| -------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `abbreviation-introduction`                  | `FULL`, `LLVM`, `ON`                                  | Command names, product names and CMake literals are not abbreviations of a longer phrase        | `additionalWellKnown`, or `approvedTerms`             |
+| `punctuation-constraints`                    | `SSL/TLS`                                             | A fixed compound protocol name, not an ambiguous `and/or`                                       | `approvedTerms`                                       |
+| `punctuation-constraints`                    | semicolons in an `(i)/(ii)/(iii)` legal list          | List separators in a regulatory enumeration, not run-on joins                                   | `forbidSemicolon: false` for such documents           |
+| `punctuation-constraints`, `no-contractions` | `'hello!'` inside an **unfenced** terminal transcript | If the source does not mark a transcript as code, the linter has no way to know it is not prose | fence the transcript, or use `extraProtectedPatterns` |
+| `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names rendered as text  | Not a sentence at all; there is no punctuation for the segmenter to use                         | none — inherent to unstructured input                 |
 
-The general shape of the first two rows is the same: **a token that looks like an abbreviation or a
-quantity but is an identifier.** The rule pack's `approvedTechnicalTerms` and the config's
-`approvedTerms` exist precisely for this, and are the first thing to reach for on a real corpus.
+The first two rows share one shape. **A token looks like prose, but it is an identifier.** The rule
+pack's `approvedTechnicalTerms` and the config's `approvedTerms` exist for this. Reach for them
+first on a real corpus.
 
-One further finding from the corpus was a genuine defect in the analyser rather than a rule
-limitation, and was fixed: masking a markdown link destination together with its closing `]` left the
-opening `[` unpaired, which made `sentence-splitter` treat the rest of the block as bracketed and
-merge every following sentence into one. That inflated sentence-length findings on any paragraph
-containing a link. See the regression test in `test/unit/protected-regions.test.ts`.
+One corpus finding was a defect in the analyser, not a rule limit. It is fixed. The mask covered a
+markdown link destination and its closing `]`. That left the opening `[` unpaired.
+`sentence-splitter` then read the rest of the block as bracketed. It merged every following
+sentence into one. That inflated sentence-length findings on any paragraph with a link. See the
+regression test in `test/unit/protected-regions.test.ts`.
+
+A second defect was found the same way. `number-unit-format` read the fractional part of a bare
+number as its unit. A version string such as `3.20.5` produced a finding. Its suggested repair was
+not a number. The unit now may not start with a decimal separator. See the regression tests in
+`test/unit/rules.test.ts`.
 
 ## The procedural/descriptive classifier
 

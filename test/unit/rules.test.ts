@@ -1007,6 +1007,31 @@ describe('number-unit-format', () => {
     });
     expect(result.forRule(id)).toHaveLength(1);
   });
+
+  // A decimal separator is not a unit. The fractional part of a bare number used to satisfy the
+  // unit capture, which reported `3.11` as `3` + `.11` and suggested `3 .11`. See issue #141.
+  it.each([
+    ['a two-segment version', 'Install Python 3.11 first.\n'],
+    ['a bare decimal', 'Use version 5.6 of the tool.\n'],
+    ['a three-segment version', 'Install release 1.2.3 now.\n'],
+    // The next three are the corpus false positives that docs/provisional-rules.md listed as a
+    // known limit of this rule. They pin the removal of that row.
+    ['a documented corpus version', 'Upgrade CMake to 3.20.5 now.\n'],
+    ['a documented corpus build number', 'Use Apache 2.4.64 now.\n'],
+    ['a documented regulatory citation', 'Read clause 1910.132 first.\n'],
+  ])('accepts %s with no unit after it', (_label, text) => {
+    expect(run(text).forRule(id)).toHaveLength(0);
+  });
+
+  it('still flags a missing space when a real unit follows a decimal', () => {
+    const result = run('The file is 5.6MB in size.\n');
+    expect(result.forRule(id)).toHaveLength(1);
+    expect(result.forRule(id)[0]?.suggestions).toEqual(['5.6 MB']);
+  });
+
+  it('accepts a correctly spaced decimal quantity', () => {
+    expect(run('The file is 5.6 MB in size.\n').forRule(id)).toHaveLength(0);
+  });
 });
 
 describe('list-instruction-structure', () => {

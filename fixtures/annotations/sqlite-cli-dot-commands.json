@@ -164,11 +164,6 @@
         {
           "ruleId": "number-unit-format",
           "category": "deterministic-violation",
-          "quote": "3.36.0"
-        },
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
           "quote": "2021-06"
         },
         {
@@ -177,7 +172,7 @@
           "quote": "18 18"
         }
       ],
-      "reason": "This whole line is literal sqlite3 CLI startup banner text (a version string, a date, and a time) inside an unfenced terminal transcript, not natural-language prose. \"3.36.0\" and \"2021-06\" are not number-and-unit pairs, and the two adjacent \"18\" tokens are the day-of-month and the hour, not a repeated word.",
+      "reason": "This whole line is literal sqlite3 CLI startup banner text (a version string, a date, and a time) inside an unfenced terminal transcript, not natural-language prose. \"3.36.0\" and \"2021-06\" are not number-and-unit pairs, and the two adjacent \"18\" tokens are the day-of-month and the hour, not a repeated word. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version string, date, and time in the sqlite3 startup banner are byte-identical"
       ],

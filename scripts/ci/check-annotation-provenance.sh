@@ -94,24 +94,24 @@ zephyr-dependency-table=dev}"
 # `sqlite-pragma-hard-negative` names one run because it emits no candidates, so no adjudication
 # reviewer ever touched it. To refresh a digest after an intended edit, run the script — the failure
 # names the fixture and prints the digest its records now have.
-export EXPECTED_PER_FIXTURE="${EXPECTED_PER_FIXTURE:-curl-url-option-reference=reviewer-b+rewriter-a|82df9668fd4f301cffbd35555d5352ca6b9bc28ff470c8cdc30604e3907ac8ec
+export EXPECTED_PER_FIXTURE="${EXPECTED_PER_FIXTURE:-curl-url-option-reference=reviewer-b+rewriter-a|c92ff7aca74f133a02d62d1ba75493724ac5a44261d18804eaf1a33795c50eb4
 django-settings-configuration=reviewer-d+rewriter-a|49861fb07a211131c5bd4a0c0639c620251014322c4bfd64f3dd9d65a289d342
-httpd-mod-ssl-directive-config=reviewer-a+rewriter-b|74b196d5ed6f41bc87666b50429cc1f9f0e24544cf0f888b59c9040f360f72ab
+httpd-mod-ssl-directive-config=reviewer-a+rewriter-b|33acd50f85219d743ddf93b77ef1d288f5eeb17cff40c03fb9f6209117bb0a89
 httpd-mod-ssl-overview=reviewer-b+rewriter-a|923b306b1b73f46bb4bed005d02addcfb8e77cc85b92ad5bbb3038f44e123d22
 k8s-audit-log-troubleshooting=reviewer-c+rewriter-b|1aca2ad77aae62af0622137e3fb93f909508c34b353f2a1b2cedd3fda9840482
 k8s-debug-pod-troubleshooting=reviewer-c+rewriter-a|96614cfe3a49af8cde244adf417d86b0b6b32ca90a5bf13f16019617e3dc9b40
 llvm-getting-started-build=reviewer-a+rewriter-a|f4cec98fb7a2d3d65cb3bf760078b6143ae207078945ab6094075d8865057569
 llvm-standalone-build-table=reviewer-a+rewriter-b|1f2ebb69ec74843d2a56e08d4d7d39dfd6ec5a00cb52c22b851a7d481f6a47c2
 node-cli-hard-negative=reviewer-d+rewriter-b|e95141872f6dd00569b4adb7a575ecf5bb3b4ae0645febf4bf3d2299780e96d6
-osha-lockout-tagout-warning=reviewer-c+rewriter-a|520b13f234af1f67160234cbb6de7c55348c95bf57aacbd0488a8b1f55d22991
-osha-ppe-requirements=reviewer-d+rewriter-b|c17af3c3ef8581e1498601236bdb8be5ee14bf370f48a6d44ceb17378bbdb7a0
+osha-lockout-tagout-warning=reviewer-c+rewriter-a|7956bf9e9a9500fdc795a9f292fa4a5d6d10c431c4c97dd3b3496eae2ed7de93
+osha-ppe-requirements=reviewer-d+rewriter-b|011035e33b016bbed250302fc994a9cd661ffb80054bedd1bd1cd1cfe4355fec
 postgres-vacuum-overview=reviewer-b+rewriter-b|8a5a59fe3d8065559475ee4bae5393b847c0ca6d0979ae12d219476802b5c80a
 sqlite-cli-description=reviewer-a+rewriter-b|3bd454e25554da7b4bf4d039088d732603677e702fad805940ab659835d3d01e
-sqlite-cli-dot-commands=reviewer-c+rewriter-a|ecbc21ba560df1dc433352ef6bbe77f0b6bb6d655e58aceebdf927cdec67f44a
+sqlite-cli-dot-commands=reviewer-c+rewriter-a|5301f0a4de6d677741ff75411a886afeb8b0955520b7f0030694c577515e42af
 sqlite-pragma-hard-negative=rewriter-b|d82255533037474391d7aef55f5cf4939d917a0a8f97c839a0ee62cd34b47418
 sqlite-vacuum-space-reclaim=reviewer-d+rewriter-a|e55a769b2e5a25162da273e45d1b42700234718646a8f0261b0ebf724f8f28f4
 zephyr-dependency-setup=reviewer-a+rewriter-a|cb9b09a412e8a7115d6b1b458fc6ae995bb944fe3f44bfb38b41618f443d988a
-zephyr-dependency-table=reviewer-b+rewriter-b|fb1f6d85d91b22f46089aaedf4218580e99619d3fa0e9b566815b74351c96c81}"
+zephyr-dependency-table=reviewer-b+rewriter-b|ce7f135c40c6bc085811e64d2432046aa2d549f2ba0b271239d3c880cdabc815}"
 
 node --input-type=module -e '
 import { createHash } from "node:crypto";

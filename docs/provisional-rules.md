@@ -455,6 +455,7 @@ findings in the adjudication records. They are the honest known limits of the cu
 | `punctuation-constraints`                    | semicolons in an `(i)/(ii)/(iii)` legal list          | List separators in a regulatory enumeration, not run-on joins                                   | `forbidSemicolon: false` for such documents           |
 | `punctuation-constraints`, `no-contractions` | `'hello!'` inside an **unfenced** terminal transcript | If the source does not mark a transcript as code, the linter has no way to know it is not prose | fence the transcript, or use `extraProtectedPatterns` |
 | `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names rendered as text  | Not a sentence at all; there is no punctuation for the segmenter to use                         | none — inherent to unstructured input                 |
+| `number-unit-format`                         | a hyphenated year-month date in a CLI banner          | A hyphen reads as a unit, and the space the rule suggests breaks the date                       | none — report only, never fixed. See issue #148       |
 
 The first two rows share one shape. **A token looks like prose, but it is an identifier.** The rule
 pack's `approvedTechnicalTerms` and the config's `approvedTerms` exist for this. Reach for them

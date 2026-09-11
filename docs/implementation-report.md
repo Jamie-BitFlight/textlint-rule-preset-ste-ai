@@ -139,7 +139,7 @@ copyleft source is present; the validator rejects them, and CC-BY sources propag
 ### Adjudication
 
 70 change records across 18 fixtures: **32 accepted, 36 disputed, 2 deferred**. Mean reviewer
-confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
+confidence 0.895. 107 semantic invariants and 17 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
 documentation, more than half of what these provisional rules flag was judged wrong at
@@ -233,6 +233,7 @@ re-reading the code that implements it.
 | `punctuation-constraints`                    | `SSL/TLS`; semicolons in an `(i)/(ii)/(iii)` legal list | A compound protocol name; legal list separators                                          |
 | `punctuation-constraints`, `no-contractions` | `'hello!'` in an **unfenced** terminal transcript       | If the source does not mark a transcript as code, the linter cannot know it is not prose |
 | `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names                     | Not a sentence; no punctuation for the segmenter                                         |
+| `number-unit-format`                         | a hyphenated year-month date in a CLI banner            | A hyphen reads as a unit, and the space the rule suggests breaks the date                |
 
 The dominant class is **an identifier that looks like prose**. `approvedTerms`,
 `approvedTechnicalTerms` and `additionalWellKnown` are the mitigation and are the first thing to

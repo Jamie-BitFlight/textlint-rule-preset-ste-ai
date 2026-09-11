@@ -829,7 +829,7 @@
     }
   },
   "docs/implementation-report.md": {
-    "total": 123,
+    "total": 122,
     "findings": {
       "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"BSD\" is used before it is introduced. Write the full term followed by \"(BSD)\" at the first use.\nexception, 2 CC-BY-4.0, 1 PostgreSQL, 1 BSD-3-Clause, 1 curl, 1 MIT.\n# Implementation report > ## Verification > ### Fixture provenance, independently verified\n1": 1,
       "ste-ai/abbreviation-introduction\n[deterministic-violation][provisional] \"BY\" is used before it is introduced. Write the full term followed by \"(BY)\" at the first use.\n2 Apache-2.0 WITH LLVM-exception, 2 CC-BY-4.0, 1 PostgreSQL, 1 BSD-3-Clause, 1\n# Implementation report > ## Verification > ### Fixture provenance, independently verified\n1": 1,
@@ -914,7 +914,6 @@
       "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 7 commas; the limit is 3. Split it.\nransport — but **no real model was run**, so this report contains no precision\n# Implementation report > ## What could not be implemented, and why\n1": 1,
       "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 8 commas; the limit is 3. Split it.\n.0, 1 PostgreSQL, 1 BSD-3-Clause, 1 curl, 1 MIT.\n# Implementation report > ## Verification > ### Fixture provenance, independently verified\n1": 1,
       "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 8 commas; the limit is 3. Split it.\nncellation, retry policy, bounded repair, tracing); 8 evaluators; versioned prom\n# Implementation report > ## What was implemented\n1": 1,
-      "ste-ai/punctuation-constraints\n[deterministic-violation][provisional] This sentence has 9 commas; the limit is 3. Split it.\ncture` 3, `sentence-length-procedural` 3, `no-repeated-words` 1.\n# Implementation report > ## Verification > ### Deterministic findings, original vs rewritten\n1": 1,
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 10.3 (24 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nFour rules attach fixes: `no-contraction\n# Implementation report > ## What was implemented > ### Rules\n1": 1,
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 10.7 (21 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\n**The autofix gate refused correct fixes\n# Implementation report > ## Defects found and fixed during implementation\n1": 1,
       "ste-ai/sentence-length-descriptive\n[deterministic-violation][provisional] Descriptive sentence has an estimated Flesch-Kincaid grade level of 11.5 (24 words); the configured limit is grade 8. Split it into shorter, simpler sentences.\nUntil the evaluation suite has been run\n# Implementation report > ## Remaining false-positive and false-negative risks > ### Risk in the semantic path\n1": 1,

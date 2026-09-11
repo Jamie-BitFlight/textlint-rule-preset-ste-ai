@@ -1032,6 +1032,15 @@ describe('number-unit-format', () => {
   it('accepts a correctly spaced decimal quantity', () => {
     expect(run('The file is 5.6 MB in size.\n').forRule(id)).toHaveLength(0);
   });
+
+  // The exclusion covers `,` as well as `.`, and only this case pins the comma half of it. Drop the
+  // comma from the class and `61,608` reads as `61` + `,608`, which suggests `61 ,608`. The decimal
+  // comma is still reported, so the assertion names the one diagnostic that belongs here rather
+  // than counting them.
+  it('does not read a thousands separator as a unit', () => {
+    const result = run('The study classified 61,608 stories.\n');
+    expect(result.forRule(id).map((d) => d.meta?.['issue'])).toEqual(['decimal-comma']);
+  });
 });
 
 describe('list-instruction-structure', () => {

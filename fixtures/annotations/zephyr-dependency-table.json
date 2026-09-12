@@ -17,14 +17,8 @@
           "end": 666
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "3.20.5"
-        }
-      ],
-      "reason": "This is a software version identifier (CMake minimum version) in a list-table cell, not a number+unit measurement. The rule's dot-as-decimal-separator heuristic misreads a three-part semantic version as a quantity needing a space before a unit. Inserting a space would corrupt the version string.",
+      "expectedDiagnostics": [],
+      "reason": "This is a software version identifier (CMake minimum version) in a list-table cell, not a number+unit measurement. The rule's dot-as-decimal-separator heuristic misreads a three-part semantic version as a quantity needing a space before a unit. Inserting a space would corrupt the version string. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version string 3.20.5 must remain byte-identical",
         "table cell content and column count must not change"
@@ -48,14 +42,8 @@
           "end": 722
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "3.12"
-        }
-      ],
-      "reason": "Python minimum version identifier in a list-table cell. Not a quantity-plus-unit; it is a dotted version number and must not be reformatted.",
+      "expectedDiagnostics": [],
+      "reason": "Python minimum version identifier in a list-table cell. Not a quantity-plus-unit; it is a dotted version number and must not be reformatted. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version string 3.12 must remain byte-identical",
         "table cell content and column count must not change"
@@ -79,14 +67,8 @@
           "end": 796
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "1.4.6"
-        }
-      ],
-      "reason": "Devicetree compiler minimum version identifier in a list-table cell. Same false-positive class as the other two dotted version numbers in this table: the rule cannot tell a semantic version apart from a quantity with a missing unit space.",
+      "expectedDiagnostics": [],
+      "reason": "Devicetree compiler minimum version identifier in a list-table cell. Same false-positive class as the other two dotted version numbers in this table: the rule cannot tell a semantic version apart from a quantity with a missing unit space. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version string 1.4.6 must remain byte-identical",
         "table cell content and column count must not change"
@@ -110,14 +92,8 @@
           "end": 823
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "3.12"
-        }
-      ],
-      "reason": "Same version number, this time repeated in the admonition prose rather than the table. It is still a software version, not a measurement with a unit, so the number-unit-format rule's suggested space would misrepresent the release number.",
+      "expectedDiagnostics": [],
+      "reason": "Same version number, this time repeated in the admonition prose rather than the table. It is still a software version, not a measurement with a unit, so the number-unit-format rule's suggested space would misrepresent the release number. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version string 3.12 must remain byte-identical",
         "the recommendation and its admonition status (note) must not be downgraded or altered"

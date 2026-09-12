@@ -84,7 +84,7 @@ Every command below was run in this session; the output is what it printed.
 | End-to-end textlint            | `npx vitest run test/e2e`                                                       | 16 kernel tests + 29 `textlint-tester` cases, all passed                                                                                             |
 | Deterministic-only, no service | `test/integration/semantic-service.test.ts`                                     | fake server received **0** requests; run notice `semantic-disabled` emitted                                                                          |
 | Semantic mode vs fake server   | same file                                                                       | 22 integration tests passed over real HTTP                                                                                                           |
-| CLI on the corpus              | `node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json` | 18 files, **121 deterministic violations** (226 diagnostics in total, the rest `review-required`), `conformance.claim: "none"`                       |
+| CLI on the corpus              | `node dist/cli/main.js lint fixtures/original/*.md --deterministic-only --json` | 18 files, **105 deterministic violations** (210 diagnostics in total, the rest `review-required`), `conformance.claim: "none"`                       |
 
 Test suite composition: 15 files — unit (rules, protected regions, offsets, fix safety, broker,
 response schema, prompts, evaluation, pipeline smoke), architecture (module boundaries), integration
@@ -95,13 +95,12 @@ response schema, prompts, evaluation, pipeline smoke), architecture (module boun
 ```
 node dist/cli/main.js lint fixtures/original/*.md   --deterministic-only --json
 node dist/cli/main.js lint fixtures/compliant/*.md  --deterministic-only --json
-→ deterministic violations: original 121 → compliant 75
+→ deterministic violations: original 105 → compliant 59
+→ by rule on the originals: sentence-length-descriptive 35, punctuation-constraints 30,
+  abbreviation-introduction 11, no-contractions 11, unapproved-vocabulary 6,
+  one-instruction-per-sentence 4, list-instruction-structure 3, sentence-length-procedural 3,
+  number-unit-format 1, no-repeated-words 1
 ```
-
-By rule on the originals: `sentence-length-descriptive` 35, `punctuation-constraints` 30,
-`number-unit-format` 17, `abbreviation-introduction` 11, `no-contractions` 11,
-`unapproved-vocabulary` 6, `one-instruction-per-sentence` 4, `list-instruction-structure` 3,
-`sentence-length-procedural` 3, `no-repeated-words` 1.
 
 These counts were re-measured after the protected-region and well-known-list change that stopped
 `abbreviation-introduction` flagging protected all-caps tokens (which accounts for
@@ -110,7 +109,10 @@ figures first published here — most visibly `sentence-length-descriptive` 15 �
 segmentation work, not from that change; they are reported as measured rather than reconciled to the
 older numbers.
 
-The 75 remaining on the rewritten corpus are overwhelmingly the findings reviewers **refused** — see
+They were measured once more after the decimal-separator fix. That accounts for
+`number-unit-format` 17 → 1.
+
+The 59 remaining on the rewritten corpus are overwhelmingly the findings reviewers **refused** — see
 false-positive risk below. They are not oversights; they are recorded as `disputed`.
 
 ### Fixture provenance, independently verified
@@ -137,7 +139,7 @@ copyleft source is present; the validator rejects them, and CC-BY sources propag
 ### Adjudication
 
 70 change records across 18 fixtures: **32 accepted, 36 disputed, 2 deferred**. Mean reviewer
-confidence 0.895. 107 semantic invariants and 20 unresolved findings recorded.
+confidence 0.895. 107 semantic invariants and 17 unresolved findings recorded.
 
 That 36 disputed exceeds 32 accepted is the most useful number in this report: **on real technical
 documentation, more than half of what these provisional rules flag was judged wrong at
@@ -228,15 +230,15 @@ re-reading the code that implements it.
 | Rule                                         | Fires on                                                | Why it is wrong                                                                          |
 | -------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `abbreviation-introduction`                  | `FULL`, `LLVM`, `ON`                                    | Command names, product names and CMake literals are not abbreviations of a longer phrase |
-| `number-unit-format`                         | `3.20.5`, `2.4.64`, `1910.132`                          | Version strings and regulatory citations are not quantity+unit pairs                     |
 | `punctuation-constraints`                    | `SSL/TLS`; semicolons in an `(i)/(ii)/(iii)` legal list | A compound protocol name; legal list separators                                          |
 | `punctuation-constraints`, `no-contractions` | `'hello!'` in an **unfenced** terminal transcript       | If the source does not mark a transcript as code, the linter cannot know it is not prose |
 | `sentence-length-descriptive`                | a flat HTML index of `PRAGMA` names                     | Not a sentence; no punctuation for the segmenter                                         |
+| `number-unit-format`                         | a hyphenated year-month date in a CLI banner            | A hyphen reads as a unit, and the space the rule suggests breaks the date                |
 
-The dominant class is **an identifier that looks like an abbreviation or a quantity**.
-`approvedTerms`, `approvedTechnicalTerms` and `additionalWellKnown` are the mitigation and are the
-first thing to configure on a real corpus. This is why the abbreviation and number rules default to
-`warning` in `examples/.textlintrc.json`.
+The dominant class is **an identifier that looks like prose**. `approvedTerms`,
+`approvedTechnicalTerms` and `additionalWellKnown` are the mitigation and are the first thing to
+configure on a real corpus. This is why the abbreviation and number rules default to `warning` in
+`examples/.textlintrc.json`.
 
 `ambiguous-pronoun-candidate` over-triggers in dense technical prose: its antecedent count is a crude
 content-word count over two sentences. It is `info` severity and candidate-only for that reason.
@@ -266,7 +268,7 @@ off by default for this reason.
 1. **Run the evaluation suite against a real llama.cpp model and calibrate the thresholds.** The
    tooling, the ground truth and the split discipline are in place; the numbers are the gap. Without
    them the confidence thresholds are guesses.
-2. **Cut the remaining abbreviation and quantity false positives.** Together they are 28 of the 121
+2. **Cut the remaining abbreviation and quantity false positives.** Together they are 12 of the 105
    findings on the corpus, down from 40 of 111 before the protected-region and well-known-list change,
    which already implemented most of the identifier-shape pre-filter this item originally proposed: a
    token corroborated by a naming region elsewhere in the document is now masked. What is left is the

@@ -17,14 +17,8 @@
           "end": 388
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "2.4.64"
-        }
-      ],
-      "reason": "'2.4.64' is the Apache httpd release version in which the 'optional' SSLEngine argument was removed, not a quantity with a missing unit space. Reformatting it would misrepresent the version number.",
+      "expectedDiagnostics": [],
+      "reason": "'2.4.64' is the Apache httpd release version in which the 'optional' SSLEngine argument was removed, not a quantity with a missing unit space. Reformatting it would misrepresent the version number. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "the version number 2.4.64 must remain byte-identical"
       ],

@@ -401,7 +401,12 @@ export const numberUnitFormatRule: DeterministicRule<z.output<typeof numberUnitO
       const raw = doc.text.slice(region.range.start, region.range.end);
 
       if (options.unitSpacing !== 'off') {
-        const m = /^([+±-]?\d+(?:[.,]\d+)?)(\s*)([^\s\d].*)$/.exec(raw);
+        // The unit may not begin with `.` or `,`. Without that exclusion the engine backtracks
+        // on a bare number: capture group 1 gives back the fractional part, and the decimal
+        // separator then satisfies the unit as a false match. `3.11` reads as `3` + `.11`, and
+        // the repair it suggests — `3 .11` — is not a number. A version string such as `1.2.3`
+        // fails the same way. No real unit starts with a decimal separator.
+        const m = /^([+±-]?\d+(?:[.,]\d+)?)(\s*)([^\s\d.,].*)$/.exec(raw);
         const unit = m?.[3];
         const gap = m?.[2];
         // Capture group 1 is not optional in the regex above, so it is always populated whenever `m`

@@ -85,14 +85,8 @@
           "end": 1715
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "1910.132"
-        }
-      ],
-      "reason": "'1910.132' is the 29 CFR regulatory citation number for this OSHA standard, repeated as a subsection marker (1910.132(b), (c), (d), (d)(1), (d)(1)(i)-(iii)) throughout the excerpt. It is not a quantity with a missing unit space; it is a legal citation. The SAFETY constraint for this fixture explicitly forbids changing any regulatory citation, so all seven occurrences are disputed together.",
+      "expectedDiagnostics": [],
+      "reason": "'1910.132' is the 29 CFR regulatory citation number for this OSHA standard, repeated as a subsection marker (1910.132(b), (c), (d), (d)(1), (d)(1)(i)-(iii)) throughout the excerpt. It is not a quantity with a missing unit space; it is a legal citation. The SAFETY constraint for this fixture explicitly forbids changing any regulatory citation, so all seven occurrences are disputed together. The rule no longer fires here: a unit may not start with a decimal separator, so this record stands as a gold non-violation.",
       "semanticInvariants": [
         "every '1910.132' citation and its subsection suffix must remain byte-identical and in its original position"
       ],

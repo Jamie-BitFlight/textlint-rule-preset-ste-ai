@@ -86,20 +86,12 @@
           "end": 256
         }
       ],
-      "expectedDiagnostics": [
-        {
-          "ruleId": "number-unit-format",
-          "category": "deterministic-violation",
-          "quote": "1910.147"
-        }
-      ],
-      "reason": "1910.147 is a CFR regulatory section citation, not a number-and-unit pair; the rule misreads the section-number dot as a missing unit space. Changing a legal citation is explicitly disallowed for this fixture.",
+      "expectedDiagnostics": [],
+      "reason": "1910.147 is a CFR regulatory section citation, not a number-and-unit pair; the rule read the section-number dot as a missing unit space. Changing a legal citation is explicitly disallowed for this fixture. The rule no longer fires here: a unit may not start with a decimal separator, so the record stands as a gold non-violation with nothing left to expect.",
       "semanticInvariants": [
         "the citation 1910.147(c)(4)(i) is byte-identical to the regulatory text and unchanged"
       ],
-      "unresolved": [
-        "rule does not recognize regulatory section-number notation and treats the dot as a number/unit boundary"
-      ],
+      "unresolved": [],
       "status": "disputed",
       "reviewer": "rewriter-a",
       "reviewerKind": "agent",

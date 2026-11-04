@@ -88,7 +88,7 @@
     "text-readability": "^1.1.1",
     "wink-eng-lite-web-model": "^1.8.1",
     "wink-nlp": "^2.4.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@babel/parser": "^7.29.3",
